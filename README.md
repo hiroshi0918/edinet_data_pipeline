@@ -16,18 +16,23 @@
 ## 📊 システムアーキテクチャ
 
 ```mermaid
-graph LR
-    A[EDINET API V2] -->|1. fetch_edinet.py\n(書類一覧取得)| B(Docker: Python App)
-    A -->|2. extract_metrics.py\n(ZIP/CSV抽出・解析)| B
-    B -->|3. Data Load\n(ON CONFLICT DO NOTHING)| C[(Docker: PostgreSQL)]
-    
-    subgraph PostgreSQL Database
-    C1[companies\n企業マスタ]
-    C2[financial_reports\n売上・利益・従業員数]
-    C3[human_capital_metrics\n人的資本・多様性指標]
-    C1 --- C2
-    C1 --- C3
+flowchart LR
+    A["EDINET API V2"]
+    B["Docker: Python App"]
+    C[("Docker: PostgreSQL")]
+
+    A -->|"1. fetch_edinet.py<br/>(書類一覧取得)"| B
+    A -->|"2. extract_metrics.py<br/>(ZIP/CSV抽出・解析)"| B
+    B -->|"3. Data Load<br/>(ON CONFLICT DO NOTHING)"| C
+
+    subgraph PG["PostgreSQL Database"]
+        C1["companies<br/>企業マスタ"]
+        C2["financial_reports<br/>売上・利益・従業員数"]
+        C3["human_capital_metrics<br/>人的資本・多様性指標"]
+        C1 --- C2
+        C1 --- C3
     end
+
     C -.-> C1
 ```
 
