@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS financial_reports (
     doc_id VARCHAR(50) PRIMARY KEY,
     edinet_code VARCHAR(10) REFERENCES companies(edinet_code),
     fiscal_year INTEGER NOT NULL,
+    csv_available BOOLEAN NOT NULL DEFAULT TRUE,
+    processed BOOLEAN NOT NULL DEFAULT FALSE,
     sales BIGINT,
     operating_profit BIGINT,
     net_profit BIGINT,

@@ -39,6 +39,7 @@ flowchart LR
 ## 🗂 ディレクトリ構成
 ```text
 edinet_data_pipeline/
+├── .env.example         # EDINET APIキーの設定例
 ├── docker-compose.yml   # データベースとアプリケーションコンテナの統合管理
 ├── Dockerfile           # Pythonコンテナの環境構築
 ├── init.sql             # 正規化された3テーブルのDDL定義（初回起動時自動実行）
@@ -62,7 +63,30 @@ edinet_data_pipeline/
 ## 🚀 セットアップと実行手順
 
 ### 1. EDINET APIキーの設定
-`/src/fetch_edinet.py` および `/src/extract_metrics.py` の `API_KEY` 変数に、[EDINET 開発者向けサイト](https://api.edinet-fsa.go.jp/api/auth/index.aspx) から取得したキーを設定します。
+まず `.env.example` をコピーして `.env` を作成し、[EDINET 開発者向けサイト](https://api.edinet-fsa.go.jp/api/auth/index.aspx?mode=1) で取得したAPIキーを設定します。
+
+```bash
+cp .env.example .env
+```
+
+`.env`
+```env
+EDINET_API_KEY=your_edinet_api_key_here
+```
+
+`docker-compose.yml` では `.env` を `app` コンテナへ読み込むようにしているため、以降の `docker compose exec` でそのまま利用できます。
+
+**EDINET APIキー発行ページで画面が開かない場合**
+
+ログイン後、APIキー表示画面がポップアップで開く挙動になっているため、ブラウザでポップアップをブロックしているとAPIキー画面が表示されないことがあります。
+
+Chrome の場合は `設定` → `プライバシーとセキュリティ` → `サイトの設定` → `ポップアップとリダイレクト` から、次の URL を許可リストに追加してください。
+
+```text
+https://api.edinet-fsa.go.jp
+```
+
+その後に再度アクセスすると、ポップアップ画面でAPIキーを確認できます。
 
 ### 2. コンテナのビルドとDB初期化
 ```bash
@@ -71,15 +95,82 @@ docker compose up -d --build
 
 ### 3. パイプラインの実行
 **(1) 書類一覧の取得（Extractの起点）**
-指定した日付の書類リストを取得し、`companies`テーブルへのマスタ登録、および`financial_reports`への空枠（対象書類ID）登録を行います。
+指定した日付の書類リストを取得し、`companies`テーブルへのマスタ登録、および`financial_reports`への空枠（対象書類ID）登録を行います。このプロジェクトでは、通常の上場企業の有価証券報告書に寄せるため、`ordinanceCode=010` かつ `formCode=030000` の標準帳票だけを対象にしています。EDINET 側で `csvFlag=1` の書類だけが後続の CSV 抽出対象になります。
 ```bash
 docker compose exec app python src/fetch_edinet.py
 ```
 
 **(2) 実データのダウンロードとDBへの抽出・ロード（Transform & Load）**
-XBRLに紐づくCSVデータをAPIからZIPとして要求し、売上・利益・従業員数・人的資本指標などの数値を安全にパースして挿入します。
+XBRLに紐づくCSVデータをAPIからZIPとして要求し、売上・利益・従業員数・人的資本指標などの数値を安全にパースして挿入します。CSV 非対応の書類は自動でスキップされ、処理済みの書類は再実行時に繰り返し対象になりません。
 ```bash
 docker compose exec app python src/extract_metrics.py
+```
+
+## 🔎 確認用SQL
+
+### 1. 取り込み件数の確認
+```bash
+docker compose exec db psql -U user -d edinet_db -c "
+SELECT COUNT(*) AS companies FROM companies;
+SELECT COUNT(*) AS reports FROM financial_reports;
+SELECT COUNT(*) AS human_metrics FROM human_capital_metrics;
+"
+```
+
+### 2. 財務データの確認
+```bash
+docker compose exec db psql -U user -d edinet_db -c "
+SELECT
+  fr.doc_id,
+  c.company_name,
+  fr.sales,
+  fr.operating_profit,
+  fr.net_profit,
+  fr.employee_count
+FROM financial_reports fr
+JOIN companies c USING (edinet_code)
+WHERE fr.processed IS TRUE
+ORDER BY fr.sales DESC NULLS LAST
+LIMIT 20;
+"
+```
+
+### 3. 人的資本データの確認
+```bash
+docker compose exec db psql -U user -d edinet_db -c "
+SELECT
+  c.company_name,
+  hm.fiscal_year,
+  hm.female_manager_ratio,
+  hm.male_childcare_leave_ratio,
+  hm.gender_wage_gap
+FROM human_capital_metrics hm
+JOIN companies c USING (edinet_code)
+ORDER BY hm.fiscal_year DESC, c.company_name
+LIMIT 20;
+"
+```
+
+### 4. 財務データと人的資本データを結合して確認
+```bash
+docker compose exec db psql -U user -d edinet_db -c "
+SELECT
+  c.company_name,
+  fr.fiscal_year,
+  fr.sales,
+  fr.operating_profit,
+  hm.female_manager_ratio,
+  hm.male_childcare_leave_ratio,
+  hm.gender_wage_gap
+FROM financial_reports fr
+JOIN companies c USING (edinet_code)
+LEFT JOIN human_capital_metrics hm
+  ON hm.edinet_code = fr.edinet_code
+ AND hm.fiscal_year = fr.fiscal_year
+WHERE fr.processed IS TRUE
+ORDER BY fr.sales DESC NULLS LAST
+LIMIT 20;
+"
 ```
 
 ## 📈 今後の展望
