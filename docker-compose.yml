@@ -3,11 +3,13 @@ services:
     build: .
     env_file:
       - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@db:5432/edinet_db}
     volumes:
-      - ./src:/app/src
+      - .:/app
     depends_on:
-      - db
-    # 起動し続けるための設定
+      db:
+        condition: service_healthy
     tty: true
 
   db:
@@ -17,6 +19,35 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: edinet_db
     volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d edinet_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  airflow:
+    image: apache/airflow:2.10.5-python3.10
+    profiles: ["airflow"]
+    env_file:
+      - .env
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@db:5432/edinet_db}
+      EDINET_PROCESS_LIMIT: ${EDINET_PROCESS_LIMIT:-20}
+    command: >
+      bash -lc "pip install -e /opt/edinet_pipeline[dev] &&
+      airflow standalone"
+    volumes:
+      - .:/opt/edinet_pipeline
+      - ./airflow/dags:/opt/airflow/dags
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

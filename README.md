@@ -1,178 +1,511 @@
-# EDINET Data Pipeline - 人的資本×財務データ 分析基盤
+# EDINET Data Pipeline
 
-このプロジェクトは、**EDINET API（V2）** を活用して、日本国内の上場企業の「有価証券報告書」から財務指標および**人的資本に関する指標（女性管理職比率、男性育休取得率など）** を自動抽出・蓄積し、将来的な統計分析やダッシュボード構築の土台となるデータパイプラインです。
+EDINET API v2 から有価証券報告書を取得し、財務指標と人的資本指標を PostgreSQL に蓄積するデータパイプラインです。運用系の正本は PostgreSQL に置き、分析用には Parquet と DuckDB を派生出力します。CLI を入口に `fetch -> process -> backfill -> export-analytics` を統一し、ローカル/Docker で再現できる構成にしています。
 
-## 💡 プロジェクトの目的・背景
-近年、投資家やステークホルダーからの関心が高まっている**「エンゲージメント（人的資本）と業績・企業価値の相関」**というテーマに対して、データドリブンなアプローチでアセスメントするための基盤（Data Warehouse）として設計しました。
+## 概要
 
-手作業での情報収集を手放し、EDINET APIからXBRL/CSV形式の生データを自動取得・解析するプログラムを実装することで、データエンジニアリングの基礎である**ETL（Extract, Transform, Load）**のフローを構築しています。
+このリポジトリは次の 2 層で構成されています。
 
-## 🛠 技術スタック
-- **言語・ライブラリ**: Python 3.10, pandas (データ解析・クレンジング), requests
-- **データベース**: PostgreSQL 15, psycopg2
-- **インフラ・環境**: Docker, Docker Compose
-- **外部API**: EDINET API V2 (CSV取得対応)
+- 運用レイヤー
+  - EDINET API から書類一覧と CSV ZIP を取得
+  - PostgreSQL に書類状態、財務指標、人的資本指標、抽出根拠を保存
+  - `pending / processing / processed / skipped / failed` の状態で再実行可能に運用
+- 分析レイヤー
+  - PostgreSQL のスナップショットを Parquet と DuckDB にエクスポート
+  - Notebook、ローカル SQL、BI の前段として利用
 
-## 📊 システムアーキテクチャ
+現時点の対象帳票は「有価証券報告書」のみです。
+
+## アーキテクチャ
 
 ```mermaid
 flowchart LR
-    A["EDINET API V2"]
-    B["Docker: Python App"]
-    C[("Docker: PostgreSQL")]
+    A["EDINET API v2"]
+    B["edinet fetch"]
+    C["edinet process"]
+    D[("PostgreSQL")]
+    E["edinet export-analytics"]
+    F["Parquet"]
+    G["DuckDB"]
 
-    A -->|"1. fetch_edinet.py<br/>(書類一覧取得)"| B
-    A -->|"2. extract_metrics.py<br/>(ZIP/CSV抽出・解析)"| B
-    B -->|"3. Data Load<br/>(ON CONFLICT DO NOTHING)"| C
-
-    subgraph PG["PostgreSQL Database"]
-        C1["companies<br/>企業マスタ"]
-        C2["financial_reports<br/>売上・利益・従業員数"]
-        C3["human_capital_metrics<br/>人的資本・多様性指標"]
-        C1 --- C2
-        C1 --- C3
-    end
-
-    C -.-> C1
+    A --> B
+    A --> C
+    B --> D
+    C --> D
+    E --> D
+    E --> F
+    E --> G
 ```
 
-## 🗂 ディレクトリ構成
+## 主な機能
+
+- `edinet fetch`
+  - 指定日の書類一覧を取得し、対象書類を `financial_reports` に登録・更新します。
+- `edinet process`
+  - 未処理キューを取得し、CSV ZIP から財務指標・人的資本指標を抽出します。
+- `edinet backfill`
+  - 日付範囲を日単位で `fetch -> process` し、途中停止後も再開できます。
+- `edinet export-analytics`
+  - PostgreSQL の分析スナップショットを Parquet と DuckDB に出力します。
+- 抽出根拠の保存
+  - 指標の抽出元を `metric_evidence` に保存し、後から監査できます。
+
+## リポジトリ構成
+
 ```text
-edinet_data_pipeline/
-├── .env.example         # EDINET APIキーの設定例
-├── docker-compose.yml   # データベースとアプリケーションコンテナの統合管理
-├── Dockerfile           # Pythonコンテナの環境構築
-├── init.sql             # 正規化された3テーブルのDDL定義（初回起動時自動実行）
-├── requirements.txt     # Python依存パッケージ
-├── README.md            
-└── src/
-    ├── fetch_edinet.py    # 指定日の提出書類一覧をAPIから取得し、DB(企業マスタ)へ登録
-    └── extract_metrics.py # 対象書類のZIPをダウンロードし、CSVから財務・人的資本データを抽出
+.
+├── src/edinet_pipeline/
+│   ├── cli.py            # edinet コマンドの入口
+│   ├── client.py         # EDINET API クライアント
+│   ├── config.py         # 環境変数と設定
+│   ├── db.py             # PostgreSQL repository
+│   ├── extractors.py     # 財務/人的資本指標の抽出
+│   ├── jobs.py           # fetch/process/backfill の実行ロジック
+│   └── analytics.py      # Parquet / DuckDB エクスポート
+├── alembic/              # DB migration
+├── airflow/dags/         # 任意の Airflow DAG
+├── tests/                # unit / integration tests
+├── docker-compose.yml    # app, db, optional airflow
+├── pyproject.toml        # 依存管理、pytest、ruff 設定
+└── README.md
 ```
 
-## 🌟 注目ポイント（ポートフォリオとしてのアピール要素）
-1. **API v2のモダンな機能の活用**
-   - 2024年に拡充されたEDINET APIのCSVダウンロード（`type=5`）機能をいち早く組み込み、泥臭いXBRLパース開発の工数を抑えつつ、いち早くビジネス価値（データ抽出）に直結させています。
-2. **オンメモリでのZIP解凍・解析処理**
-   - ダウンロードした大量のZIPファイルをローカルディスクに保存し続けるのではなく、`io.BytesIO` と `zipfile` モジュールを使ってすべてオンメモリで展開・パースしています。コンテナのストレージ圧迫やI/Oボトルネックを防ぐ堅牢な実装を意識しました。
-3. **拡張性を見据えたRDB設計**
-   - BIツールでの分析を前提とし、「企業マスタ」「期間ごとの財務データ」「人的資本指標」を論理的に分離・正規化しました。SQLによる柔軟なJOIN・Group By集計ができるように `init.sql` でスキーマを定めています。
-4. **べき等性の担保**
-   - パイプラインが途中で失敗しても何度でも安全に再実行できるように、PostgreSQLの `ON CONFLICT DO NOTHING` （または UPDATE）を設計に盛り込み、データの重複登録（Duplicate Key）を防いでいます。
+互換維持のため `python src/fetch_edinet.py` と `python src/extract_metrics.py` も残していますが、正規の入口は `edinet` CLI です。
 
-## 🚀 セットアップと実行手順
+## 前提環境
 
-### 1. EDINET APIキーの設定
-まず `.env.example` をコピーして `.env` を作成し、[EDINET 開発者向けサイト](https://api.edinet-fsa.go.jp/api/auth/index.aspx?mode=1) で取得したAPIキーを設定します。
+- Docker / Docker Compose で実行する場合
+  - Docker Desktop など、Compose が使える環境
+- ローカル Python で実行する場合
+  - Python 3.10 以上
+  - PostgreSQL 15 相当
+- EDINET API キー
+  - EDINET の開発者向けサイトで取得したキー
+
+## 環境変数
+
+`.env.example` をコピーして `.env` を作成します。
 
 ```bash
 cp .env.example .env
 ```
 
-`.env`
+主要な設定値:
+
+| 変数 | 必須 | 用途 | 既定値 |
+| --- | --- | --- | --- |
+| `EDINET_API_KEY` | Yes | EDINET API キー | なし |
+| `DATABASE_URL` | Yes | PostgreSQL 接続先 | なし |
+| `EDINET_REQUEST_TIMEOUT` | No | API タイムアウト秒 | `30` |
+| `EDINET_RETRY_COUNT` | No | API 再試行回数 | `3` |
+| `EDINET_BACKOFF_SECONDS` | No | API 再試行時の待機係数 | `2` |
+| `PROCESS_SLEEP_SECONDS` | No | 書類ごとの待機秒 | `1` |
+| `LOG_LEVEL` | No | ログレベル | `INFO` |
+| `ANALYTICS_OUTPUT_DIR` | No | Parquet / DuckDB の出力先 | `artifacts/analytics` |
+
+`.env.example` の `DATABASE_URL` は Compose 上の `app` コンテナから使う前提で `@db` を使っています。
+
 ```env
-EDINET_API_KEY=your_edinet_api_key_here
+EDINET_API_KEY=replace_with_your_edinet_api_key
+DATABASE_URL=postgresql://user:password@db:5432/edinet_db
+EDINET_REQUEST_TIMEOUT=30
+EDINET_RETRY_COUNT=3
+EDINET_BACKOFF_SECONDS=2
+PROCESS_SLEEP_SECONDS=1
+LOG_LEVEL=INFO
+ANALYTICS_OUTPUT_DIR=artifacts/analytics
 ```
 
-`docker-compose.yml` では `.env` を `app` コンテナへ読み込むようにしているため、以降の `docker compose exec` でそのまま利用できます。
+ホスト環境から直接 `edinet` を実行する場合は、必要に応じて `DATABASE_URL=postgresql://user:password@localhost:5432/edinet_db` のように切り替えてください。
 
-**EDINET APIキー発行ページで画面が開かない場合**
+## 最短セットアップ
 
-ログイン後、APIキー表示画面がポップアップで開く挙動になっているため、ブラウザでポップアップをブロックしているとAPIキー画面が表示されないことがあります。
+### 1. コンテナを起動
 
-Chrome の場合は `設定` → `プライバシーとセキュリティ` → `サイトの設定` → `ポップアップとリダイレクト` から、次の URL を許可リストに追加してください。
-
-```text
-https://api.edinet-fsa.go.jp
-```
-
-その後に再度アクセスすると、ポップアップ画面でAPIキーを確認できます。
-
-### 2. コンテナのビルドとDB初期化
 ```bash
 docker compose up -d --build
 ```
 
-### 3. パイプラインの実行
-**(1) 書類一覧の取得（Extractの起点）**
-指定した日付の書類リストを取得し、`companies`テーブルへのマスタ登録、および`financial_reports`への空枠（対象書類ID）登録を行います。このプロジェクトでは、通常の上場企業の有価証券報告書に寄せるため、`ordinanceCode=010` かつ `formCode=030000` の標準帳票だけを対象にしています。EDINET 側で `csvFlag=1` の書類だけが後続の CSV 抽出対象になります。
+### 2. スキーマを作成 / 移行
+
 ```bash
-docker compose exec app python src/fetch_edinet.py
+docker compose exec app alembic upgrade head
 ```
 
-**(2) 実データのダウンロードとDBへの抽出・ロード（Transform & Load）**
-XBRLに紐づくCSVデータをAPIからZIPとして要求し、売上・利益・従業員数・人的資本指標などの数値を安全にパースして挿入します。CSV 非対応の書類は自動でスキップされ、処理済みの書類は再実行時に繰り返し対象になりません。
+### 3. 書類一覧を取得
+
 ```bash
-docker compose exec app python src/extract_metrics.py
+docker compose exec app edinet fetch --date 2024-03-29
 ```
 
-## 🔎 確認用SQL
+### 4. 未処理キューを処理
 
-### 1. 取り込み件数の確認
+```bash
+docker compose exec app edinet process --limit 20
+```
+
+### 5. 分析用データを出力
+
+```bash
+docker compose exec app edinet export-analytics --format both
+```
+
+### 6. 取り込み状況を確認
+
 ```bash
 docker compose exec db psql -U user -d edinet_db -c "
-SELECT COUNT(*) AS companies FROM companies;
-SELECT COUNT(*) AS reports FROM financial_reports;
-SELECT COUNT(*) AS human_metrics FROM human_capital_metrics;
+SELECT status, COUNT(*) AS reports
+FROM financial_reports
+GROUP BY status
+ORDER BY status;
 "
 ```
 
-### 2. 財務データの確認
+## 典型的な運用フロー
+
+単日取り込み:
+
+```bash
+docker compose exec app edinet fetch --date 2024-03-29
+docker compose exec app edinet process --limit 20
+docker compose exec app edinet export-analytics --format both
+```
+
+月次バックフィル:
+
+```bash
+docker compose exec app edinet backfill --from 2024-03-01 --to 2024-03-31 --process-limit 20
+docker compose exec app edinet export-analytics --format both
+```
+
+失敗済みの再処理:
+
+```bash
+docker compose exec app edinet process --limit 20 --retry-failed
+docker compose exec app edinet export-analytics --format both
+```
+
+## CLI リファレンス
+
+### `edinet fetch`
+
+指定日の EDINET 書類一覧から、有価証券報告書だけを `financial_reports` に登録・更新します。
+
+```bash
+docker compose exec app edinet fetch --date 2024-03-29
+```
+
+挙動:
+
+- `docDescription`, `ordinanceCode`, `formCode` で対象帳票を絞り込みます。
+- `csvFlag=1` の書類は `pending`、CSV 非対応は `skipped` で登録します。
+- 同日を再実行しても `doc_id` 単位で再利用するため、重複挿入しません。
+
+### `edinet process`
+
+キューから `pending` の書類を取り出して処理します。
+
+```bash
+docker compose exec app edinet process --limit 20
+docker compose exec app edinet process --limit 20 --retry-failed
+```
+
+挙動:
+
+- CSV ZIP をダウンロードし、財務指標と人的資本指標を抽出します。
+- 抽出結果を `financial_reports`、`human_capital_metrics`、`metric_evidence` に書き込みます。
+- `--retry-failed` を付けた場合のみ `failed` も再処理対象になります。
+
+### `edinet backfill`
+
+日付範囲を日単位で `fetch -> process` します。
+
+```bash
+docker compose exec app edinet backfill --from 2024-03-01 --to 2024-03-31 --process-limit 20
+docker compose exec app edinet backfill --from 2024-03-01 --to 2024-03-31 --process-limit 20 --retry-failed
+```
+
+挙動:
+
+- 指定範囲を inclusive で処理します。
+- `pending / failed / processed / skipped` の状態を使って再入可能に動きます。
+- 処理途中で停止しても、同じコマンドを再実行すれば継続できます。
+
+### `edinet export-analytics`
+
+運用 DB のスナップショットから Parquet と DuckDB を生成します。
+
+```bash
+docker compose exec app edinet export-analytics --format both
+docker compose exec app edinet export-analytics --format parquet
+docker compose exec app edinet export-analytics --format duckdb
+```
+
+挙動:
+
+- `PostgreSQL` は正本です。
+- `Parquet` は配布・再利用しやすい列指向フォーマットです。
+- `DuckDB` はローカル SQL 分析用のスナップショット DB です。
+- `both` は同じ PostgreSQL snapshot を 1 回だけ読み、Parquet と DuckDB を両方更新します。
+- v1 では `process/backfill` 完了後に自動更新しません。必要なタイミングで明示実行します。
+
+## 状態管理
+
+`financial_reports.status` は次の意味を持ちます。
+
+| status | 意味 |
+| --- | --- |
+| `pending` | 取得対象として登録済み、未処理 |
+| `processing` | 現在処理中 |
+| `processed` | 正常に抽出完了 |
+| `skipped` | CSV 非対応などで処理対象外 |
+| `failed` | API / ZIP / CSV 解析エラーで失敗 |
+
+補助列:
+
+- `retry_count`
+  - 失敗回数
+- `last_error`
+  - 直近の失敗理由
+- `processed_at`
+  - 処理完了時刻
+- `source_metadata`
+  - EDINET API の元レスポンス
+
+## データモデル
+
+### `companies`
+
+企業マスタです。
+
+- `edinet_code`
+- `company_name`
+- `industry`
+
+### `financial_reports`
+
+書類メタデータと処理状態の主テーブルです。
+
+- `doc_id`
+- `edinet_code`
+- `fiscal_year`
+- `status`
+- `retry_count`
+- `last_error`
+- `processed_at`
+- `sales`
+- `operating_profit`
+- `net_profit`
+- `employee_count`
+- `submitted_date`
+- `source_metadata`
+
+### `human_capital_metrics`
+
+会社・年度・ソース単位の人的資本指標です。
+
+- `female_manager_ratio`
+- `male_childcare_leave_ratio`
+- `gender_wage_gap`
+- `source_name`
+
+`(edinet_code, fiscal_year, source_name)` は一意です。
+
+### `metric_evidence`
+
+各指標がどの行・どの値から抽出されたかを保持する監査テーブルです。
+
+- `doc_id`
+- `metric_name`
+- `item_name`
+- `raw_value`
+- `relative_year`
+- `source_file`
+- `matched_by`
+
+### `vw_company_year_metrics`
+
+分析向けの結合済みビューです。企業、年度、財務指標、人的資本指標をまとめて参照できます。
+
+## 分析用エクスポート
+
+出力先は `ANALYTICS_OUTPUT_DIR` 配下です。
+
+```text
+artifacts/analytics/
+├── parquet/
+│   ├── company_year_metrics/
+│   │   └── fiscal_year=2024/...
+│   └── metric_evidence/
+│       └── fiscal_year=2024/...
+└── edinet_analytics.duckdb
+```
+
+Parquet:
+
+- `company_year_metrics`
+- `metric_evidence`
+
+の 2 dataset を `fiscal_year` パーティションで出力します。
+
+DuckDB:
+
+- `analytics.company_year_metrics`
+- `analytics.metric_evidence`
+
+の 2 テーブルを実体化します。
+
+DuckDB を直接開く例:
+
+```bash
+duckdb artifacts/analytics/edinet_analytics.duckdb
+```
+
+```sql
+SELECT COUNT(*) FROM analytics.company_year_metrics;
+SELECT * FROM analytics.metric_evidence LIMIT 20;
+SELECT fiscal_year, AVG(female_manager_ratio)
+FROM analytics.company_year_metrics
+GROUP BY fiscal_year
+ORDER BY fiscal_year;
+```
+
+## 代表 SQL
+
+取り込み状況:
+
+```bash
+docker compose exec db psql -U user -d edinet_db -c "
+SELECT doc_id, edinet_code, status, retry_count, last_error
+FROM financial_reports
+ORDER BY submitted_date, doc_id
+LIMIT 30;
+"
+```
+
+分析ビュー:
+
 ```bash
 docker compose exec db psql -U user -d edinet_db -c "
 SELECT
-  fr.doc_id,
-  c.company_name,
-  fr.sales,
-  fr.operating_profit,
-  fr.net_profit,
-  fr.employee_count
-FROM financial_reports fr
-JOIN companies c USING (edinet_code)
-WHERE fr.processed IS TRUE
-ORDER BY fr.sales DESC NULLS LAST
+  company_name,
+  fiscal_year,
+  sales,
+  operating_profit,
+  net_profit,
+  employee_count,
+  female_manager_ratio,
+  male_childcare_leave_ratio,
+  gender_wage_gap
+FROM vw_company_year_metrics
+ORDER BY fiscal_year DESC, sales DESC NULLS LAST
 LIMIT 20;
 "
 ```
 
-### 3. 人的資本データの確認
+抽出根拠:
+
 ```bash
 docker compose exec db psql -U user -d edinet_db -c "
 SELECT
-  c.company_name,
-  hm.fiscal_year,
-  hm.female_manager_ratio,
-  hm.male_childcare_leave_ratio,
-  hm.gender_wage_gap
-FROM human_capital_metrics hm
-JOIN companies c USING (edinet_code)
-ORDER BY hm.fiscal_year DESC, c.company_name
-LIMIT 20;
+  me.doc_id,
+  fr.edinet_code,
+  me.metric_name,
+  me.item_name,
+  me.raw_value,
+  me.relative_year,
+  me.matched_by
+FROM metric_evidence me
+JOIN financial_reports fr
+  ON fr.doc_id = me.doc_id
+ORDER BY fr.fiscal_year DESC, me.doc_id, me.metric_name
+LIMIT 30;
 "
 ```
 
-### 4. 財務データと人的資本データを結合して確認
+失敗書類の確認:
+
 ```bash
 docker compose exec db psql -U user -d edinet_db -c "
-SELECT
-  c.company_name,
-  fr.fiscal_year,
-  fr.sales,
-  fr.operating_profit,
-  hm.female_manager_ratio,
-  hm.male_childcare_leave_ratio,
-  hm.gender_wage_gap
-FROM financial_reports fr
-JOIN companies c USING (edinet_code)
-LEFT JOIN human_capital_metrics hm
-  ON hm.edinet_code = fr.edinet_code
- AND hm.fiscal_year = fr.fiscal_year
-WHERE fr.processed IS TRUE
-ORDER BY fr.sales DESC NULLS LAST
-LIMIT 20;
+SELECT doc_id, edinet_code, status, retry_count, last_error
+FROM financial_reports
+WHERE status IN ('failed', 'skipped')
+ORDER BY submitted_date, doc_id;
 "
 ```
 
-## 📈 今後の展望
-- Tableau等のBIツールを直接PostgreSQLに接続し、「人的資本の充実度と利益率の相関」を可視化するダッシュボードを構築。
-- Apache Airflow（またはMage.ai）への移行による、バッチ処理（Cronジョブやタスクごとの依存関係整理）の完全自動化。
+## 開発
+
+ローカル Python 環境での実行:
+
+```bash
+python -m pip install -e '.[dev]'
+alembic upgrade head
+ruff check .
+pytest -q
+```
+
+analytics export を含めた CLI の確認:
+
+```bash
+python -m edinet_pipeline --help
+python -m edinet_pipeline export-analytics --help
+```
+
+CI では次を実行します。
+
+- `ruff check .`
+- `pytest -q`
+- `gitleaks`
+
+integration test は PostgreSQL を前提にしています。
+
+## 任意の Airflow 実行
+
+Airflow はデフォルトでは起動しません。必要な場合だけ profile を付けて起動します。
+
+```bash
+docker compose --profile airflow up airflow
+```
+
+同梱の DAG は次の順で実行します。
+
+- `fetch_daily`
+- `process_queue`
+- `optional_backfill`
+
+`EDINET_BACKFILL_START` を与えた場合だけ追加バックフィルを実行します。v1 では Airflow から `export-analytics` は自動実行しません。
+
+## 互換ラッパー
+
+旧スクリプトも一時的に利用できます。
+
+```bash
+TARGET_DATE=2024-03-29 docker compose exec app python src/fetch_edinet.py
+docker compose exec app python src/extract_metrics.py --limit 20
+```
+
+ただし今後の機能追加は `edinet` CLI を前提に行います。
+
+## トラブルシューティング
+
+### `DATABASE_URL` で接続できない
+
+- Compose 内から実行しているか確認する
+- ホストから直接実行しているなら `@db` ではなく `@localhost` に切り替える
+
+### `process` 実行後に対象が残る
+
+- `failed` か `skipped` になっていないか確認する
+- `failed` は `--retry-failed` を付けて再処理する
+
+### Parquet / DuckDB が更新されない
+
+- `process` や `backfill` の後に `edinet export-analytics --format both` を実行する
+- v1 では分析出力は自動更新ではない
+
+### スキーマ差分がある
+
+```bash
+docker compose exec app alembic upgrade head
+```

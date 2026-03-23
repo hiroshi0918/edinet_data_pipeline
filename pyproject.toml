@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "edinet-data-pipeline"
+version = "0.1.0"
+description = "EDINET annual securities report ingestion pipeline"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "alembic>=1.14.0",
+    "duckdb>=1.2.1",
+    "pandas>=2.2.3",
+    "pyarrow>=19.0.1",
+    "psycopg2-binary>=2.9.10",
+    "requests>=2.32.3",
+    "SQLAlchemy>=2.0.39",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.5",
+    "ruff>=0.11.2",
+]
+
+[project.scripts]
+edinet = "edinet_pipeline.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests that require a live PostgreSQL database",
+]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP"]

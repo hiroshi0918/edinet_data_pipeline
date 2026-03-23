@@ -1,0 +1,213 @@
+from __future__ import annotations
+
+import io
+import re
+import unicodedata
+import zipfile
+
+import pandas as pd
+
+from edinet_pipeline.models import MetricEvidenceRecord, ParsedDocument
+
+FINANCIAL_FIELDS = ("sales", "operating_profit", "net_profit", "employee_count")
+HUMAN_FIELDS = (
+    "female_manager_ratio",
+    "male_childcare_leave_ratio",
+    "gender_wage_gap",
+)
+
+EXPLICIT_PATTERNS = {
+    "sales": ("売上高", "営業収益", "売上収益", "完成工事高"),
+    "operating_profit": ("営業利益", "営業損失"),
+    "net_profit": ("当期純利益", "親会社株主に帰属する"),
+    "employee_count": ("従業員数",),
+    "female_manager_ratio": ("管理職に占める女性労働者の割合",),
+    "male_childcare_leave_ratio": ("男性労働者の育児休業取得率", "男性の育児休業取得率"),
+    "gender_wage_gap": ("男女の賃金の差異", "男女賃金差異"),
+}
+CURRENT_PERIOD_MARKERS = ("当期", "当年", "当連結会計年度", "提出者")
+
+
+def empty_parsed_document() -> ParsedDocument:
+    return ParsedDocument(
+        financial_metrics={name: None for name in FINANCIAL_FIELDS},
+        human_metrics={name: None for name in HUMAN_FIELDS},
+        evidence=[],
+    )
+
+
+def normalize_text(value: object) -> str:
+    if value is None or pd.isna(value):
+        return ""
+    return unicodedata.normalize("NFKC", str(value)).strip()
+
+
+def extract_numeric(value: object) -> float | None:
+    text = normalize_text(value)
+    if not text or text in {"-", "nan", "None"}:
+        return None
+
+    negative = False
+    if text.startswith("(") and text.endswith(")"):
+        negative = True
+        text = text[1:-1]
+
+    text = text.replace(",", "")
+    match = re.search(r"[-+]?\d+(?:\.\d+)?", text)
+    if not match:
+        return None
+
+    number = float(match.group())
+    if negative and number > 0:
+        return -number
+    return number
+
+
+def parse_metric_tokens(compact_text: str) -> list[float | None]:
+    normalized = normalize_text(compact_text).replace("－", "-").replace("―", "-")
+    normalized = re.sub(r"[%％,]", "", normalized)
+    tokens: list[float | None] = []
+    for token in re.findall(r"-|\d+(?:\.\d+)?", normalized):
+        if token == "-":
+            tokens.append(None)
+        else:
+            tokens.append(float(token))
+    return tokens
+
+
+def is_relevant_relative_year(relative_year: str) -> bool:
+    normalized = normalize_text(relative_year)
+    if not normalized:
+        return True
+    return any(marker in normalized for marker in CURRENT_PERIOD_MARKERS)
+
+
+def _extract_label_value(section: str, labels: tuple[str, ...]) -> float | None:
+    for label in labels:
+        match = re.search(rf"{re.escape(label)}[^0-9\-]*(-|\d+(?:\.\d+)?)", section)
+        if not match:
+            continue
+        token = match.group(1)
+        if token == "-":
+            return None
+        return float(token)
+    return None
+
+
+def extract_human_capital_from_text(text: object) -> dict[str, float]:
+    normalized = normalize_text(text)
+    if "管理職に占める女性労働者の割合" not in normalized:
+        return {}
+
+    start = normalized.find("管理職に占める女性労働者の割合")
+    section = normalized[start : start + 800]
+    section = re.sub(r"[\(（]注[^)）]*[\)）]\s*[0-9０-９]?", "", section)
+    section = re.sub(r"\s+", " ", section)
+
+    metric_labels = [
+        "労働者の男女の賃金の差異(%)",
+        "男女の賃金の差異(%)",
+        "労働者の男女賃金差異(%)",
+    ]
+
+    result = {}
+    female_manager_ratio = _extract_label_value(section, ("管理職に占める女性労働者の割合",))
+    if female_manager_ratio is not None:
+        result["female_manager_ratio"] = female_manager_ratio
+
+    male_childcare_leave_ratio = _extract_label_value(
+        section,
+        ("男性労働者の育児休業取得率", "男性の育児休業取得率"),
+    )
+    if male_childcare_leave_ratio is not None:
+        result["male_childcare_leave_ratio"] = male_childcare_leave_ratio
+
+    gender_wage_gap = _extract_label_value(section, tuple(metric_labels))
+    if gender_wage_gap is not None:
+        result["gender_wage_gap"] = gender_wage_gap
+
+    return result
+
+
+def parse_document_zip(zip_bytes: bytes) -> ParsedDocument:
+    parsed = empty_parsed_document()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
+        csv_files = [
+            name
+            for name in archive.namelist()
+            if name.endswith(".csv")
+            and (
+                "jpcrp" in name.lower() or "jpaud" in name.lower() or "xbrl_to_csv" in name.lower()
+            )
+        ]
+        if not csv_files:
+            raise ValueError("No candidate CSV files found in ZIP")
+
+        for csv_file in csv_files:
+            with archive.open(csv_file) as handle:
+                frame = pd.read_csv(handle, encoding="utf-16le", sep="\t")
+
+            if "項目名" not in frame.columns or "値" not in frame.columns:
+                continue
+
+            for _, row in frame.iterrows():
+                item_name = normalize_text(row.get("項目名"))
+                raw_value = row.get("値")
+                raw_text = normalize_text(raw_value)
+                relative_year = normalize_text(row.get("相対年度"))
+
+                if not item_name and not raw_text:
+                    continue
+
+                for metric_name, patterns in EXPLICIT_PATTERNS.items():
+                    if (
+                        metric_name in parsed.financial_metrics
+                        and parsed.financial_metrics[metric_name] is not None
+                    ):
+                        continue
+                    if (
+                        metric_name in parsed.human_metrics
+                        and parsed.human_metrics[metric_name] is not None
+                    ):
+                        continue
+                    if not is_relevant_relative_year(relative_year):
+                        continue
+                    if not any(pattern in item_name for pattern in patterns):
+                        continue
+
+                    numeric_value = extract_numeric(raw_value)
+                    if numeric_value is None:
+                        continue
+
+                    evidence = MetricEvidenceRecord(
+                        metric_name=metric_name,
+                        item_name=item_name or metric_name,
+                        raw_value=raw_text,
+                        relative_year=relative_year,
+                        source_file=csv_file,
+                        matched_by="item_name_match",
+                    )
+                    parsed.evidence.append(evidence)
+
+                    if metric_name in parsed.financial_metrics:
+                        parsed.financial_metrics[metric_name] = int(round(numeric_value))
+                    else:
+                        parsed.human_metrics[metric_name] = numeric_value
+
+                fallback_metrics = extract_human_capital_from_text(raw_text)
+                for metric_name, metric_value in fallback_metrics.items():
+                    if parsed.human_metrics[metric_name] is not None:
+                        continue
+                    parsed.human_metrics[metric_name] = metric_value
+                    parsed.evidence.append(
+                        MetricEvidenceRecord(
+                            metric_name=metric_name,
+                            item_name=item_name or metric_name,
+                            raw_value=raw_text,
+                            relative_year=relative_year,
+                            source_file=csv_file,
+                            matched_by="text_fallback",
+                        )
+                    )
+
+    return parsed

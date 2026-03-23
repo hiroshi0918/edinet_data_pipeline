@@ -1,0 +1,4 @@
+title = "EDINET Data Pipeline Gitleaks Config"
+
+[extend]
+useDefault = true
