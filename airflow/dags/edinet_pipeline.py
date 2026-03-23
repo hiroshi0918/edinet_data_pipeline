@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import pendulum
+from airflow.operators.bash import BashOperator
 
 from airflow import DAG
-from airflow.operators.bash import BashOperator
 
 with DAG(
     dag_id="edinet_pipeline",
