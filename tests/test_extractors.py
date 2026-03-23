@@ -1,7 +1,34 @@
 from __future__ import annotations
 
-from edinet_pipeline.extractors import extract_human_capital_from_text, extract_numeric
+import io
+import zipfile
+
+import pandas as pd
+import pytest
+
+from edinet_pipeline.extractors import (
+    extract_human_capital_from_text,
+    extract_numeric,
+    parse_document_zip,
+)
 from edinet_pipeline.models import FilingFilters
+
+
+def build_zip(entries: dict[str, object]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for path, payload in entries.items():
+            if isinstance(payload, list):
+                frame = pd.DataFrame(payload)
+                content = frame.to_csv(index=False, sep="\t").encode("utf-16le")
+            elif isinstance(payload, pd.DataFrame):
+                content = payload.to_csv(index=False, sep="\t").encode("utf-16le")
+            elif isinstance(payload, str):
+                content = payload.encode("utf-8")
+            else:
+                content = payload
+            archive.writestr(path, content)
+    return buffer.getvalue()
 
 
 def test_extract_numeric_handles_commas_full_width_and_parentheses() -> None:
@@ -43,3 +70,65 @@ def test_filing_filters_accept_only_target_annual_reports() -> None:
 
     assert filters.matches(target_document) is True
     assert filters.matches(non_target_document) is False
+
+
+def test_parse_document_zip_skips_irrelevant_files_and_invalid_columns() -> None:
+    zip_bytes = build_zip(
+        {
+            "notes/readme.txt": "ignore me",
+            "XBRL_TO_CSV/invalid.csv": pd.DataFrame([{"foo": "売上高", "bar": "100"}]),
+            "XBRL_TO_CSV/jpcrp_valid.csv": [
+                {"項目名": "売上高", "値": "1,234", "相対年度": "当期"},
+                {"項目名": "従業員数", "値": "50", "相対年度": "提出者"},
+            ],
+        }
+    )
+
+    parsed = parse_document_zip(zip_bytes)
+
+    assert parsed.financial_metrics["sales"] == 1234
+    assert parsed.financial_metrics["employee_count"] == 50
+    assert [record.metric_name for record in parsed.evidence] == ["sales", "employee_count"]
+
+
+def test_parse_document_zip_ignores_non_current_rows_and_records_both_evidence_types() -> None:
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp_metrics.csv": [
+                {"項目名": "売上高", "値": "1,000", "相対年度": "前期"},
+                {"項目名": "男性労働者の育児休業取得率", "値": "81.0", "相対年度": "提出者"},
+                {
+                    "項目名": "補足文章",
+                    "値": "管理職に占める女性労働者の割合 12.5 労働者の男女の賃金の差異(%) 75.5",
+                    "相対年度": "提出者",
+                },
+            ]
+        }
+    )
+
+    parsed = parse_document_zip(zip_bytes)
+
+    assert parsed.financial_metrics["sales"] is None
+    assert parsed.human_metrics == {
+        "female_manager_ratio": 12.5,
+        "male_childcare_leave_ratio": 81.0,
+        "gender_wage_gap": 75.5,
+    }
+    assert {(record.metric_name, record.matched_by) for record in parsed.evidence} == {
+        ("male_childcare_leave_ratio", "item_name_match"),
+        ("female_manager_ratio", "text_fallback"),
+        ("gender_wage_gap", "text_fallback"),
+    }
+
+
+def test_parse_document_zip_raises_when_no_candidate_csv_files_exist() -> None:
+    zip_bytes = build_zip(
+        {
+            "reports/annual.csv": [
+                {"項目名": "売上高", "値": "1,234", "相対年度": "当期"},
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError, match="No candidate CSV files found in ZIP"):
+        parse_document_zip(zip_bytes)
