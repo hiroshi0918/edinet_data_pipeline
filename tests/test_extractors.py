@@ -1,3 +1,5 @@
+"""extractors モジュールのテスト — CSV/ZIP パース・数値変換・人的資本テキスト抽出の検証."""
+
 from __future__ import annotations
 
 import io
@@ -15,6 +17,14 @@ from edinet_pipeline.models import FilingFilters
 
 
 def build_zip(entries: dict[str, object]) -> bytes:
+    """テスト用の ZIP アーカイブをメモリ上に構築する.
+
+    entries の値は以下の型を受け付ける:
+      - list[dict]:    → DataFrame に変換後、TSV (UTF-16LE) に変換
+      - pd.DataFrame:  → TSV (UTF-16LE) に変換
+      - str:           → UTF-8 バイト列に変換
+      - bytes:         → そのまま書き込み
+    """
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for path, payload in entries.items():
@@ -31,19 +41,32 @@ def build_zip(entries: dict[str, object]) -> bytes:
     return buffer.getvalue()
 
 
+# ------------------------------------------------------------------ #
+#  extract_numeric: 全角・カンマ・括弧付き数値のパース
+# ------------------------------------------------------------------ #
+
+
 def test_extract_numeric_handles_commas_full_width_and_parentheses() -> None:
+    """全角数字 / カンマ区切り / 括弧(負数) が正しく変換されること."""
     assert extract_numeric("１,２３４") == 1234.0
     assert extract_numeric("(1,234)") == -1234.0
     assert extract_numeric("営業利益 98.7") == 98.7
 
 
 def test_extract_numeric_returns_none_for_missing_markers() -> None:
+    """空文字列・ハイフン・None は欠損値 (None) として返すこと."""
     assert extract_numeric("") is None
     assert extract_numeric("-") is None
     assert extract_numeric(None) is None
 
 
+# ------------------------------------------------------------------ #
+#  extract_human_capital_from_text: 自由記述テキストからの指標抽出
+# ------------------------------------------------------------------ #
+
+
 def test_extract_human_capital_from_text_uses_text_fallback() -> None:
+    """補足文章中のキーワードから人的資本指標を抽出できること."""
     text = """
     管理職に占める女性労働者の割合 12.5
     男性労働者の育児休業取得率 80.0
@@ -55,7 +78,13 @@ def test_extract_human_capital_from_text_uses_text_fallback() -> None:
     assert metrics["gender_wage_gap"] == 75.5
 
 
+# ------------------------------------------------------------------ #
+#  FilingFilters: 書類種別フィルタ (有価証券報告書のみ通す)
+# ------------------------------------------------------------------ #
+
+
 def test_filing_filters_accept_only_target_annual_reports() -> None:
+    """有価証券報告書 (ordinanceCode=010, formCode=030000) のみ True を返すこと."""
     filters = FilingFilters()
     target_document = {
         "docDescription": "有価証券報告書－第10期(2023/04/01－2024/03/31)",
@@ -72,7 +101,13 @@ def test_filing_filters_accept_only_target_annual_reports() -> None:
     assert filters.matches(non_target_document) is False
 
 
+# ------------------------------------------------------------------ #
+#  parse_document_zip: ZIP → ParsedDocument の統合テスト
+# ------------------------------------------------------------------ #
+
+
 def test_parse_document_zip_skips_irrelevant_files_and_invalid_columns() -> None:
+    """XBRL_TO_CSV/jpcrp_*.csv のみ処理対象とし、不正カラムのファイルを無視すること."""
     zip_bytes = build_zip(
         {
             "notes/readme.txt": "ignore me",
@@ -92,6 +127,7 @@ def test_parse_document_zip_skips_irrelevant_files_and_invalid_columns() -> None
 
 
 def test_parse_document_zip_ignores_non_current_rows_and_records_both_evidence_types() -> None:
+    """前期データは無視し、項目名マッチとテキストフォールバックの両方で証跡を記録すること."""
     zip_bytes = build_zip(
         {
             "XBRL_TO_CSV/jpcrp_metrics.csv": [
@@ -108,12 +144,14 @@ def test_parse_document_zip_ignores_non_current_rows_and_records_both_evidence_t
 
     parsed = parse_document_zip(zip_bytes)
 
+    # 前期の売上高は取り込まれない
     assert parsed.financial_metrics["sales"] is None
     assert parsed.human_metrics == {
         "female_manager_ratio": 12.5,
         "male_childcare_leave_ratio": 81.0,
         "gender_wage_gap": 75.5,
     }
+    # 抽出方法が item_name_match と text_fallback の 2 種類記録される
     assert {(record.metric_name, record.matched_by) for record in parsed.evidence} == {
         ("male_childcare_leave_ratio", "item_name_match"),
         ("female_manager_ratio", "text_fallback"),
@@ -122,6 +160,7 @@ def test_parse_document_zip_ignores_non_current_rows_and_records_both_evidence_t
 
 
 def test_parse_document_zip_raises_when_no_candidate_csv_files_exist() -> None:
+    """XBRL_TO_CSV/ 配下に対象 CSV が無い場合 ValueError を送出すること."""
     zip_bytes = build_zip(
         {
             "reports/annual.csv": [

@@ -1,3 +1,13 @@
+"""データベースアクセス層 — PostgreSQL への CRUD 操作とパイプライン状態管理.
+
+テーブル構成:
+  companies             : 企業マスタ (edinet_code がキー)
+  financial_reports     : 書類メタ + 財務指標 + 処理ステータス
+  human_capital_metrics : 人的資本指標 (女性管理職比率 等)
+  metric_evidence       : 抽出根拠の監査証跡
+  vw_company_year_metrics : 企業×年度ごとの統合ビュー (分析用)
+"""
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -9,11 +19,13 @@ from psycopg2.extras import Json, RealDictCursor
 
 from edinet_pipeline.models import DocumentRecord, MetricEvidenceRecord, ParsedDocument
 
+# claim_documents_for_processing で取得対象とするステータス
 PROCESSABLE_STATUSES = ("pending", "failed")
 
 
 @contextmanager
 def db_connection(database_url: str) -> Iterator[psycopg2.extensions.connection]:
+    """PostgreSQL コネクションのコンテキストマネージャ (自動 close)."""
     connection = psycopg2.connect(database_url)
     try:
         yield connection
@@ -22,10 +34,20 @@ def db_connection(database_url: str) -> Iterator[psycopg2.extensions.connection]
 
 
 class PipelineRepository:
+    """パイプラインの DB 操作を集約するリポジトリクラス.
+
+    このクラスでは commit を行わない — トランザクション制御は呼び出し側の責務。
+    """
+
     def __init__(self, connection: psycopg2.extensions.connection) -> None:
         self.connection = connection
 
+    # ------------------------------------------------------------------ #
+    #  企業・書類の登録 (Upsert)
+    # ------------------------------------------------------------------ #
+
     def upsert_company(self, edinet_code: str, company_name: str) -> None:
+        """企業マスタへ INSERT or UPDATE (edinet_code をキーにする)."""
         with self.connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -38,6 +60,13 @@ class PipelineRepository:
             )
 
     def upsert_document(self, document: DocumentRecord) -> None:
+        """書類メタデータを INSERT or UPDATE.
+
+        ステータス遷移ルール:
+          - 既に processed / failed / processing → ステータス維持
+          - CSV 未提供 (csvFlag=0) → skipped
+          - 上記以外 → pending (処理待ち)
+        """
         initial_status = "pending" if document.csv_available else "skipped"
         initial_error = None if document.csv_available else "CSV not available from EDINET"
         with self.connection.cursor() as cursor:
@@ -90,6 +119,10 @@ class PipelineRepository:
                 ),
             )
 
+    # ------------------------------------------------------------------ #
+    #  処理キューの取得と状態遷移
+    # ------------------------------------------------------------------ #
+
     def claim_documents_for_processing(
         self,
         *,
@@ -97,6 +130,11 @@ class PipelineRepository:
         retry_failed: bool,
         submitted_date: date | None = None,
     ) -> list[dict]:
+        """処理対象の書類を SELECT FOR UPDATE SKIP LOCKED で排他取得し、
+        ステータスを 'processing' に更新して返す.
+
+        並行ワーカーが同じ書類を重複処理しないようロックベースで制御する。
+        """
         statuses = ["pending"]
         if retry_failed:
             statuses.append("failed")
@@ -137,6 +175,7 @@ class PipelineRepository:
             return list(cursor.fetchall())
 
     def mark_processed(self, doc_id: str, parsed: ParsedDocument) -> None:
+        """処理成功 — 財務指標を書き込み、ステータスを 'processed' へ."""
         with self.connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -160,6 +199,7 @@ class PipelineRepository:
             )
 
     def mark_failed(self, doc_id: str, reason: str) -> None:
+        """処理失敗 — エラー理由を記録し retry_count をインクリメント."""
         with self.connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -174,6 +214,7 @@ class PipelineRepository:
             )
 
     def reset_to_pending(self, doc_id: str, reason: str) -> None:
+        """中断からの復帰 — ステータスを 'pending' に戻す (SIGINT 等)."""
         with self.connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -186,6 +227,7 @@ class PipelineRepository:
             )
 
     def mark_skipped(self, doc_id: str, reason: str) -> None:
+        """処理スキップ — CSV が存在しない書類などに使用."""
         with self.connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -198,6 +240,10 @@ class PipelineRepository:
                 (reason, doc_id),
             )
 
+    # ------------------------------------------------------------------ #
+    #  人的資本指標 / 抽出根拠の保存
+    # ------------------------------------------------------------------ #
+
     def upsert_human_metrics(
         self,
         *,
@@ -206,6 +252,10 @@ class PipelineRepository:
         parsed: ParsedDocument,
         source_name: str = "EDINET_CSV",
     ) -> None:
+        """人的資本指標を INSERT or UPDATE.
+
+        全値が None の場合は何もしない (空レコード防止)。
+        """
         if all(value is None for value in parsed.human_metrics.values()):
             return
 
@@ -237,6 +287,7 @@ class PipelineRepository:
             )
 
     def replace_metric_evidence(self, doc_id: str, evidence: list[MetricEvidenceRecord]) -> None:
+        """抽出根拠を全削除 → 再挿入 (冪等な洗い替え方式)."""
         with self.connection.cursor() as cursor:
             cursor.execute("DELETE FROM metric_evidence WHERE doc_id = %s", (doc_id,))
             if not evidence:
@@ -268,7 +319,12 @@ class PipelineRepository:
                 ],
             )
 
+    # ------------------------------------------------------------------ #
+    #  分析レイヤー用クエリ (Read-Only)
+    # ------------------------------------------------------------------ #
+
     def fetch_company_year_metrics_rows(self) -> list[dict]:
+        """vw_company_year_metrics ビューから全行を取得 (Parquet / DuckDB 出力用)."""
         with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute(
                 """
@@ -294,6 +350,7 @@ class PipelineRepository:
             return list(cursor.fetchall())
 
     def fetch_metric_evidence_rows(self) -> list[dict]:
+        """metric_evidence を companies・financial_reports と JOIN して全行取得."""
         with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute(
                 """

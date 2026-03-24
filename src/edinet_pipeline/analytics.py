@@ -1,3 +1,14 @@
+"""分析レイヤー — PostgreSQL のスナップショットを Parquet / DuckDB へエクスポート.
+
+出力先 (デフォルト):
+  artifacts/analytics/parquet/  — fiscal_year でパーティション分割された Parquet ファイル
+  artifacts/analytics/edinet_analytics.duckdb — 全データを格納した DuckDB ファイル
+
+データセット:
+  company_year_metrics : 企業×年度ごとの財務・人的資本指標 (vw_company_year_metrics ビュー)
+  metric_evidence      : 指標抽出の根拠・監査証跡
+"""
+
 from __future__ import annotations
 
 import logging
@@ -15,6 +26,10 @@ from edinet_pipeline.db import PipelineRepository, db_connection
 from edinet_pipeline.logging_utils import log_event
 
 logger = logging.getLogger(__name__)
+
+# ------------------------------------------------------------------ #
+#  データセット名とカラム定義
+# ------------------------------------------------------------------ #
 
 COMPANY_YEAR_METRICS_DATASET = "company_year_metrics"
 METRIC_EVIDENCE_DATASET = "metric_evidence"
@@ -52,6 +67,7 @@ METRIC_EVIDENCE_COLUMNS = [
     "matched_by",
 ]
 
+# PyArrow スキーマ — Parquet 出力時の型を明示的に指定
 DATASET_SCHEMAS = {
     COMPANY_YEAR_METRICS_DATASET: pa.schema(
         [
@@ -90,11 +106,17 @@ DATASET_SCHEMAS = {
 }
 
 
+# ------------------------------------------------------------------ #
+#  DataFrame ↔ PyArrow 変換
+# ------------------------------------------------------------------ #
+
 def _frame_from_rows(rows: list[dict], columns: list[str]) -> pd.DataFrame:
+    """dict のリストを指定カラム順の DataFrame に変換する."""
     return pd.DataFrame(rows, columns=columns)
 
 
 def build_company_year_metrics_frame(settings: Settings) -> pd.DataFrame:
+    """PostgreSQL から企業×年度メトリクスを取得し DataFrame で返す."""
     with db_connection(settings.database_url) as connection:
         repository = PipelineRepository(connection)
         rows = repository.fetch_company_year_metrics_rows()
@@ -102,6 +124,7 @@ def build_company_year_metrics_frame(settings: Settings) -> pd.DataFrame:
 
 
 def build_metric_evidence_frame(settings: Settings) -> pd.DataFrame:
+    """PostgreSQL から抽出根拠データを取得し DataFrame で返す."""
     with db_connection(settings.database_url) as connection:
         repository = PipelineRepository(connection)
         rows = repository.fetch_metric_evidence_rows()
@@ -109,6 +132,7 @@ def build_metric_evidence_frame(settings: Settings) -> pd.DataFrame:
 
 
 def load_analytics_frames(settings: Settings) -> dict[str, pd.DataFrame]:
+    """全データセットの DataFrame をまとめて取得する."""
     return {
         COMPANY_YEAR_METRICS_DATASET: build_company_year_metrics_frame(settings),
         METRIC_EVIDENCE_DATASET: build_metric_evidence_frame(settings),
@@ -116,12 +140,14 @@ def load_analytics_frames(settings: Settings) -> dict[str, pd.DataFrame]:
 
 
 def _empty_table(dataset_name: str) -> pa.Table:
+    """スキーマのみ・レコード 0 件の空 PyArrow テーブルを生成する."""
     schema = DATASET_SCHEMAS[dataset_name]
     arrays = [pa.array([], type=field.type) for field in schema]
     return pa.Table.from_arrays(arrays, schema=schema)
 
 
 def _frame_to_table(dataset_name: str, frame: pd.DataFrame) -> pa.Table:
+    """DataFrame を明示的なスキーマで PyArrow Table に変換する."""
     if frame.empty:
         return _empty_table(dataset_name)
     return pa.Table.from_pandas(
@@ -131,7 +157,16 @@ def _frame_to_table(dataset_name: str, frame: pd.DataFrame) -> pa.Table:
     )
 
 
+# ------------------------------------------------------------------ #
+#  Parquet 出力 (fiscal_year でパーティション分割)
+# ------------------------------------------------------------------ #
+
 def write_partitioned_parquet(dataset_name: str, frame: pd.DataFrame, root_dir: Path) -> int:
+    """DataFrame を fiscal_year パーティションで Parquet 出力する.
+
+    Returns:
+        書き込んだ行数 (空の場合は 0)
+    """
     dataset_root = root_dir / dataset_name
     dataset_root.mkdir(parents=True, exist_ok=True)
 
@@ -149,6 +184,13 @@ def write_partitioned_parquet(dataset_name: str, frame: pd.DataFrame, root_dir: 
 
 
 def export_parquet_snapshot(settings: Settings, frames: dict[str, pd.DataFrame]) -> dict[str, int]:
+    """Parquet スナップショットをアトミックに出力する.
+
+    手順:
+      1. 一時ディレクトリ (.tmp-*) に書き出し
+      2. 成功時に本番ディレクトリへ移動 (アトミック replace)
+      3. 失敗時は一時ディレクトリをクリーンアップ
+    """
     output_root = settings.analytics_output_root
     output_root.mkdir(parents=True, exist_ok=True)
     tmp_root = output_root / f".tmp-{int(time.time() * 1000)}"
@@ -161,6 +203,7 @@ def export_parquet_snapshot(settings: Settings, frames: dict[str, pd.DataFrame])
             rows = write_partitioned_parquet(dataset_name, frames[dataset_name], tmp_parquet_root)
             summary[dataset_name] = rows
 
+        # 一時ディレクトリ → 本番ディレクトリへアトミックに入れ替え
         target_root = settings.analytics_parquet_root
         target_root.mkdir(parents=True, exist_ok=True)
         for dataset_name in DATASET_ORDER:
@@ -185,7 +228,17 @@ def export_parquet_snapshot(settings: Settings, frames: dict[str, pd.DataFrame])
     return summary
 
 
+# ------------------------------------------------------------------ #
+#  DuckDB 出力 (analytics スキーマに全テーブルを格納)
+# ------------------------------------------------------------------ #
+
 def export_duckdb_snapshot(settings: Settings, frames: dict[str, pd.DataFrame]) -> dict[str, int]:
+    """DuckDB スナップショットをアトミックに出力する.
+
+    手順:
+      1. .tmp ファイルに全データセットを書き込み
+      2. 完了後に本番パスへ rename
+    """
     output_root = settings.analytics_output_root
     output_root.mkdir(parents=True, exist_ok=True)
 
@@ -200,6 +253,7 @@ def export_duckdb_snapshot(settings: Settings, frames: dict[str, pd.DataFrame]) 
         connection.execute("CREATE SCHEMA IF NOT EXISTS analytics")
         for dataset_name in DATASET_ORDER:
             frame = frames[dataset_name]
+            # DataFrame を一時リレーション名で登録 → CTAS でテーブル化
             relation_name = f"{dataset_name}_frame"
             connection.register(relation_name, frame)
             connection.execute(
@@ -219,11 +273,21 @@ def export_duckdb_snapshot(settings: Settings, frames: dict[str, pd.DataFrame]) 
     finally:
         connection.close()
 
+    # アトミック rename: tmp → 本番パス
     tmp_path.replace(target_path)
     return summary
 
 
+# ------------------------------------------------------------------ #
+#  エントリポイント: フォーマットに応じてエクスポートを実行
+# ------------------------------------------------------------------ #
+
 def export_analytics(settings: Settings, output_format: str) -> dict[str, dict[str, int]]:
+    """指定フォーマット (parquet / duckdb / both) でスナップショットを出力する.
+
+    Returns:
+        {"parquet": {dataset: rows}, "duckdb": {dataset: rows}} 形式のサマリ
+    """
     frames = load_analytics_frames(settings)
     summary: dict[str, dict[str, int]] = {}
 

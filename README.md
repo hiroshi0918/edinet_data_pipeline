@@ -37,6 +37,30 @@ graph LR
     E --> G
 ```
 
+## データ抽出・分析のロジック
+
+本データパイプラインは、以下の流れでEDINETからデータを取得し、分析可能な形式に変換しています。
+
+### 1. 取得する「元データ」について
+*   **対象書類:** EDINET API v2を利用し、主に「有価証券報告書」を対象とします。
+*   **データ形式:** APIから書類の実体データ（CSVが複数格納されたZIPファイル）をダウンロードします。
+*   **対象ファイル:** ZIP内にある `jpcrp`, `jpaud`, `xbrl_to_csv` といった名前が含まれるCSVファイルが解析対象です。これらは「項目名」「値」「相対年度」などの列を持つ表形式データです。
+
+### 2. データ抽出（Extraction）のロジック
+抽出処理は大きく分けて「表データからの抽出」と「文章データからの抽出（フォールバック）」の2段構えになっています。
+
+*   **A. 表データ（構造化データ）からの抽出:**
+    CSVの各行を順番に見ていき、「相対年度」が当期のもので、「項目名」が事前定義されたキーワード（例：売上高、営業利益、従業員数、管理職に占める女性労働者の割合 など）と一致するデータを取得し、数値化します。
+*   **B. 文章データからの抽出（人的資本指標のフォールバック）:**
+    人的資本の情報（女性管理職比率など）は、自由記述のテキストブロック内に書かれていることが多々あります。表データから見つからなかった場合、テキスト内に「管理職に占める女性労働者の割合」という文字列が含まれているか探し、そこから後方800文字を切り出します。その後、不要な脚注番号や記号を除外してクリーンアップし、該当する指標のラベルのすぐ後ろに出現する最初の数値を抜き出します。
+
+### 3. 分析データ化・出力（Analytics）のロジック
+抽出されたデータは一旦PostgreSQLに保存され、その後データサイエンティストやBIツールが直接読み込みやすい形式（Parquet / DuckDB）に変換・出力されます。
+
+*   **出力される2つのデータセット:**
+    1.  **`company_year_metrics`:** 企業・年度ごとの各指標（売上、利益、女性管理職比率など）をまとめたメインのテーブルです。
+    2.  **`metric_evidence`:** 「どのファイルの、どの文字列から、どういうロジックでその数値を拾ったか」という証拠（監査証跡）を記録したテーブルです。
+
 ## 主な機能
 
 - `edinet fetch`
@@ -278,50 +302,63 @@ docker compose exec app edinet export-analytics --format duckdb
 
 企業マスタです。
 
-- `edinet_code`
-- `company_name`
-- `industry`
+| カラム名 | データ型 | 制約・デフォルト | 説明 |
+| --- | --- | --- | --- |
+| `edinet_code` | `String(10)` | **PK** | EDINETが付与する企業の一意な識別コード |
+| `company_name` | `String(255)` | NOT NULL | 企業名 |
+| `industry` | `String(100)` | Nullable | 業種 |
+| `created_at` | `DateTime` | `CURRENT_TIMESTAMP` | レコードの登録日時 |
 
 ### `financial_reports`
 
 書類メタデータと処理状態の主テーブルです。
 
-- `doc_id`
-- `edinet_code`
-- `fiscal_year`
-- `status`
-- `retry_count`
-- `last_error`
-- `processed_at`
-- `sales`
-- `operating_profit`
-- `net_profit`
-- `employee_count`
-- `submitted_date`
-- `source_metadata`
+| カラム名 | データ型 | 制約・デフォルト | 説明 |
+| --- | --- | --- | --- |
+| `doc_id` | `String(50)` | **PK** | 書類の固有ID（例: S100T6L2） |
+| `edinet_code` | `String(10)` | FK (`companies`) | 提出した企業のEDINETコード |
+| `fiscal_year` | `Integer` | NOT NULL | 対象となる決算年度（年） |
+| `status` | `String(20)` | `pending` | 処理状態（`pending`/`processing`/`processed`/`skipped`/`failed`） |
+| `retry_count` | `Integer` | `0` | エラーによる再試行回数 |
+| `last_error` | `Text` | Nullable | 直近のエラーログ詳細 |
+| `processed_at` | `DateTime` | Nullable | 処理の完了日時 |
+| `sales` | `BigInteger` | Nullable | 抽出された「売上高」など |
+| `operating_profit` | `BigInteger` | Nullable | 抽出された「営業利益」など |
+| `net_profit` | `BigInteger` | Nullable | 抽出された「純利益」など |
+| `employee_count` | `Integer` | Nullable | 抽出された「従業員数」 |
+| `submitted_date` | `Date` | NOT NULL | 提出日 |
+| `source_metadata` | `JSONB` | `'{}'` | EDINET APIからの元レスポンス情報 |
 
 ### `human_capital_metrics`
 
 会社・年度・ソース単位の人的資本指標です。
-
-- `female_manager_ratio`
-- `male_childcare_leave_ratio`
-- `gender_wage_gap`
-- `source_name`
-
 `(edinet_code, fiscal_year, source_name)` は一意です。
+
+| カラム名 | データ型 | 制約・デフォルト | 説明 |
+| --- | --- | --- | --- |
+| `id` | `Integer` | **PK** (Auto) | 内部サロゲートキー |
+| `edinet_code` | `String(10)` | FK (`companies`) | 企業のEDINETコード |
+| `fiscal_year` | `Integer` | NOT NULL | 対象となる決算年度（年） |
+| `female_manager_ratio` | `Numeric(5,2)`| Nullable | 女性管理職比率 (%) |
+| `male_childcare_leave_ratio`| `Numeric(5,2)`| Nullable | 男性の育児休業取得率 (%) |
+| `gender_wage_gap` | `Numeric(5,2)`| Nullable | 男女間賃金格差 (%) |
+| `engagement_score` | `Numeric(5,2)`| Nullable | エンゲージメントスコア |
+| `source_name` | `String(100)` | `EDINET_CSV` | データ抽出元（デフォルトはEDINET_CSV） |
 
 ### `metric_evidence`
 
-各指標がどの行・どの値から抽出されたかを保持する監査テーブルです。
+各指標がどのファイルの、どのテキスト・値に基づいて抽出されたかを保持する監査テーブルです。
 
-- `doc_id`
-- `metric_name`
-- `item_name`
-- `raw_value`
-- `relative_year`
-- `source_file`
-- `matched_by`
+| カラム名 | データ型 | 制約・デフォルト | 説明 |
+| --- | --- | --- | --- |
+| `id` | `Integer` | **PK** (Auto) | 内部サロゲートキー |
+| `doc_id` | `String(50)` | FK (`financial_reports`) | 抽出元の書類ID |
+| `metric_name` | `String(100)` | NOT NULL | 指標の内部名（例: `sales`, `female_manager_ratio`） |
+| `item_name` | `Text` | NOT NULL | 元のCSV上の項目名 |
+| `raw_value` | `Text` | NOT NULL | 正規化済みの抽出元のテキストまたは値 |
+| `relative_year` | `String(100)` | Nullable | XBRL上の相対年度（当期、前期など） |
+| `source_file` | `Text` | NOT NULL | 抽出元のCSVファイル名 |
+| `matched_by` | `String(50)` | NOT NULL | 一致ロジック（`item_name_match` や `text_fallback`） |
 
 ### `vw_company_year_metrics`
 
@@ -370,9 +407,10 @@ GROUP BY fiscal_year
 ORDER BY fiscal_year;
 ```
 
-## 代表 SQL
+## 運用・分析に役立つSQLクエリ集
 
-取り込み状況:
+### 1. 最近の取り込み（処理）ステータスを一覧表示する
+各レポートが現在どのような状態（`pending`, `processed`, `failed` など）か、またエラーが発生していないかを確認するためのクエリです。
 
 ```bash
 docker compose exec db psql -U user -d edinet_db -c "
@@ -383,7 +421,8 @@ LIMIT 30;
 "
 ```
 
-分析ビュー:
+### 2. 抽出が完了した財務・人的資本データを一覧表示する
+抽出に成功した売上高や女性管理職比率、育休取得率など、実際に分析に使うデータを企業・年度ごとに一覧するクエリです。
 
 ```bash
 docker compose exec db psql -U user -d edinet_db -c "
@@ -403,7 +442,8 @@ LIMIT 20;
 "
 ```
 
-抽出根拠:
+### 3. 各指標が元ファイルの「どのテキスト」から抽出されたかを検証する
+抽出されたデータがどのような元テキスト（証拠）に基づいて判断されたか、監査やデバッグを行うためのクエリです。
 
 ```bash
 docker compose exec db psql -U user -d edinet_db -c "
@@ -423,7 +463,8 @@ LIMIT 30;
 "
 ```
 
-失敗書類の確認:
+### 4. 処理に失敗・スキップされた書類の詳細（エラー理由）を確認する
+エラー（`failed`）または対象外（`skipped`）となったレポートのIDやその理由（`last_error`）を確認し、リカバリ対応などを行うためのクエリです。
 
 ```bash
 docker compose exec db psql -U user -d edinet_db -c "

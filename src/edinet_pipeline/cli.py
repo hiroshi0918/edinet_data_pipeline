@@ -1,3 +1,5 @@
+"""CLIエントリポイント — `edinet` コマンドのサブコマンド定義と実行振り分け."""
+
 from __future__ import annotations
 
 import argparse
@@ -11,13 +13,23 @@ from edinet_pipeline.logging_utils import configure_logging
 
 
 def parse_date(value: str) -> datetime.date:
+    """YYYY-MM-DD 形式の文字列を date オブジェクトへ変換する."""
     return datetime.strptime(value, "%Y-%m-%d").date()
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """サブコマンド付きの ArgumentParser を構築する.
+
+    サブコマンド:
+        fetch            : 指定日の書類一覧を取得し DB 登録
+        process          : キューに溜まった書類を順次ダウンロード・解析
+        backfill         : 日付範囲で fetch → process をまとめて実行
+        export-analytics : PostgreSQL → Parquet / DuckDB へスナップショット出力
+    """
     parser = argparse.ArgumentParser(prog="edinet", description="EDINET annual report pipeline")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    # --- fetch: 1 日分の書類メタデータを EDINET API から取得 ---
     fetch_parser = subparsers.add_parser(
         "fetch",
         help="Fetch EDINET document metadata for one day",
@@ -26,6 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--date", required=True, type=parse_date, help="Target date (YYYY-MM-DD)"
     )
 
+    # --- process: pending / failed キューの書類を処理 ---
     process_parser = subparsers.add_parser("process", help="Process queued EDINET documents")
     process_parser.add_argument("--limit", type=int, default=10, help="Maximum documents per batch")
     process_parser.add_argument(
@@ -34,6 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Include failed documents in the processing queue",
     )
 
+    # --- backfill: 日付範囲の一括取得 + 処理 ---
     backfill_parser = subparsers.add_parser(
         "backfill",
         help="Fetch and process EDINET documents over a date range",
@@ -52,6 +66,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Include failed documents when draining the queue",
     )
 
+    # --- export-analytics: 分析用スナップショットの出力 ---
     export_parser = subparsers.add_parser(
         "export-analytics",
         help="Export analytics snapshots to Parquet and/or DuckDB",
@@ -66,6 +81,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """CLI メイン関数 — 引数を解析し、対応するジョブを実行して終了コードを返す."""
     parser = build_parser()
     args = parser.parse_args(argv)
     settings = Settings.from_env()

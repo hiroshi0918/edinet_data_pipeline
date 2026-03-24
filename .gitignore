@@ -10,3 +10,4 @@ dist/
 .coverage
 *.egg-info/
 artifacts/
+GEMINI.md
