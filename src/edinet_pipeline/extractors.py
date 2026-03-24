@@ -84,13 +84,32 @@ def is_relevant_relative_year(relative_year: str) -> bool:
 
 def _extract_label_value(section: str, labels: tuple[str, ...]) -> float | None:
     for label in labels:
-        match = re.search(rf"{re.escape(label)}[^0-9\-]*(-|\d+(?:\.\d+)?)", section)
-        if not match:
+        start = section.find(label)
+        if start == -1:
             continue
-        token = match.group(1)
-        if token == "-":
-            return None
-        return float(token)
+        after_label = section[start + len(label):]
+        
+        # 邪魔な「年」「号」「名」などの数字や注釈番号を除去
+        cleaned = re.sub(r"\d+(?:\.\d+)?\s*(?:年|月|日|号|条|項|名|人|円|千円|百万円|歳|ヶ月)", "", after_label)
+        cleaned = re.sub(r"[\(（]?注[)）]?\s*\d+", "", cleaned)
+        cleaned = re.sub(r"※\s*\d+", "", cleaned)
+        # 不要な記号も消す（例として "①" などの丸数字や、本文中の不要な注釈の名残）
+        cleaned = re.sub(r"[①②③④⑤⑥⑦⑧⑨⑩]", "", cleaned)
+
+        # 全ての数字（またはハイフン）を順番に見ていく
+        for match in re.finditer(r"(-|\d+(?:\.\d+)?)", cleaned):
+            token = match.group(1)
+            if token == "-":
+                return None
+            try:
+                val = float(token)
+                # 割合としてあり得ない異常値（例えば 200% を超えるなど）はスキップして次を探す
+                # ※男女間賃金格差などは100%を超える場合があるが、200%以上はほぼ誤検知
+                if val > 200:
+                    continue
+                return val
+            except ValueError:
+                continue
     return None
 
 

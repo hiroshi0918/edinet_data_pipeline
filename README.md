@@ -19,14 +19,14 @@ EDINET API v2 から有価証券報告書を取得し、財務指標と人的資
 ## アーキテクチャ
 
 ```mermaid
-flowchart LR
-    A["EDINET API v2"]
-    B["edinet fetch"]
-    C["edinet process"]
-    D[("PostgreSQL")]
-    E["edinet export-analytics"]
-    F["Parquet"]
-    G["DuckDB"]
+graph LR
+    A[EDINET API v2]
+    B[edinet fetch]
+    C[edinet process]
+    D[(PostgreSQL)]
+    E[edinet export-analytics]
+    F[Parquet]
+    G[DuckDB]
 
     A --> B
     A --> C
