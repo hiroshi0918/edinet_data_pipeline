@@ -25,6 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
         process          : キューに溜まった書類を順次ダウンロード・解析
         backfill         : 日付範囲で fetch → process をまとめて実行
         export-analytics : PostgreSQL → Parquet / DuckDB へスナップショット出力
+        dashboard        : 分析ダッシュボードを起動 (要 viz 依存)
     """
     parser = argparse.ArgumentParser(prog="edinet", description="EDINET annual report pipeline")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -77,6 +78,24 @@ def build_parser() -> argparse.ArgumentParser:
         default="both",
         help="Output format to refresh",
     )
+
+    # --- dashboard: 分析ダッシュボードの起動 ---
+    dashboard_parser = subparsers.add_parser(
+        "dashboard",
+        help="Launch interactive analytics dashboard (requires viz extras)",
+    )
+    dashboard_parser.add_argument(
+        "--port", type=int, default=8501, help="Dashboard server port"
+    )
+    dashboard_parser.add_argument(
+        "--host", type=str, default="localhost", help="Dashboard server host"
+    )
+    dashboard_parser.add_argument(
+        "--duckdb-path",
+        type=str,
+        default=None,
+        help="Path to DuckDB file (default: artifacts/analytics/edinet_analytics.duckdb)",
+    )
     return parser
 
 
@@ -84,6 +103,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     """CLI メイン関数 — 引数を解析し、対応するジョブを実行して終了コードを返す."""
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    # dashboard は PostgreSQL / API キーを必要としないため、Settings 前に分岐
+    if args.command == "dashboard":
+        try:
+            from edinet_pipeline.dashboard import launch_dashboard
+        except ImportError:
+            parser.error(
+                "Visualization dependencies not installed. "
+                "Run: pip install -e '.[viz]'"
+            )
+        from edinet_pipeline.config import DEFAULT_DUCKDB_PATH
+
+        duckdb_path = args.duckdb_path or DEFAULT_DUCKDB_PATH
+        launch_dashboard(host=args.host, port=args.port, duckdb_path=duckdb_path)
+        return 0
+
     settings = Settings.from_env()
     configure_logging(settings.log_level)
 

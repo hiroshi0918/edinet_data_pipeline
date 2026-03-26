@@ -13,6 +13,9 @@ EDINET API v2 から有価証券報告書を取得し、財務指標と人的資
 - 分析レイヤー
   - PostgreSQL のスナップショットを Parquet と DuckDB にエクスポート
   - Notebook、ローカル SQL、BI の前段として利用
+- 可視化レイヤー
+  - DuckDB をデータソースとした Streamlit ダッシュボード
+  - 財務指標の推移・比較、人的資本指標の分布・トレンド、データ品質をインタラクティブに可視化
 
 現時点の対象帳票は「有価証券報告書」のみです。
 
@@ -27,6 +30,7 @@ graph LR
     E[edinet export-analytics]
     F[Parquet]
     G[DuckDB]
+    H[edinet dashboard]
 
     A --> B
     A --> C
@@ -35,6 +39,7 @@ graph LR
     E --> D
     E --> F
     E --> G
+    G --> H
 ```
 
 ## データ抽出・分析のロジック
@@ -71,6 +76,9 @@ graph LR
   - 日付範囲を日単位で `fetch -> process` し、途中停止後も再開できます。
 - `edinet export-analytics`
   - PostgreSQL の分析スナップショットを Parquet と DuckDB に出力します。
+- `edinet dashboard`
+  - DuckDB をデータソースとした Streamlit ダッシュボードを起動します。
+  - 財務指標の推移・企業比較、人的資本指標の分布・散布図、データ品質のカバレッジを可視化します。
 - 抽出根拠の保存
   - 指標の抽出元を `metric_evidence` に保存し、後から監査できます。
 
@@ -85,7 +93,13 @@ graph LR
 │   ├── db.py             # PostgreSQL repository
 │   ├── extractors.py     # 財務/人的資本指標の抽出
 │   ├── jobs.py           # fetch/process/backfill の実行ロジック
-│   └── analytics.py      # Parquet / DuckDB エクスポート
+│   ├── analytics.py      # Parquet / DuckDB エクスポート
+│   └── dashboard/        # Streamlit ダッシュボード
+│       ├── app.py        # マルチページアプリの入口
+│       ├── data.py       # DuckDB クエリ関数群
+│       ├── constants.py  # 共通定数（指標ラベル等）
+│       ├── components/   # 共通 UI コンポーネント
+│       └── pages/        # 各ページ (overview, financial, human_capital, data_quality)
 ├── alembic/              # DB migration
 ├── airflow/dags/         # 任意の Airflow DAG
 ├── tests/                # unit / integration tests
@@ -174,7 +188,16 @@ docker compose exec app edinet process --limit 20
 docker compose exec app edinet export-analytics --format both
 ```
 
-### 6. 取り込み状況を確認
+### 6. ダッシュボードで可視化
+
+```bash
+pip install -e '.[viz]'
+edinet dashboard
+```
+
+ブラウザで `http://localhost:8501` を開くと、4 ページ構成のダッシュボードが表示されます。
+
+### 7. 取り込み状況を確認
 
 ```bash
 docker compose exec db psql -U user -d edinet_db -c "
@@ -193,6 +216,7 @@ ORDER BY status;
 docker compose exec app edinet fetch --date 2024-03-29
 docker compose exec app edinet process --limit 20
 docker compose exec app edinet export-analytics --format both
+edinet dashboard
 ```
 
 月次バックフィル:
@@ -272,6 +296,44 @@ docker compose exec app edinet export-analytics --format duckdb
 - `DuckDB` はローカル SQL 分析用のスナップショット DB です。
 - `both` は同じ PostgreSQL snapshot を 1 回だけ読み、Parquet と DuckDB を両方更新します。
 - v1 では `process/backfill` 完了後に自動更新しません。必要なタイミングで明示実行します。
+
+### `edinet dashboard`
+
+DuckDB をデータソースとしたインタラクティブな分析ダッシュボードを起動します。
+
+```bash
+edinet dashboard
+edinet dashboard --port 3000 --host 0.0.0.0
+edinet dashboard --duckdb-path /path/to/edinet_analytics.duckdb
+```
+
+利用にはオプション依存のインストールが必要です。
+
+```bash
+pip install -e '.[viz]'
+```
+
+ダッシュボードは以下の 4 ページで構成されます。
+
+| ページ | 内容 |
+| --- | --- |
+| 概要 | KPI カード（企業数・年度数・レコード数）、年度別処理ステータス分布 |
+| 財務指標 | 売上高・営業利益・純利益・従業員数の推移（折れ線）、企業ランキング（棒）、集計統計テーブル |
+| 人的資本指標 | 女性管理職比率・男性育休取得率・男女賃金格差の分布（ヒストグラム/箱ひげ図）、年度別平均推移、散布図 |
+| データ品質 | 指標カバレッジヒートマップ、年度別充足率推移、抽出方法の分布 |
+
+オプション:
+
+| 引数 | 既定値 | 用途 |
+| --- | --- | --- |
+| `--port` | `8501` | サーバーポート番号 |
+| `--host` | `localhost` | サーバーバインドアドレス |
+| `--duckdb-path` | `artifacts/analytics/edinet_analytics.duckdb` | DuckDB ファイルパス |
+
+注意:
+
+- ダッシュボードは DuckDB ファイルのみ参照します。PostgreSQL や EDINET API キーは不要です。
+- データを最新化するには先に `edinet export-analytics --format duckdb` を実行してください。
 
 ## 状態管理
 
@@ -486,11 +548,19 @@ ruff check .
 pytest -q
 ```
 
-analytics export を含めた CLI の確認:
+ダッシュボード開発を含む場合:
+
+```bash
+python -m pip install -e '.[dev,viz]'
+pytest tests/test_dashboard_data.py tests/test_dashboard_cli.py tests/test_dashboard_app.py -v
+```
+
+CLI の確認:
 
 ```bash
 python -m edinet_pipeline --help
 python -m edinet_pipeline export-analytics --help
+python -m edinet_pipeline dashboard --help
 ```
 
 CI では次を実行します。
@@ -544,6 +614,11 @@ docker compose exec app python src/extract_metrics.py --limit 20
 
 - `process` や `backfill` の後に `edinet export-analytics --format both` を実行する
 - v1 では分析出力は自動更新ではない
+
+### ダッシュボードが起動しない
+
+- `pip install -e '.[viz]'` で Streamlit と Plotly がインストール済みか確認する
+- DuckDB ファイルが存在するか確認する（未エクスポートなら `edinet export-analytics --format duckdb` を先に実行する）
 
 ### スキーマ差分がある
 

@@ -8,6 +8,10 @@ from pathlib import Path
 
 from edinet_pipeline.models import FilingFilters
 
+DEFAULT_ANALYTICS_OUTPUT_DIR = "artifacts/analytics"
+DEFAULT_DUCKDB_FILENAME = "edinet_analytics.duckdb"
+DEFAULT_DUCKDB_PATH = f"{DEFAULT_ANALYTICS_OUTPUT_DIR}/{DEFAULT_DUCKDB_FILENAME}"
+
 
 def _get_env(name: str, *, default: str | None = None, required: bool = False) -> str:
     """環境変数を取得する. required=True かつ未設定なら ValueError を送出."""
@@ -42,7 +46,7 @@ class Settings:
     backoff_seconds: float = 2.0
     process_sleep_seconds: float = 1.0
     log_level: str = "INFO"
-    analytics_output_dir: str = "artifacts/analytics"
+    analytics_output_dir: str = DEFAULT_ANALYTICS_OUTPUT_DIR
     filing_filters: FilingFilters = field(default_factory=FilingFilters)
 
     @classmethod
@@ -57,7 +61,7 @@ class Settings:
             process_sleep_seconds=float(_get_env("PROCESS_SLEEP_SECONDS", default="1")),
             log_level=_get_env("LOG_LEVEL", default="INFO").upper(),
             analytics_output_dir=_get_env(
-                "ANALYTICS_OUTPUT_DIR", default="artifacts/analytics"
+                "ANALYTICS_OUTPUT_DIR", default=DEFAULT_ANALYTICS_OUTPUT_DIR
             ),
         )
 
@@ -74,4 +78,4 @@ class Settings:
     @property
     def analytics_duckdb_path(self) -> Path:
         """DuckDB データベースファイルのフルパス."""
-        return self.analytics_output_root / "edinet_analytics.duckdb"
+        return self.analytics_output_root / DEFAULT_DUCKDB_FILENAME

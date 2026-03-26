@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 #  データセット名とカラム定義
 # ------------------------------------------------------------------ #
 
+ANALYTICS_SCHEMA = "analytics"
 COMPANY_YEAR_METRICS_DATASET = "company_year_metrics"
 METRIC_EVIDENCE_DATASET = "metric_evidence"
 DATASET_ORDER = (COMPANY_YEAR_METRICS_DATASET, METRIC_EVIDENCE_DATASET)
@@ -250,7 +251,7 @@ def export_duckdb_snapshot(settings: Settings, frames: dict[str, pd.DataFrame]) 
     summary: dict[str, int] = {}
     connection = duckdb.connect(str(tmp_path))
     try:
-        connection.execute("CREATE SCHEMA IF NOT EXISTS analytics")
+        connection.execute(f"CREATE SCHEMA IF NOT EXISTS {ANALYTICS_SCHEMA}")
         for dataset_name in DATASET_ORDER:
             frame = frames[dataset_name]
             # DataFrame を一時リレーション名で登録 → CTAS でテーブル化
