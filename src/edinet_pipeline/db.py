@@ -4,6 +4,7 @@
   companies             : 企業マスタ (edinet_code がキー)
   financial_reports     : 書類メタ + 財務指標 + 処理ステータス
   human_capital_metrics : 人的資本指標 (女性管理職比率 等)
+  raw_edinet_facts      : 元CSVの生行データ
   metric_evidence       : 抽出根拠の監査証跡
   vw_company_year_metrics : 企業×年度ごとの統合ビュー (分析用)
 """
@@ -15,9 +16,14 @@ from contextlib import contextmanager
 from datetime import date
 
 import psycopg2
-from psycopg2.extras import Json, RealDictCursor
+from psycopg2.extras import Json, RealDictCursor, execute_values
 
-from edinet_pipeline.models import DocumentRecord, MetricEvidenceRecord, ParsedDocument
+from edinet_pipeline.models import (
+    DocumentRecord,
+    MetricEvidenceRecord,
+    ParsedDocument,
+    RawFactRecord,
+)
 
 # claim_documents_for_processing で取得対象とするステータス
 PROCESSABLE_STATUSES = ("pending", "failed")
@@ -241,7 +247,7 @@ class PipelineRepository:
             )
 
     # ------------------------------------------------------------------ #
-    #  人的資本指標 / 抽出根拠の保存
+    #  人的資本指標 / 生データ / 抽出根拠の保存
     # ------------------------------------------------------------------ #
 
     def upsert_human_metrics(
@@ -286,38 +292,59 @@ class PipelineRepository:
                 ),
             )
 
+    def _replace_child_records(
+        self, doc_id: str, table: str, columns: list[str], rows: list[tuple],
+    ) -> None:
+        """DELETE → bulk INSERT の冪等な洗い替え."""
+        with self.connection.cursor() as cursor:
+            cursor.execute(f"DELETE FROM {table} WHERE doc_id = %s", (doc_id,))
+            if not rows:
+                return
+            col_list = ", ".join(columns)
+            execute_values(
+                cursor,
+                f"INSERT INTO {table} ({col_list}) VALUES %s",
+                rows,
+                page_size=1000,
+            )
+
+    def replace_raw_facts(self, doc_id: str, raw_facts: list[RawFactRecord]) -> None:
+        """元CSVの生行データを全削除 → 再挿入 (冪等な洗い替え方式)."""
+        self._replace_child_records(
+            doc_id,
+            "raw_edinet_facts",
+            [
+                "doc_id", "source_file", "row_number", "element_id", "item_name",
+                "context_id", "relative_year", "consolidation_type", "period_type",
+                "unit_id", "unit_label", "raw_value",
+            ],
+            [
+                (
+                    doc_id, r.source_file, r.row_number, r.element_id, r.item_name,
+                    r.context_id, r.relative_year, r.consolidation_type, r.period_type,
+                    r.unit_id, r.unit_label, r.raw_value,
+                )
+                for r in raw_facts
+            ],
+        )
+
     def replace_metric_evidence(self, doc_id: str, evidence: list[MetricEvidenceRecord]) -> None:
         """抽出根拠を全削除 → 再挿入 (冪等な洗い替え方式)."""
-        with self.connection.cursor() as cursor:
-            cursor.execute("DELETE FROM metric_evidence WHERE doc_id = %s", (doc_id,))
-            if not evidence:
-                return
-            cursor.executemany(
-                """
-                INSERT INTO metric_evidence (
-                    doc_id,
-                    metric_name,
-                    item_name,
-                    raw_value,
-                    relative_year,
-                    source_file,
-                    matched_by
+        self._replace_child_records(
+            doc_id,
+            "metric_evidence",
+            [
+                "doc_id", "metric_name", "item_name", "raw_value",
+                "relative_year", "source_file", "matched_by",
+            ],
+            [
+                (
+                    doc_id, r.metric_name, r.item_name, r.raw_value,
+                    r.relative_year, r.source_file, r.matched_by,
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """,
-                [
-                    (
-                        doc_id,
-                        record.metric_name,
-                        record.item_name,
-                        record.raw_value,
-                        record.relative_year,
-                        record.source_file,
-                        record.matched_by,
-                    )
-                    for record in evidence
-                ],
-            )
+                for r in evidence
+            ],
+        )
 
     # ------------------------------------------------------------------ #
     #  分析レイヤー用クエリ (Read-Only)

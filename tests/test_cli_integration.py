@@ -177,6 +177,22 @@ def test_process_sets_processed_skipped_failed_and_upserts_human_metrics(
         )[0]
         >= 3
     )
+    assert fetch_one(
+        db_connection,
+        "SELECT COUNT(*) FROM raw_edinet_facts WHERE doc_id = %s",
+        ("S100PROC1",),
+    ) == (7,)
+    assert fetch_one(
+        db_connection,
+        """
+        SELECT row_number, item_name, relative_year, raw_value
+        FROM raw_edinet_facts
+        WHERE doc_id = %s
+        ORDER BY row_number
+        LIMIT 1
+        """,
+        ("S100PROC1",),
+    ) == (1, "売上高", "当期", "1,234")
 
     with db_connection.cursor() as cursor:
         cursor.execute(
@@ -210,6 +226,11 @@ def test_process_sets_processed_skipped_failed_and_upserts_human_metrics(
     )
     assert human_metrics == (Decimal("22.00"), Decimal("82.00"), Decimal("76.00"))
     assert fetch_one(db_connection, "SELECT COUNT(*) FROM human_capital_metrics")[0] == 1
+    assert fetch_one(
+        db_connection,
+        "SELECT COUNT(*) FROM raw_edinet_facts WHERE doc_id = %s",
+        ("S100PROC1",),
+    ) == (4,)
 
 
 @pytest.mark.integration

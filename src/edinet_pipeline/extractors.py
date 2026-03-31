@@ -7,7 +7,7 @@ import zipfile
 
 import pandas as pd
 
-from edinet_pipeline.models import MetricEvidenceRecord, ParsedDocument
+from edinet_pipeline.models import MetricEvidenceRecord, ParsedDocument, RawFactRecord
 
 FINANCIAL_FIELDS = ("sales", "operating_profit", "net_profit", "employee_count")
 HUMAN_FIELDS = (
@@ -33,6 +33,7 @@ def empty_parsed_document() -> ParsedDocument:
         financial_metrics={name: None for name in FINANCIAL_FIELDS},
         human_metrics={name: None for name in HUMAN_FIELDS},
         evidence=[],
+        raw_facts=[],
     )
 
 
@@ -40,6 +41,12 @@ def normalize_text(value: object) -> str:
     if value is None or pd.isna(value):
         return ""
     return unicodedata.normalize("NFKC", str(value)).strip()
+
+
+def stringify_raw(value: object) -> str | None:
+    if value is None or pd.isna(value):
+        return None
+    return str(value)
 
 
 def extract_numeric(value: object) -> float | None:
@@ -166,14 +173,31 @@ def parse_document_zip(zip_bytes: bytes) -> ParsedDocument:
             with archive.open(csv_file) as handle:
                 frame = pd.read_csv(handle, encoding="utf-16le", sep="\t")
 
-            if "項目名" not in frame.columns or "値" not in frame.columns:
-                continue
+            extractable = "項目名" in frame.columns and "値" in frame.columns
 
-            for _, row in frame.iterrows():
-                item_name = normalize_text(row.get("項目名"))
-                raw_value = row.get("値")
+            for row_number, row_dict in enumerate(frame.to_dict("records"), start=1):
+                raw_fact = RawFactRecord(
+                    source_file=csv_file,
+                    row_number=row_number,
+                    element_id=stringify_raw(row_dict.get("要素ID")),
+                    item_name=stringify_raw(row_dict.get("項目名")),
+                    context_id=stringify_raw(row_dict.get("コンテキストID")),
+                    relative_year=stringify_raw(row_dict.get("相対年度")),
+                    consolidation_type=stringify_raw(row_dict.get("連結・個別")),
+                    period_type=stringify_raw(row_dict.get("期間・時点")),
+                    unit_id=stringify_raw(row_dict.get("ユニットID")),
+                    unit_label=stringify_raw(row_dict.get("単位")),
+                    raw_value=stringify_raw(row_dict.get("値")),
+                )
+                parsed.raw_facts.append(raw_fact)
+
+                if not extractable:
+                    continue
+
+                item_name = normalize_text(raw_fact.item_name)
+                raw_value = raw_fact.raw_value
                 raw_text = normalize_text(raw_value)
-                relative_year = normalize_text(row.get("相対年度"))
+                relative_year = normalize_text(raw_fact.relative_year)
 
                 if not item_name and not raw_text:
                     continue

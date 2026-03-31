@@ -188,6 +188,7 @@ def process_documents(
                 parsed = parse_document_zip(zip_bytes)
                 with db_connection(settings.database_url) as connection:
                     repository = PipelineRepository(connection)
+                    repository.replace_raw_facts(doc_id, parsed.raw_facts)
                     repository.mark_processed(doc_id, parsed)
                     repository.upsert_human_metrics(
                         edinet_code=edinet_code,

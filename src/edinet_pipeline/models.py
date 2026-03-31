@@ -41,8 +41,24 @@ class MetricEvidenceRecord:
     matched_by: str
 
 
+@dataclass(frozen=True)
+class RawFactRecord:
+    source_file: str
+    row_number: int
+    element_id: str | None
+    item_name: str | None
+    context_id: str | None
+    relative_year: str | None
+    consolidation_type: str | None
+    period_type: str | None
+    unit_id: str | None
+    unit_label: str | None
+    raw_value: str | None
+
+
 @dataclass
 class ParsedDocument:
     financial_metrics: dict[str, int | None] = field(default_factory=dict)
     human_metrics: dict[str, float | None] = field(default_factory=dict)
     evidence: list[MetricEvidenceRecord] = field(default_factory=list)
+    raw_facts: list[RawFactRecord] = field(default_factory=list)

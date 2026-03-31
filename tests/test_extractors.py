@@ -159,6 +159,43 @@ def test_parse_document_zip_ignores_non_current_rows_and_records_both_evidence_t
     }
 
 
+def test_parse_document_zip_collects_raw_facts_with_all_available_columns() -> None:
+    """元CSV行を raw_facts として保持し、9列の値を欠損込みで保存すること."""
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp_full.csv": [
+                {
+                    "要素ID": "jpcrp_cor:NetSales",
+                    "項目名": "売上高、経営指標等",
+                    "コンテキストID": "CurrentYearDuration",
+                    "相対年度": "当期",
+                    "連結・個別": "連結",
+                    "期間・時点": "期間",
+                    "ユニットID": "JPY",
+                    "単位": "円",
+                    "値": "1,234",
+                }
+            ],
+        }
+    )
+
+    parsed = parse_document_zip(zip_bytes)
+
+    assert len(parsed.raw_facts) == 1
+    raw_fact = parsed.raw_facts[0]
+    assert raw_fact.source_file == "XBRL_TO_CSV/jpcrp_full.csv"
+    assert raw_fact.row_number == 1
+    assert raw_fact.element_id == "jpcrp_cor:NetSales"
+    assert raw_fact.item_name == "売上高、経営指標等"
+    assert raw_fact.context_id == "CurrentYearDuration"
+    assert raw_fact.relative_year == "当期"
+    assert raw_fact.consolidation_type == "連結"
+    assert raw_fact.period_type == "期間"
+    assert raw_fact.unit_id == "JPY"
+    assert raw_fact.unit_label == "円"
+    assert raw_fact.raw_value == "1,234"
+
+
 def test_parse_document_zip_raises_when_no_candidate_csv_files_exist() -> None:
     """XBRL_TO_CSV/ 配下に対象 CSV が無い場合 ValueError を送出すること."""
     zip_bytes = build_zip(
