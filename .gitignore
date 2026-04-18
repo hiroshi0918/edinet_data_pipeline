@@ -10,4 +10,5 @@ dist/
 .coverage
 *.egg-info/
 artifacts/
+docs/samples/
 GEMINI.md
