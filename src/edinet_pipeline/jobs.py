@@ -16,7 +16,7 @@ from typing import Any
 
 from edinet_pipeline.client import CsvUnavailableError, EdinetApiError, EdinetClient
 from edinet_pipeline.config import Settings
-from edinet_pipeline.db import PipelineRepository, db_connection
+from edinet_pipeline.db import DatabasePool, PipelineRepository, db_connection
 from edinet_pipeline.extractors import parse_document_zip
 from edinet_pipeline.logging_utils import log_event
 from edinet_pipeline.models import DocumentRecord
@@ -156,128 +156,141 @@ def process_documents(
         処理した書類数
     """
     client_cls = client_cls or EdinetClient
-    with db_connection(settings.database_url) as connection:
-        repository = PipelineRepository(connection)
-        claimed_documents = repository.claim_documents_for_processing(
-            limit=limit,
-            retry_failed=retry_failed,
-            submitted_date=submitted_date,
-        )
-        connection.commit()
 
-    if not claimed_documents:
-        log_event(
-            logger,
-            "info",
-            "process_queue_empty",
-            retry_failed=retry_failed,
-            submitted_date=submitted_date.isoformat() if submitted_date else None,
-        )
-        return 0
-
-    client = client_cls(settings)
+    # ループ内で書類ごとに接続を張り直すと PostgreSQL ハンドシェイクのコストが累積するため、
+    # プールから接続を借り受ける方式に切り替える。
+    pool = DatabasePool(
+        settings.database_url,
+        min_size=settings.db_pool_min_size,
+        max_size=settings.db_pool_max_size,
+    )
     try:
-        for document in claimed_documents:
-            started_at = time.time()
-            doc_id = document["doc_id"]
-            edinet_code = document["edinet_code"]
-            fiscal_year = document["fiscal_year"]
-            try:
-                # CSV ZIP ダウンロード → 指標抽出 → DB 書き込み
-                zip_bytes = client.download_document_csv(doc_id)
-                parsed = parse_document_zip(zip_bytes)
-                with db_connection(settings.database_url) as connection:
-                    repository = PipelineRepository(connection)
-                    repository.replace_raw_facts(doc_id, parsed.raw_facts)
-                    repository.mark_processed(doc_id, parsed)
-                    repository.upsert_human_metrics(
-                        edinet_code=edinet_code,
-                        fiscal_year=fiscal_year,
-                        parsed=parsed,
+        with pool.connection() as connection:
+            repository = PipelineRepository(connection)
+            claimed_documents = repository.claim_documents_for_processing(
+                limit=limit,
+                retry_failed=retry_failed,
+                submitted_date=submitted_date,
+            )
+            connection.commit()
+
+        if not claimed_documents:
+            log_event(
+                logger,
+                "info",
+                "process_queue_empty",
+                retry_failed=retry_failed,
+                submitted_date=submitted_date.isoformat() if submitted_date else None,
+            )
+            return 0
+
+        client = client_cls(settings)
+        try:
+            for document in claimed_documents:
+                started_at = time.time()
+                doc_id = document["doc_id"]
+                edinet_code = document["edinet_code"]
+                fiscal_year = document["fiscal_year"]
+                try:
+                    # CSV ZIP ダウンロード → 指標抽出 → DB 書き込み
+                    zip_bytes = client.download_document_csv(doc_id)
+                    parsed = parse_document_zip(
+                        zip_bytes, max_ratio=settings.human_metric_max_ratio
                     )
-                    repository.replace_metric_evidence(doc_id, parsed.evidence)
-                    connection.commit()
-                elapsed_ms = int((time.time() - started_at) * 1000)
-                log_event(
-                    logger,
-                    "info",
-                    "document_processed",
-                    doc_id=doc_id,
-                    status="processed",
-                    elapsed_ms=elapsed_ms,
-                    evidence_count=len(parsed.evidence),
-                )
-            except CsvUnavailableError as exc:
-                # CSV が存在しない書類 → skipped に遷移
-                with db_connection(settings.database_url) as connection:
-                    repository = PipelineRepository(connection)
-                    repository.mark_skipped(doc_id, str(exc))
-                    connection.commit()
-                elapsed_ms = int((time.time() - started_at) * 1000)
-                log_event(
-                    logger,
-                    "warning",
-                    "document_processed",
-                    doc_id=doc_id,
-                    status="skipped",
-                    reason=str(exc),
-                    elapsed_ms=elapsed_ms,
-                )
-            except EdinetApiError as exc:
-                # API エラー (タイムアウト等) → failed に遷移、後でリトライ可能
-                with db_connection(settings.database_url) as connection:
-                    repository = PipelineRepository(connection)
-                    repository.mark_failed(doc_id, str(exc))
-                    connection.commit()
-                elapsed_ms = int((time.time() - started_at) * 1000)
-                log_event(
-                    logger,
-                    "error",
-                    "document_processed",
-                    doc_id=doc_id,
-                    status="failed",
-                    reason=str(exc),
-                    elapsed_ms=elapsed_ms,
-                )
-            except Exception as exc:
-                # 予期しないエラー → failed に遷移
-                with db_connection(settings.database_url) as connection:
-                    repository = PipelineRepository(connection)
-                    repository.mark_failed(doc_id, str(exc))
-                    connection.commit()
-                elapsed_ms = int((time.time() - started_at) * 1000)
-                log_event(
-                    logger,
-                    "error",
-                    "document_processed",
-                    doc_id=doc_id,
-                    status="failed",
-                    reason=str(exc),
-                    elapsed_ms=elapsed_ms,
-                )
-            except BaseException as exc:
-                # SIGINT / SystemExit → pending に戻して中断を安全に処理
-                with db_connection(settings.database_url) as connection:
-                    repository = PipelineRepository(connection)
-                    repository.reset_to_pending(doc_id, f"Interrupted: {exc}")
-                    connection.commit()
-                log_event(
-                    logger,
-                    "warning",
-                    "document_interrupted",
-                    doc_id=doc_id,
-                    status="pending",
-                    reason=f"Interrupted: {exc}",
-                )
-                raise
+                    with pool.connection() as connection:
+                        repository = PipelineRepository(connection)
+                        repository.replace_raw_facts(doc_id, parsed.raw_facts)
+                        repository.mark_processed(doc_id, parsed)
+                        repository.upsert_human_metrics(
+                            edinet_code=edinet_code,
+                            fiscal_year=fiscal_year,
+                            parsed=parsed,
+                        )
+                        repository.replace_metric_evidence(doc_id, parsed.evidence)
+                        connection.commit()
+                    elapsed_ms = int((time.time() - started_at) * 1000)
+                    log_event(
+                        logger,
+                        "info",
+                        "document_processed",
+                        doc_id=doc_id,
+                        status="processed",
+                        elapsed_ms=elapsed_ms,
+                        evidence_count=len(parsed.evidence),
+                    )
+                except CsvUnavailableError as exc:
+                    # CSV が存在しない書類 → skipped に遷移
+                    with pool.connection() as connection:
+                        repository = PipelineRepository(connection)
+                        repository.mark_skipped(doc_id, str(exc))
+                        connection.commit()
+                    elapsed_ms = int((time.time() - started_at) * 1000)
+                    log_event(
+                        logger,
+                        "warning",
+                        "document_processed",
+                        doc_id=doc_id,
+                        status="skipped",
+                        reason=str(exc),
+                        elapsed_ms=elapsed_ms,
+                    )
+                except EdinetApiError as exc:
+                    # API エラー (タイムアウト等) → failed に遷移、後でリトライ可能
+                    with pool.connection() as connection:
+                        repository = PipelineRepository(connection)
+                        repository.mark_failed(doc_id, str(exc))
+                        connection.commit()
+                    elapsed_ms = int((time.time() - started_at) * 1000)
+                    log_event(
+                        logger,
+                        "error",
+                        "document_processed",
+                        doc_id=doc_id,
+                        status="failed",
+                        reason=str(exc),
+                        elapsed_ms=elapsed_ms,
+                    )
+                except Exception as exc:
+                    # 予期しないエラー → failed に遷移
+                    with pool.connection() as connection:
+                        repository = PipelineRepository(connection)
+                        repository.mark_failed(doc_id, str(exc))
+                        connection.commit()
+                    elapsed_ms = int((time.time() - started_at) * 1000)
+                    log_event(
+                        logger,
+                        "error",
+                        "document_processed",
+                        doc_id=doc_id,
+                        status="failed",
+                        reason=str(exc),
+                        elapsed_ms=elapsed_ms,
+                    )
+                except BaseException as exc:
+                    # SIGINT / SystemExit → pending に戻して中断を安全に処理
+                    with pool.connection() as connection:
+                        repository = PipelineRepository(connection)
+                        repository.reset_to_pending(doc_id, f"Interrupted: {exc}")
+                        connection.commit()
+                    log_event(
+                        logger,
+                        "warning",
+                        "document_interrupted",
+                        doc_id=doc_id,
+                        status="pending",
+                        reason=f"Interrupted: {exc}",
+                    )
+                    raise
 
-            # API レートリミット対策として各書類の処理間にスリープ
-            if settings.process_sleep_seconds > 0:
-                time.sleep(settings.process_sleep_seconds)
+                # API レートリミット対策として各書類の処理間にスリープ
+                if settings.process_sleep_seconds > 0:
+                    time.sleep(settings.process_sleep_seconds)
+        finally:
+            client.close()
+
+        return len(claimed_documents)
     finally:
-        client.close()
-
-    return len(claimed_documents)
+        pool.closeall()
 
 
 # ------------------------------------------------------------------ #

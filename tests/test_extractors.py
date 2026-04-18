@@ -78,6 +78,22 @@ def test_extract_human_capital_from_text_uses_text_fallback() -> None:
     assert metrics["gender_wage_gap"] == 75.5
 
 
+def test_extract_human_capital_from_text_respects_max_ratio_override() -> None:
+    """max_ratio で異常値判定の閾値を絞れること (閾値以上の値は後続トークンにスキップ)."""
+    text = (
+        "管理職に占める女性労働者の割合 95.0 50.0 "
+        "男性労働者の育児休業取得率 80.0 "
+        "労働者の男女の賃金の差異(%) 75.5"
+    )
+    # 既定 (200) では最初に現れる 95.0 を採用
+    default_metrics = extract_human_capital_from_text(text)
+    assert default_metrics["female_manager_ratio"] == 95.0
+
+    # 閾値を 90 に絞ると 95.0 は除外され、次トークンの 50.0 が採用される
+    tight_metrics = extract_human_capital_from_text(text, max_ratio=90.0)
+    assert tight_metrics["female_manager_ratio"] == 50.0
+
+
 # ------------------------------------------------------------------ #
 #  FilingFilters: 書類種別フィルタ (有価証券報告書のみ通す)
 # ------------------------------------------------------------------ #

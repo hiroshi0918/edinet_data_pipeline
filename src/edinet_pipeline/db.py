@@ -17,6 +17,7 @@ from datetime import date
 
 import psycopg2
 from psycopg2.extras import Json, RealDictCursor, execute_values
+from psycopg2.pool import ThreadedConnectionPool
 
 from edinet_pipeline.models import (
     DocumentRecord,
@@ -28,15 +29,64 @@ from edinet_pipeline.models import (
 # claim_documents_for_processing で取得対象とするステータス
 PROCESSABLE_STATUSES = ("pending", "failed")
 
+# _replace_child_records で操作を許可するテーブル名の許可リスト
+# テーブル名は SQL の identifier として動的展開されるため、許可外の名前を拒否して
+# インジェクション経路を遮断する
+_CHILD_TABLE_ALLOWLIST: frozenset[str] = frozenset({"raw_edinet_facts", "metric_evidence"})
+
 
 @contextmanager
 def db_connection(database_url: str) -> Iterator[psycopg2.extensions.connection]:
-    """PostgreSQL コネクションのコンテキストマネージャ (自動 close)."""
+    """PostgreSQL コネクションのコンテキストマネージャ (自動 close).
+
+    単発用途 (CLI サブコマンドの 1 回きり処理など) 向け。
+    多数の書類をループ処理する場合は DatabasePool を使う。
+    """
     connection = psycopg2.connect(database_url)
     try:
         yield connection
     finally:
         connection.close()
+
+
+class DatabasePool:
+    """psycopg2 の ThreadedConnectionPool を薄くラップした接続プール.
+
+    書類ごとに connect/close を繰り返すとハンドシェイクコストが累積するため、
+    process_documents のループなど反復利用では本プール経由で接続を取り回す。
+    コンテキストマネージャでの取得を基本とし、例外時も自動で putconn される。
+    """
+
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        min_size: int = 1,
+        max_size: int = 5,
+    ) -> None:
+        if min_size < 0 or max_size < 1 or min_size > max_size:
+            raise ValueError(
+                f"Invalid pool size: min={min_size}, max={max_size}"
+            )
+        self._pool = ThreadedConnectionPool(min_size, max_size, database_url)
+
+    @contextmanager
+    def connection(self) -> Iterator[psycopg2.extensions.connection]:
+        """プールから接続を 1 つ借り受け、ブロック終了時に返却する."""
+        conn = self._pool.getconn()
+        try:
+            yield conn
+        finally:
+            # プール側で既に close されたコネクションを putconn すると例外になるため、
+            # 念のため closed 判定してから返却する。
+            if not conn.closed:
+                self._pool.putconn(conn)
+            else:
+                self._pool.putconn(conn, close=True)
+
+    def closeall(self) -> None:
+        """プール内の全接続を閉じる (プロセス終了時などに呼ぶ)."""
+        self._pool.closeall()
 
 
 class PipelineRepository:
@@ -295,7 +345,12 @@ class PipelineRepository:
     def _replace_child_records(
         self, doc_id: str, table: str, columns: list[str], rows: list[tuple],
     ) -> None:
-        """DELETE → bulk INSERT の冪等な洗い替え."""
+        """DELETE → bulk INSERT の冪等な洗い替え.
+
+        table はクエリ文字列に動的展開されるため、許可リストで事前検証する。
+        """
+        if table not in _CHILD_TABLE_ALLOWLIST:
+            raise ValueError(f"Disallowed child table: {table!r}")
         with self.connection.cursor() as cursor:
             cursor.execute(f"DELETE FROM {table} WHERE doc_id = %s", (doc_id,))
             if not rows:

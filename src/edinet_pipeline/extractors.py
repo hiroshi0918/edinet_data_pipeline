@@ -9,6 +9,10 @@ import pandas as pd
 
 from edinet_pipeline.models import MetricEvidenceRecord, ParsedDocument, RawFactRecord
 
+# 人的資本指標 (割合) として受け入れる既定の上限値 (%)。
+# 呼び出し側 (Settings.human_metric_max_ratio) から明示的に指定されない場合のフォールバック。
+DEFAULT_HUMAN_METRIC_MAX_RATIO = 200.0
+
 FINANCIAL_FIELDS = ("sales", "operating_profit", "net_profit", "employee_count")
 HUMAN_FIELDS = (
     "female_manager_ratio",
@@ -89,13 +93,18 @@ def is_relevant_relative_year(relative_year: str) -> bool:
     return any(marker in normalized for marker in CURRENT_PERIOD_MARKERS)
 
 
-def _extract_label_value(section: str, labels: tuple[str, ...]) -> float | None:
+def _extract_label_value(
+    section: str,
+    labels: tuple[str, ...],
+    *,
+    max_ratio: float = DEFAULT_HUMAN_METRIC_MAX_RATIO,
+) -> float | None:
     for label in labels:
         start = section.find(label)
         if start == -1:
             continue
         after_label = section[start + len(label):]
-        
+
         # 邪魔な「年」「号」「名」などの数字や注釈番号を除去
         cleaned = re.sub(r"\d+(?:\.\d+)?\s*(?:年|月|日|号|条|項|名|人|円|千円|百万円|歳|ヶ月)", "", after_label)
         cleaned = re.sub(r"[\(（]?注[)）]?\s*\d+", "", cleaned)
@@ -110,9 +119,9 @@ def _extract_label_value(section: str, labels: tuple[str, ...]) -> float | None:
                 return None
             try:
                 val = float(token)
-                # 割合としてあり得ない異常値（例えば 200% を超えるなど）はスキップして次を探す
-                # ※男女間賃金格差などは100%を超える場合があるが、200%以上はほぼ誤検知
-                if val > 200:
+                # 割合としてあり得ない異常値は誤検知 (注釈番号など) の可能性が高いためスキップ。
+                # 閾値は max_ratio (既定: Settings.human_metric_max_ratio) で調整可能。
+                if val > max_ratio:
                     continue
                 return val
             except ValueError:
@@ -120,7 +129,11 @@ def _extract_label_value(section: str, labels: tuple[str, ...]) -> float | None:
     return None
 
 
-def extract_human_capital_from_text(text: object) -> dict[str, float]:
+def extract_human_capital_from_text(
+    text: object,
+    *,
+    max_ratio: float = DEFAULT_HUMAN_METRIC_MAX_RATIO,
+) -> dict[str, float]:
     normalized = normalize_text(text)
     if "管理職に占める女性労働者の割合" not in normalized:
         return {}
@@ -137,25 +150,34 @@ def extract_human_capital_from_text(text: object) -> dict[str, float]:
     ]
 
     result = {}
-    female_manager_ratio = _extract_label_value(section, ("管理職に占める女性労働者の割合",))
+    female_manager_ratio = _extract_label_value(
+        section, ("管理職に占める女性労働者の割合",), max_ratio=max_ratio,
+    )
     if female_manager_ratio is not None:
         result["female_manager_ratio"] = female_manager_ratio
 
     male_childcare_leave_ratio = _extract_label_value(
         section,
         ("男性労働者の育児休業取得率", "男性の育児休業取得率"),
+        max_ratio=max_ratio,
     )
     if male_childcare_leave_ratio is not None:
         result["male_childcare_leave_ratio"] = male_childcare_leave_ratio
 
-    gender_wage_gap = _extract_label_value(section, tuple(metric_labels))
+    gender_wage_gap = _extract_label_value(
+        section, tuple(metric_labels), max_ratio=max_ratio,
+    )
     if gender_wage_gap is not None:
         result["gender_wage_gap"] = gender_wage_gap
 
     return result
 
 
-def parse_document_zip(zip_bytes: bytes) -> ParsedDocument:
+def parse_document_zip(
+    zip_bytes: bytes,
+    *,
+    max_ratio: float = DEFAULT_HUMAN_METRIC_MAX_RATIO,
+) -> ParsedDocument:
     parsed = empty_parsed_document()
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
         csv_files = [
@@ -237,7 +259,7 @@ def parse_document_zip(zip_bytes: bytes) -> ParsedDocument:
                     else:
                         parsed.human_metrics[metric_name] = numeric_value
 
-                fallback_metrics = extract_human_capital_from_text(raw_text)
+                fallback_metrics = extract_human_capital_from_text(raw_text, max_ratio=max_ratio)
                 for metric_name, metric_value in fallback_metrics.items():
                     if parsed.human_metrics[metric_name] is not None:
                         continue

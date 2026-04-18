@@ -12,6 +12,11 @@ DEFAULT_ANALYTICS_OUTPUT_DIR = "artifacts/analytics"
 DEFAULT_DUCKDB_FILENAME = "edinet_analytics.duckdb"
 DEFAULT_DUCKDB_PATH = f"{DEFAULT_ANALYTICS_OUTPUT_DIR}/{DEFAULT_DUCKDB_FILENAME}"
 
+# 人的資本指標 (割合) として受け入れる上限値 (%)。
+# 例: 男女間賃金格差は 100% を超える事例があるが、200% を超える値は
+# 本文中の別の数字 (注釈番号など) を誤検知している可能性が高いため既定で除外する。
+DEFAULT_HUMAN_METRIC_MAX_RATIO = 200.0
+
 
 def _get_env(name: str, *, default: str | None = None, required: bool = False) -> str:
     """環境変数を取得する. required=True かつ未設定なら ValueError を送出."""
@@ -28,15 +33,18 @@ class Settings:
     """パイプライン全体の設定値を保持するイミュータブルなデータクラス.
 
     Attributes:
-        edinet_api_key:        EDINET API のサブスクリプションキー
-        database_url:          PostgreSQL 接続文字列
-        request_timeout:       HTTP リクエストのタイムアウト (秒)
-        retry_count:           API リトライ回数
-        backoff_seconds:       リトライ間隔の基準秒数 (線形バックオフ)
-        process_sleep_seconds: 各書類処理間のスリープ (API レートリミット対策)
-        log_level:             ログレベル (INFO / DEBUG 等)
-        analytics_output_dir:  分析スナップショットの出力ディレクトリ
-        filing_filters:        対象書類のフィルタ条件 (有価証券報告書のみ等)
+        edinet_api_key:          EDINET API のサブスクリプションキー
+        database_url:            PostgreSQL 接続文字列
+        request_timeout:         HTTP リクエストのタイムアウト (秒)
+        retry_count:             API リトライ回数
+        backoff_seconds:         リトライ間隔の基準秒数 (線形バックオフ)
+        process_sleep_seconds:   各書類処理間のスリープ (API レートリミット対策)
+        log_level:               ログレベル (INFO / DEBUG 等)
+        analytics_output_dir:    分析スナップショットの出力ディレクトリ
+        filing_filters:          対象書類のフィルタ条件 (有価証券報告書のみ等)
+        human_metric_max_ratio:  人的資本指標として受け入れる最大値 (%)
+        db_pool_min_size:        DB 接続プールの最小接続数
+        db_pool_max_size:        DB 接続プールの最大接続数
     """
 
     edinet_api_key: str
@@ -48,6 +56,9 @@ class Settings:
     log_level: str = "INFO"
     analytics_output_dir: str = DEFAULT_ANALYTICS_OUTPUT_DIR
     filing_filters: FilingFilters = field(default_factory=FilingFilters)
+    human_metric_max_ratio: float = DEFAULT_HUMAN_METRIC_MAX_RATIO
+    db_pool_min_size: int = 1
+    db_pool_max_size: int = 5
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -63,6 +74,11 @@ class Settings:
             analytics_output_dir=_get_env(
                 "ANALYTICS_OUTPUT_DIR", default=DEFAULT_ANALYTICS_OUTPUT_DIR
             ),
+            human_metric_max_ratio=float(
+                _get_env("HUMAN_METRIC_MAX_RATIO", default=str(DEFAULT_HUMAN_METRIC_MAX_RATIO))
+            ),
+            db_pool_min_size=int(_get_env("DB_POOL_MIN_SIZE", default="1")),
+            db_pool_max_size=int(_get_env("DB_POOL_MAX_SIZE", default="5")),
         )
 
     @property

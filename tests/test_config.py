@@ -15,6 +15,9 @@ SETTINGS_ENV_VARS = (
     "PROCESS_SLEEP_SECONDS",
     "LOG_LEVEL",
     "ANALYTICS_OUTPUT_DIR",
+    "HUMAN_METRIC_MAX_RATIO",
+    "DB_POOL_MIN_SIZE",
+    "DB_POOL_MAX_SIZE",
 )
 
 
@@ -54,6 +57,9 @@ def test_settings_from_env_applies_defaults_and_derived_paths(
     assert settings.analytics_output_root == Path("artifacts/analytics")
     assert settings.analytics_parquet_root == Path("artifacts/analytics/parquet")
     assert settings.analytics_duckdb_path == Path("artifacts/analytics/edinet_analytics.duckdb")
+    assert settings.human_metric_max_ratio == 200.0
+    assert settings.db_pool_min_size == 1
+    assert settings.db_pool_max_size == 5
 
 
 def test_settings_from_env_parses_numeric_values_and_uppercases_log_level(
@@ -68,6 +74,9 @@ def test_settings_from_env_parses_numeric_values_and_uppercases_log_level(
     monkeypatch.setenv("PROCESS_SLEEP_SECONDS", "0")
     monkeypatch.setenv("LOG_LEVEL", "debug")
     monkeypatch.setenv("ANALYTICS_OUTPUT_DIR", "/tmp/edinet-analytics")
+    monkeypatch.setenv("HUMAN_METRIC_MAX_RATIO", "150.5")
+    monkeypatch.setenv("DB_POOL_MIN_SIZE", "2")
+    monkeypatch.setenv("DB_POOL_MAX_SIZE", "10")
 
     settings = Settings.from_env()
 
@@ -79,3 +88,6 @@ def test_settings_from_env_parses_numeric_values_and_uppercases_log_level(
     assert settings.analytics_output_root == Path("/tmp/edinet-analytics")
     assert settings.analytics_parquet_root == Path("/tmp/edinet-analytics/parquet")
     assert settings.analytics_duckdb_path == Path("/tmp/edinet-analytics/edinet_analytics.duckdb")
+    assert settings.human_metric_max_ratio == 150.5
+    assert settings.db_pool_min_size == 2
+    assert settings.db_pool_max_size == 10
