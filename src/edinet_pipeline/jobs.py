@@ -14,7 +14,7 @@ import time
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from edinet_pipeline.client import CsvUnavailableError, EdinetApiError, EdinetClient
+from edinet_pipeline.client import CsvUnavailableError, EdinetClient
 from edinet_pipeline.config import Settings
 from edinet_pipeline.db import DatabasePool, PipelineRepository, db_connection
 from edinet_pipeline.extractors import parse_document_zip
@@ -137,6 +137,64 @@ def fetch_documents_for_date(
 #  Job 2: process — キュー内の書類を順次ダウンロード・解析
 # ------------------------------------------------------------------ #
 
+def _record_terminal_state(
+    pool: DatabasePool,
+    *,
+    doc_id: str,
+    status: str,
+    reason: str,
+    started_at: float,
+    log_level: str,
+) -> None:
+    """書類の最終状態 (skipped / failed) を 1 トランザクションで記録し、ログ出力する.
+
+    Args:
+        pool: コネクションプール
+        doc_id: 対象書類 ID
+        status: "skipped" or "failed"
+        reason: DB に記録する失敗理由 (last_error)
+        started_at: 経過時間計測の起点 (time.time() の値)
+        log_level: log_event に渡すログレベル ("warning" / "error" 等)
+    """
+    with pool.connection() as connection:
+        repository = PipelineRepository(connection)
+        if status == "skipped":
+            repository.mark_skipped(doc_id, reason)
+        else:
+            repository.mark_failed(doc_id, reason)
+        connection.commit()
+    elapsed_ms = int((time.time() - started_at) * 1000)
+    log_event(
+        logger,
+        log_level,
+        "document_processed",
+        doc_id=doc_id,
+        status=status,
+        reason=reason,
+        elapsed_ms=elapsed_ms,
+    )
+
+
+def _record_interruption(pool: DatabasePool, *, doc_id: str, reason: str) -> None:
+    """SIGINT 等の中断発生時に書類を pending へ戻し、中断ログを出力する.
+
+    呼び出し側は本関数を呼んだあと **必ず例外を再 raise** すること
+    (BaseException を握りつぶしてはいけない)。
+    """
+    with pool.connection() as connection:
+        repository = PipelineRepository(connection)
+        repository.reset_to_pending(doc_id, reason)
+        connection.commit()
+    log_event(
+        logger,
+        "warning",
+        "document_interrupted",
+        doc_id=doc_id,
+        status="pending",
+        reason=reason,
+    )
+
+
 def process_documents(
     settings: Settings,
     *,
@@ -151,6 +209,11 @@ def process_documents(
       1. CSV ZIP をダウンロード
       2. parse_document_zip で財務指標 + 人的資本指標を抽出
       3. DB に結果を書き込み (processed / skipped / failed)
+
+    例外時の遷移先:
+      - CsvUnavailableError      → skipped
+      - その他の Exception 派生   → failed (EdinetApiError を含む)
+      - BaseException (SIGINT 等) → pending に戻し、再 raise する
 
     Returns:
         処理した書類数
@@ -219,67 +282,31 @@ def process_documents(
                         evidence_count=len(parsed.evidence),
                     )
                 except CsvUnavailableError as exc:
-                    # CSV が存在しない書類 → skipped に遷移
-                    with pool.connection() as connection:
-                        repository = PipelineRepository(connection)
-                        repository.mark_skipped(doc_id, str(exc))
-                        connection.commit()
-                    elapsed_ms = int((time.time() - started_at) * 1000)
-                    log_event(
-                        logger,
-                        "warning",
-                        "document_processed",
+                    # CSV が存在しない書類 → skipped に遷移 (warning ログ)
+                    _record_terminal_state(
+                        pool,
                         doc_id=doc_id,
                         status="skipped",
                         reason=str(exc),
-                        elapsed_ms=elapsed_ms,
-                    )
-                except EdinetApiError as exc:
-                    # API エラー (タイムアウト等) → failed に遷移、後でリトライ可能
-                    with pool.connection() as connection:
-                        repository = PipelineRepository(connection)
-                        repository.mark_failed(doc_id, str(exc))
-                        connection.commit()
-                    elapsed_ms = int((time.time() - started_at) * 1000)
-                    log_event(
-                        logger,
-                        "error",
-                        "document_processed",
-                        doc_id=doc_id,
-                        status="failed",
-                        reason=str(exc),
-                        elapsed_ms=elapsed_ms,
+                        started_at=started_at,
+                        log_level="warning",
                     )
                 except Exception as exc:
-                    # 予期しないエラー → failed に遷移
-                    with pool.connection() as connection:
-                        repository = PipelineRepository(connection)
-                        repository.mark_failed(doc_id, str(exc))
-                        connection.commit()
-                    elapsed_ms = int((time.time() - started_at) * 1000)
-                    log_event(
-                        logger,
-                        "error",
-                        "document_processed",
+                    # API エラー (EdinetApiError) や予期しない例外を一括で failed 扱いにする。
+                    # mark_failed 側で retry_count をインクリメントするため、
+                    # `--retry-failed` で再試行可能。
+                    _record_terminal_state(
+                        pool,
                         doc_id=doc_id,
                         status="failed",
                         reason=str(exc),
-                        elapsed_ms=elapsed_ms,
+                        started_at=started_at,
+                        log_level="error",
                     )
                 except BaseException as exc:
-                    # SIGINT / SystemExit → pending に戻して中断を安全に処理
-                    with pool.connection() as connection:
-                        repository = PipelineRepository(connection)
-                        repository.reset_to_pending(doc_id, f"Interrupted: {exc}")
-                        connection.commit()
-                    log_event(
-                        logger,
-                        "warning",
-                        "document_interrupted",
-                        doc_id=doc_id,
-                        status="pending",
-                        reason=f"Interrupted: {exc}",
-                    )
+                    # SIGINT / SystemExit → pending に戻して中断を安全に処理し、必ず再 raise する。
+                    # 再 raise しないと SIGINT が握りつぶされ、ユーザの停止指示が無視されてしまう。
+                    _record_interruption(pool, doc_id=doc_id, reason=f"Interrupted: {exc}")
                     raise
 
                 # API レートリミット対策として各書類の処理間にスリープ
