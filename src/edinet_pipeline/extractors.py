@@ -106,7 +106,11 @@ def _extract_label_value(
         after_label = section[start + len(label):]
 
         # 邪魔な「年」「号」「名」などの数字や注釈番号を除去
-        cleaned = re.sub(r"\d+(?:\.\d+)?\s*(?:年|月|日|号|条|項|名|人|円|千円|百万円|歳|ヶ月)", "", after_label)
+        cleaned = re.sub(
+            r"\d+(?:\.\d+)?\s*(?:年|月|日|号|条|項|名|人|円|千円|百万円|歳|ヶ月)",
+            "",
+            after_label,
+        )
         cleaned = re.sub(r"[\(（]?注[)）]?\s*\d+", "", cleaned)
         cleaned = re.sub(r"※\s*\d+", "", cleaned)
         # 不要な記号も消す（例として "①" などの丸数字や、本文中の不要な注釈の名残）
