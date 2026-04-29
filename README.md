@@ -2,6 +2,14 @@
 
 EDINET API v2 から有価証券報告書を取得し、財務指標と人的資本指標を PostgreSQL に蓄積するデータパイプラインです。運用系の正本は PostgreSQL に置き、分析用には Parquet と DuckDB を派生出力します。CLI を入口に `fetch -> process -> backfill -> export-analytics` を統一し、ローカル/Docker で再現できる構成にしています。
 
+> **初めてこのリポジトリを読む方へ**
+>
+> 本 README は CLI とセットアップを網羅したリファレンスです。「コードを読んで動きを理解したい」場合は、まず以下を順に読むのが最短ルートです。
+>
+> 1. [docs/CODE_MAP.md](docs/CODE_MAP.md) — モジュール責務、依存グラフ、推奨される読む順序
+> 2. [docs/DATA_FLOW.md](docs/DATA_FLOW.md) — 1 書類が API → DB → Parquet/DuckDB → ダッシュボードへ流れる過程の時系列解説
+> 3. 実装本体は `src/edinet_pipeline/` 配下を `models.py → config.py → cli.py → ...` の順で読むと理解しやすいです（詳細は CODE_MAP.md 参照）。
+
 ## 概要
 
 このリポジトリは次の 3 層で構成されています。

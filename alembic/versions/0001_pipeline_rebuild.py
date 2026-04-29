@@ -1,3 +1,15 @@
+"""パイプライン v1 への再構築マイグレーション (initial revision).
+
+このリビジョンは v0 時代の旧スキーマからでも、空 DB からでも、同じ手順で
+`v1` 構造へ収束できるように冪等に書かれている。
+そのため `op.create_table` の前に常に `_has_*` ヘルパーで存在確認を行い、
+既存の場合は ALTER 系の追加・型変更だけを実施する。
+
+ヘルパー関数 (`_has_table` 等) は SQLAlchemy の `Inspector` 経由で
+スキーマの現状を観測し、create / add / alter のいずれを実行すべきか
+判断するための **idempotent ガード**として使われる。
+"""
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -15,14 +27,17 @@ HUMAN_METRICS_UNIQUE_NAME = "uq_human_capital_metrics_company_year_source"
 
 
 def _has_table(inspector: sa.Inspector, table_name: str) -> bool:
+    """指定テーブルが存在するか (idempotent な create_table 用ガード)."""
     return table_name in inspector.get_table_names()
 
 
 def _has_column(inspector: sa.Inspector, table_name: str, column_name: str) -> bool:
+    """指定カラムが存在するか (idempotent な add_column 用ガード)."""
     return any(column["name"] == column_name for column in inspector.get_columns(table_name))
 
 
 def _has_check_constraint(inspector: sa.Inspector, table_name: str, constraint_name: str) -> bool:
+    """指定 CHECK 制約が存在するか (二重作成を防ぐためのガード)."""
     return any(
         constraint["name"] == constraint_name
         for constraint in inspector.get_check_constraints(table_name)
@@ -30,6 +45,7 @@ def _has_check_constraint(inspector: sa.Inspector, table_name: str, constraint_n
 
 
 def _has_unique_constraint(inspector: sa.Inspector, table_name: str, constraint_name: str) -> bool:
+    """指定 UNIQUE 制約が存在するか (二重作成を防ぐためのガード)."""
     return any(
         constraint["name"] == constraint_name
         for constraint in inspector.get_unique_constraints(table_name)
