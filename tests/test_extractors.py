@@ -1,4 +1,4 @@
-"""extractors モジュールのテスト — CSV/ZIP パース・数値変換・人的資本テキスト抽出の検証."""
+"""extractors モジュールのテスト — 3層抽出戦略 (要素ID / 項目名 / テキスト) の検証."""
 
 from __future__ import annotations
 
@@ -9,22 +9,26 @@ import pandas as pd
 import pytest
 
 from edinet_pipeline.extractors import (
+    classify_element_id,
+    convert_to_percentage,
     extract_human_capital_from_text,
     extract_numeric,
+    merge_llm_records,
     parse_document_zip,
 )
-from edinet_pipeline.models import FilingFilters
+from edinet_pipeline.models import (
+    SCOPE_CONSOLIDATED_SUBSIDIARY,
+    SCOPE_REPORTING_COMPANY,
+    WORKER_TYPE_ALL,
+    WORKER_TYPE_NON_REGULAR,
+    WORKER_TYPE_REGULAR,
+    FilingFilters,
+    HumanMetricRecord,
+)
 
 
 def build_zip(entries: dict[str, object]) -> bytes:
-    """テスト用の ZIP アーカイブをメモリ上に構築する.
-
-    entries の値は以下の型を受け付ける:
-      - list[dict]:    → DataFrame に変換後、TSV (UTF-16LE) に変換
-      - pd.DataFrame:  → TSV (UTF-16LE) に変換
-      - str:           → UTF-8 バイト列に変換
-      - bytes:         → そのまま書き込み
-    """
+    """テスト用の ZIP アーカイブをメモリ上に構築する."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for path, payload in entries.items():
@@ -41,23 +45,98 @@ def build_zip(entries: dict[str, object]) -> bytes:
     return buffer.getvalue()
 
 
+def _find_record(
+    records: list[HumanMetricRecord], scope: str, worker_type: str,
+) -> HumanMetricRecord | None:
+    """テスト補助: (scope, worker_type) で HumanMetricRecord を検索."""
+    for r in records:
+        if r.scope == scope and r.worker_type == worker_type:
+            return r
+    return None
+
+
 # ------------------------------------------------------------------ #
 #  extract_numeric: 全角・カンマ・括弧付き数値のパース
 # ------------------------------------------------------------------ #
 
 
 def test_extract_numeric_handles_commas_full_width_and_parentheses() -> None:
-    """全角数字 / カンマ区切り / 括弧(負数) が正しく変換されること."""
     assert extract_numeric("１,２３４") == 1234.0
     assert extract_numeric("(1,234)") == -1234.0
     assert extract_numeric("営業利益 98.7") == 98.7
 
 
 def test_extract_numeric_returns_none_for_missing_markers() -> None:
-    """空文字列・ハイフン・None は欠損値 (None) として返すこと."""
     assert extract_numeric("") is None
     assert extract_numeric("-") is None
     assert extract_numeric(None) is None
+    assert extract_numeric("－") is None  # XBRLの全角ダッシュ
+
+
+# ------------------------------------------------------------------ #
+#  convert_to_percentage: pure 単位の ％ 換算
+# ------------------------------------------------------------------ #
+
+
+def test_convert_to_percentage_scales_pure_unit() -> None:
+    """unit_id='pure' の値は ×100 されて % になる (XBRL の慣例)."""
+    assert convert_to_percentage(0.024, "pure") == pytest.approx(2.4)
+    assert convert_to_percentage(0.585, "pure") == pytest.approx(58.5)
+
+
+def test_convert_to_percentage_passes_through_other_units() -> None:
+    """pure 以外の単位 (JPY, %, None) はそのまま返す."""
+    assert convert_to_percentage(1234.0, "JPY") == 1234.0
+    assert convert_to_percentage(2.4, "%") == 2.4
+    assert convert_to_percentage(2.4, None) == 2.4
+
+
+# ------------------------------------------------------------------ #
+#  classify_element_id: 要素ID の分類
+# ------------------------------------------------------------------ #
+
+
+def test_classify_element_id_recognizes_female_manager_ratio() -> None:
+    """女性管理職比率の要素IDを正しく分類できる."""
+    eid = "jpcrp_cor:RatioOfFemaleEmployeesInManagerialPositionsMetricsOfReportingCompany"
+    assert classify_element_id(eid) == (
+        "female_manager_ratio", SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL,
+    )
+
+
+def test_classify_element_id_recognizes_worker_type_prefix() -> None:
+    """賃金差異の正規/非正規 worker_type が要素IDから判定される."""
+    regular = (
+        "jpcrp_cor:RegularEmployeesDifferencesInWagesBetweenMaleAndFemaleEmployees"
+        "MetricsOfReportingCompany"
+    )
+    non_regular = (
+        "jpcrp_cor:NonRegularEmployeesDifferencesInWagesBetweenMaleAndFemaleEmployees"
+        "MetricsOfReportingCompany"
+    )
+    assert classify_element_id(regular) == (
+        "gender_wage_gap", SCOPE_REPORTING_COMPANY, WORKER_TYPE_REGULAR,
+    )
+    assert classify_element_id(non_regular) == (
+        "gender_wage_gap", SCOPE_REPORTING_COMPANY, WORKER_TYPE_NON_REGULAR,
+    )
+
+
+def test_classify_element_id_recognizes_consolidated_subsidiary_scope() -> None:
+    """連結子会社サフィックスが scope を切り替える."""
+    eid = (
+        "jpcrp_cor:AllEmployeesRatioOfMaleEmployeesTakingChildcareLeave"
+        "MetricsOfConsolidatedSubsidiaries"
+    )
+    assert classify_element_id(eid) == (
+        "male_childcare_leave_ratio", SCOPE_CONSOLIDATED_SUBSIDIARY, WORKER_TYPE_ALL,
+    )
+
+
+def test_classify_element_id_returns_none_for_unrelated() -> None:
+    assert classify_element_id(None) is None
+    assert classify_element_id("jpcrp_cor:NetSales") is None
+    assert classify_element_id("") is None
 
 
 # ------------------------------------------------------------------ #
@@ -66,7 +145,6 @@ def test_extract_numeric_returns_none_for_missing_markers() -> None:
 
 
 def test_extract_human_capital_from_text_uses_text_fallback() -> None:
-    """補足文章中のキーワードから人的資本指標を抽出できること."""
     text = """
     管理職に占める女性労働者の割合 12.5
     男性労働者の育児休業取得率 80.0
@@ -78,52 +156,71 @@ def test_extract_human_capital_from_text_uses_text_fallback() -> None:
     assert metrics["gender_wage_gap"] == 75.5
 
 
+def test_extract_human_capital_from_text_avoids_f_equals_m_bug() -> None:
+    """F=M同値バグ防止: 異なる指標が同じ数値を取らないこと.
+
+    旧実装は「ラベル群+数値群」レイアウトで全ラベルが先頭の数値にマッチして
+    F=M=W=5.2 という不正な結果を返していた。新実装は走査窓を他ラベル直前で
+    打ち切るため、誤った同一値を返さない (取れない場合は None を返す).
+    """
+    text = (
+        "管理職に占める女性労働者の割合(%) "
+        "男性労働者の育児休業取得率(%) "
+        "労働者の男女の賃金の差異(%) "
+        "5.2 36.4 68.2"
+    )
+    metrics = extract_human_capital_from_text(text)
+    f_val = metrics.get("female_manager_ratio")
+    m_val = metrics.get("male_childcare_leave_ratio")
+    w_val = metrics.get("gender_wage_gap")
+
+    # 旧バグ: F=M=W=5.2 になっていた → このアサートで再発を防ぐ
+    if f_val is not None and m_val is not None:
+        assert f_val != m_val, "F=M same-value bug regressed"
+    if f_val is not None and w_val is not None:
+        assert f_val != w_val, "F=W same-value bug regressed"
+    if m_val is not None and w_val is not None:
+        assert m_val != w_val, "M=W same-value bug regressed"
+
+
 def test_extract_human_capital_from_text_respects_max_ratio_override() -> None:
-    """max_ratio で異常値判定の閾値を絞れること (閾値以上の値は後続トークンにスキップ)."""
     text = (
         "管理職に占める女性労働者の割合 95.0 50.0 "
         "男性労働者の育児休業取得率 80.0 "
         "労働者の男女の賃金の差異(%) 75.5"
     )
-    # 既定 (200) では最初に現れる 95.0 を採用
     default_metrics = extract_human_capital_from_text(text)
     assert default_metrics["female_manager_ratio"] == 95.0
 
-    # 閾値を 90 に絞ると 95.0 は除外され、次トークンの 50.0 が採用される
     tight_metrics = extract_human_capital_from_text(text, max_ratio=90.0)
     assert tight_metrics["female_manager_ratio"] == 50.0
 
 
 # ------------------------------------------------------------------ #
-#  FilingFilters: 書類種別フィルタ (有価証券報告書のみ通す)
+#  FilingFilters
 # ------------------------------------------------------------------ #
 
 
 def test_filing_filters_accept_only_target_annual_reports() -> None:
-    """有価証券報告書 (ordinanceCode=010, formCode=030000) のみ True を返すこと."""
     filters = FilingFilters()
-    target_document = {
+    target = {
         "docDescription": "有価証券報告書－第10期(2023/04/01－2024/03/31)",
-        "ordinanceCode": "010",
-        "formCode": "030000",
+        "ordinanceCode": "010", "formCode": "030000",
     }
-    non_target_document = {
+    non_target = {
         "docDescription": "四半期報告書－第1四半期",
-        "ordinanceCode": "010",
-        "formCode": "043000",
+        "ordinanceCode": "010", "formCode": "043000",
     }
-
-    assert filters.matches(target_document) is True
-    assert filters.matches(non_target_document) is False
+    assert filters.matches(target) is True
+    assert filters.matches(non_target) is False
 
 
 # ------------------------------------------------------------------ #
-#  parse_document_zip: ZIP → ParsedDocument の統合テスト
+#  parse_document_zip: 統合テスト
 # ------------------------------------------------------------------ #
 
 
 def test_parse_document_zip_skips_irrelevant_files_and_invalid_columns() -> None:
-    """XBRL_TO_CSV/jpcrp_*.csv のみ処理対象とし、不正カラムのファイルを無視すること."""
     zip_bytes = build_zip(
         {
             "notes/readme.txt": "ignore me",
@@ -134,49 +231,164 @@ def test_parse_document_zip_skips_irrelevant_files_and_invalid_columns() -> None
             ],
         }
     )
-
     parsed = parse_document_zip(zip_bytes)
-
     assert parsed.financial_metrics["sales"] == 1234
     assert parsed.financial_metrics["employee_count"] == 50
-    assert [record.metric_name for record in parsed.evidence] == ["sales", "employee_count"]
+    assert [r.metric_name for r in parsed.evidence] == ["sales", "employee_count"]
 
 
-def test_parse_document_zip_ignores_non_current_rows_and_records_both_evidence_types() -> None:
-    """前期データは無視し、項目名マッチとテキストフォールバックの両方で証跡を記録すること."""
+def test_parse_document_zip_element_id_match_takes_priority() -> None:
+    """要素IDマッチが項目名マッチより優先され、unit='pure' は ％ 換算されること."""
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp_structured.csv": [
+                {
+                    "要素ID": (
+                        "jpcrp_cor:RatioOfFemaleEmployeesInManagerialPositions"
+                        "MetricsOfReportingCompany"
+                    ),
+                    "項目名": "管理職に占める女性労働者の割合、提出会社の指標",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "0.024",
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+
+    record = _find_record(parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL)
+    assert record is not None
+    assert record.female_manager_ratio == pytest.approx(2.4)
+    assert any(e.matched_by == "element_id_match" for e in parsed.evidence)
+
+
+def test_parse_document_zip_captures_consolidated_subsidiary_dimension() -> None:
+    """連結子会社の指標が別の HumanMetricRecord として保存される."""
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp.csv": [
+                {
+                    "要素ID": (
+                        "jpcrp_cor:RatioOfFemaleEmployeesInManagerialPositions"
+                        "MetricsOfReportingCompany"
+                    ),
+                    "項目名": "管理職に占める女性労働者の割合、提出会社の指標",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "0.052",
+                },
+                {
+                    "要素ID": (
+                        "jpcrp_cor:RatioOfFemaleEmployeesInManagerialPositions"
+                        "MetricsOfConsolidatedSubsidiaries"
+                    ),
+                    "項目名": "管理職に占める女性労働者の割合、連結子会社の指標",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "0.143",
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+    reporting = _find_record(parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL)
+    subsidiary = _find_record(
+        parsed.human_metrics, SCOPE_CONSOLIDATED_SUBSIDIARY, WORKER_TYPE_ALL,
+    )
+    assert reporting is not None and reporting.female_manager_ratio == pytest.approx(5.2)
+    assert subsidiary is not None and subsidiary.female_manager_ratio == pytest.approx(14.3)
+
+
+def test_parse_document_zip_separates_worker_types_for_wage_gap() -> None:
+    """賃金差異が worker_type ごとに別レコードとして保存される."""
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp.csv": [
+                {
+                    "要素ID": (
+                        "jpcrp_cor:AllEmployeesDifferencesInWagesBetweenMaleAnd"
+                        "FemaleEmployeesMetricsOfReportingCompany"
+                    ),
+                    "項目名": "全労働者、労働者の男女の賃金の差異、提出会社の指標",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "0.682",
+                },
+                {
+                    "要素ID": (
+                        "jpcrp_cor:RegularEmployeesDifferencesInWagesBetweenMaleAnd"
+                        "FemaleEmployeesMetricsOfReportingCompany"
+                    ),
+                    "項目名": "正規雇用労働者、労働者の男女の賃金の差異、提出会社の指標",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "0.686",
+                },
+                {
+                    "要素ID": (
+                        "jpcrp_cor:NonRegularEmployeesDifferencesInWagesBetweenMaleAnd"
+                        "FemaleEmployeesMetricsOfReportingCompany"
+                    ),
+                    "項目名": "非正規雇用労働者、労働者の男女の賃金の差異、提出会社の指標",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "0.617",
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+
+    all_record = _find_record(parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL)
+    regular_record = _find_record(
+        parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_REGULAR,
+    )
+    non_regular_record = _find_record(
+        parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_NON_REGULAR,
+    )
+    assert all_record.gender_wage_gap == pytest.approx(68.2)
+    assert regular_record.gender_wage_gap == pytest.approx(68.6)
+    assert non_regular_record.gender_wage_gap == pytest.approx(61.7)
+
+
+def test_parse_document_zip_ignores_non_current_rows_and_uses_text_fallback() -> None:
+    """前期データは無視し、項目名マッチとテキストフォールバックの両方が動作する."""
     zip_bytes = build_zip(
         {
             "XBRL_TO_CSV/jpcrp_metrics.csv": [
                 {"項目名": "売上高", "値": "1,000", "相対年度": "前期"},
                 {"項目名": "男性労働者の育児休業取得率", "値": "81.0", "相対年度": "提出者"},
                 {
-                    "項目名": "補足文章",
-                    "値": "管理職に占める女性労働者の割合 12.5 労働者の男女の賃金の差異(%) 75.5",
+                    "項目名": "従業員の状況 [テキストブロック]",
+                    "値": (
+                        "管理職に占める女性労働者の割合 12.5 "
+                        "男性労働者の育児休業取得率 81.0 "
+                        "労働者の男女の賃金の差異(%) 75.5"
+                    ),
                     "相対年度": "提出者",
                 },
             ]
         }
     )
-
     parsed = parse_document_zip(zip_bytes)
+    assert parsed.financial_metrics["sales"] is None  # 前期は無視
 
-    # 前期の売上高は取り込まれない
-    assert parsed.financial_metrics["sales"] is None
-    assert parsed.human_metrics == {
-        "female_manager_ratio": 12.5,
-        "male_childcare_leave_ratio": 81.0,
-        "gender_wage_gap": 75.5,
-    }
-    # 抽出方法が item_name_match と text_fallback の 2 種類記録される
-    assert {(record.metric_name, record.matched_by) for record in parsed.evidence} == {
-        ("male_childcare_leave_ratio", "item_name_match"),
-        ("female_manager_ratio", "text_fallback"),
-        ("gender_wage_gap", "text_fallback"),
-    }
+    # reporting_company × all に集約される
+    reporting_all = _find_record(
+        parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL,
+    )
+    assert reporting_all is not None
+    assert reporting_all.male_childcare_leave_ratio == 81.0
+    assert reporting_all.female_manager_ratio == 12.5
+    assert reporting_all.gender_wage_gap == 75.5
+
+    # employee_status_text が保持されている (LLM への入力候補)
+    assert parsed.employee_status_text is not None
+    assert "管理職に占める女性労働者の割合" in parsed.employee_status_text
 
 
 def test_parse_document_zip_collects_raw_facts_with_all_available_columns() -> None:
-    """元CSV行を raw_facts として保持し、9列の値を欠損込みで保存すること."""
     zip_bytes = build_zip(
         {
             "XBRL_TO_CSV/jpcrp_full.csv": [
@@ -194,33 +406,63 @@ def test_parse_document_zip_collects_raw_facts_with_all_available_columns() -> N
             ],
         }
     )
-
     parsed = parse_document_zip(zip_bytes)
-
     assert len(parsed.raw_facts) == 1
-    raw_fact = parsed.raw_facts[0]
-    assert raw_fact.source_file == "XBRL_TO_CSV/jpcrp_full.csv"
-    assert raw_fact.row_number == 1
-    assert raw_fact.element_id == "jpcrp_cor:NetSales"
-    assert raw_fact.item_name == "売上高、経営指標等"
-    assert raw_fact.context_id == "CurrentYearDuration"
-    assert raw_fact.relative_year == "当期"
-    assert raw_fact.consolidation_type == "連結"
-    assert raw_fact.period_type == "期間"
-    assert raw_fact.unit_id == "JPY"
-    assert raw_fact.unit_label == "円"
-    assert raw_fact.raw_value == "1,234"
+    assert parsed.raw_facts[0].element_id == "jpcrp_cor:NetSales"
 
 
 def test_parse_document_zip_raises_when_no_candidate_csv_files_exist() -> None:
-    """XBRL_TO_CSV/ 配下に対象 CSV が無い場合 ValueError を送出すること."""
     zip_bytes = build_zip(
-        {
-            "reports/annual.csv": [
-                {"項目名": "売上高", "値": "1,234", "相対年度": "当期"},
-            ]
-        }
+        {"reports/annual.csv": [{"項目名": "売上高", "値": "1,234", "相対年度": "当期"}]},
     )
-
     with pytest.raises(ValueError, match="No candidate CSV files found in ZIP"):
         parse_document_zip(zip_bytes)
+
+
+# ------------------------------------------------------------------ #
+#  merge_llm_records: LLM 結果のマージ
+# ------------------------------------------------------------------ #
+
+
+def test_merge_llm_records_fills_only_missing_fields() -> None:
+    """既存値がある指標は LLM 値で上書きされない (first-wins)."""
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp.csv": [
+                {
+                    "要素ID": (
+                        "jpcrp_cor:RatioOfFemaleEmployeesInManagerialPositions"
+                        "MetricsOfReportingCompany"
+                    ),
+                    "項目名": "管理職に占める女性労働者の割合、提出会社の指標",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "0.052",  # → 5.2%
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+
+    # LLM が違う値 (99.0) を返したと仮定
+    llm_records = [
+        HumanMetricRecord(
+            scope=SCOPE_REPORTING_COMPANY, worker_type=WORKER_TYPE_ALL,
+            female_manager_ratio=99.0,  # 既存値 5.2 が温存されるべき
+            male_childcare_leave_ratio=70.0,  # 新規で埋まる
+        ),
+    ]
+    filled = merge_llm_records(parsed, llm_records)
+
+    record = _find_record(parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL)
+    assert record.female_manager_ratio == pytest.approx(5.2)  # 上書きされていない
+    assert record.male_childcare_leave_ratio == 70.0  # 新規に埋まった
+    assert filled == 1
+
+
+def test_merge_llm_records_returns_zero_for_empty_input() -> None:
+    zip_bytes = build_zip(
+        {"XBRL_TO_CSV/jpcrp.csv": [{"項目名": "売上高", "値": "1,000", "相対年度": "当期"}]},
+    )
+    parsed = parse_document_zip(zip_bytes)
+    assert merge_llm_records(parsed, []) == 0

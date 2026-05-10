@@ -171,6 +171,8 @@ def test_export_analytics_writes_both_outputs(
         "operating_profit",
         "net_profit",
         "employee_count",
+        "scope",
+        "worker_type",
         "female_manager_ratio",
         "male_childcare_leave_ratio",
         "gender_wage_gap",

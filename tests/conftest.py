@@ -34,7 +34,7 @@ def db_connection(migrated_database: str):
         cursor.execute(
             """
             TRUNCATE TABLE raw_edinet_facts, metric_evidence, human_capital_metrics,
-            financial_reports, companies
+            financial_reports, companies, llm_extraction_cache
             RESTART IDENTITY CASCADE
             """
         )

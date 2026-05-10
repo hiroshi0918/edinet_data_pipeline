@@ -32,7 +32,11 @@ def _clear_streamlit_cache():
 
 
 def _create_analytics_schema(connection: duckdb.DuckDBPyConnection) -> None:
-    """テスト用の analytics スキーマとテーブルを作成する."""
+    """テスト用の analytics スキーマとテーブルを作成する.
+
+    v0.3 で scope/worker_type/element_id 等の次元カラムが追加されているため、
+    テスト用スキーマもそれに合わせて拡張する。
+    """
     connection.execute("CREATE SCHEMA analytics")
     connection.execute(
         """
@@ -47,6 +51,8 @@ def _create_analytics_schema(connection: duckdb.DuckDBPyConnection) -> None:
             operating_profit BIGINT,
             net_profit BIGINT,
             employee_count BIGINT,
+            scope VARCHAR,
+            worker_type VARCHAR,
             female_manager_ratio DECIMAL(5,2),
             male_childcare_leave_ratio DECIMAL(5,2),
             gender_wage_gap DECIMAL(5,2),
@@ -68,7 +74,10 @@ def _create_analytics_schema(connection: duckdb.DuckDBPyConnection) -> None:
             raw_value VARCHAR,
             relative_year VARCHAR,
             source_file VARCHAR,
-            matched_by VARCHAR
+            matched_by VARCHAR,
+            element_id VARCHAR,
+            scope VARCHAR,
+            worker_type VARCHAR
         )
         """
     )
@@ -83,29 +92,38 @@ def conn():
         """
         INSERT INTO analytics.company_year_metrics VALUES
             ('E00001', 'Company A', 2023, 'D001', '2024-03-15', 'processed',
-             1000000, 100000, 50000, 500, 15.5, 30.0, 75.0, 'EDINET_CSV'),
+             1000000, 100000, 50000, 500, 'reporting_company', 'all',
+             15.5, 30.0, 75.0, 'EDINET_CSV'),
             ('E00001', 'Company A', 2024, 'D002', '2025-03-15', 'processed',
-             1200000, 120000, 60000, 520, 18.0, 35.0, 78.0, 'EDINET_CSV'),
+             1200000, 120000, 60000, 520, 'reporting_company', 'all',
+             18.0, 35.0, 78.0, 'EDINET_CSV'),
             ('E00002', 'Company B', 2023, 'D003', '2024-03-20', 'processed',
-             500000, 50000, 25000, 200, NULL, NULL, NULL, 'EDINET_CSV'),
+             500000, 50000, 25000, 200, 'reporting_company', 'all',
+             NULL, NULL, NULL, 'EDINET_CSV'),
             ('E00002', 'Company B', 2024, 'D004', '2025-03-20', 'failed',
-             NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'EDINET_CSV'),
+             NULL, NULL, NULL, NULL, 'reporting_company', 'all',
+             NULL, NULL, NULL, 'EDINET_CSV'),
             ('E00003', 'Company C', 2023, 'D005', '2024-03-25', 'skipped',
-             NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'EDINET_CSV')
+             NULL, NULL, NULL, NULL, 'reporting_company', 'all',
+             NULL, NULL, NULL, 'EDINET_CSV')
         """
     )
     connection.execute(
         """
         INSERT INTO analytics.metric_evidence VALUES
             ('D001', 'E00001', 'Company A', 2023, '2024-03-15', 'processed',
-             'sales', '売上高', '1000000', '当期', 'jpcrp.csv', 'item_name_match'),
+             'sales', '売上高', '1000000', '当期', 'jpcrp.csv', 'item_name_match',
+             'jpcrp_cor:NetSales', NULL, NULL),
             ('D001', 'E00001', 'Company A', 2023, '2024-03-15', 'processed',
              'female_manager_ratio', '管理職に占める女性', '15.5', '当期',
-             'text_block.csv', 'text_fallback'),
+             'text_block.csv', 'text_fallback', NULL,
+             'reporting_company', 'all'),
             ('D002', 'E00001', 'Company A', 2024, '2025-03-15', 'processed',
-             'sales', '売上高', '1200000', '当期', 'jpcrp.csv', 'item_name_match'),
+             'sales', '売上高', '1200000', '当期', 'jpcrp.csv', 'item_name_match',
+             'jpcrp_cor:NetSales', NULL, NULL),
             ('D003', 'E00002', 'Company B', 2023, '2024-03-20', 'processed',
-             'sales', '売上高', '500000', '当期', 'jpcrp.csv', 'item_name_match')
+             'sales', '売上高', '500000', '当期', 'jpcrp.csv', 'item_name_match',
+             'jpcrp_cor:NetSales', NULL, NULL)
         """
     )
     yield connection
