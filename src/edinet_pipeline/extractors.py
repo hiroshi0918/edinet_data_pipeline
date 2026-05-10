@@ -1,3 +1,14 @@
+"""EDINET CSV からの指標抽出 — 3層戦略.
+
+  Layer 1: 要素IDマッチ (jpcrp_cor:RatioOf...) — 構造化XBRL の決定論的抽出
+  Layer 2: 項目名マッチ — 旧タクソノミー / カスタム項目名のフォールバック
+  Layer 3: テキストブロックからの抽出 — Layer 1/2 で空のときの最終手段
+
+Layer 3 の中ではさらに:
+  3a. 正規表現ベース (extract_human_capital_from_text)
+  3b. LLM ベース (LLM_FALLBACK_ENABLED=true 時のみ; llm_extractor 経由)
+"""
+
 from __future__ import annotations
 
 import io
@@ -7,10 +18,19 @@ import zipfile
 
 import pandas as pd
 
-from edinet_pipeline.models import MetricEvidenceRecord, ParsedDocument, RawFactRecord
+from edinet_pipeline.models import (
+    SCOPE_CONSOLIDATED_SUBSIDIARY,
+    SCOPE_REPORTING_COMPANY,
+    WORKER_TYPE_ALL,
+    WORKER_TYPE_NON_REGULAR,
+    WORKER_TYPE_REGULAR,
+    HumanMetricRecord,
+    MetricEvidenceRecord,
+    ParsedDocument,
+    RawFactRecord,
+)
 
-# 人的資本指標 (割合) として受け入れる既定の上限値 (%)。
-# 呼び出し側 (Settings.human_metric_max_ratio) から明示的に指定されない場合のフォールバック。
+# 人的資本指標 (割合) の上限値 (%)。本文中の注釈番号などの誤検知を排除。
 DEFAULT_HUMAN_METRIC_MAX_RATIO = 200.0
 
 FINANCIAL_FIELDS = ("sales", "operating_profit", "net_profit", "employee_count")
@@ -20,6 +40,7 @@ HUMAN_FIELDS = (
     "gender_wage_gap",
 )
 
+# Layer 2: 項目名部分一致パターン
 EXPLICIT_PATTERNS = {
     "sales": ("売上高", "営業収益", "売上収益", "完成工事高"),
     "operating_profit": ("営業利益", "営業損失"),
@@ -29,33 +50,100 @@ EXPLICIT_PATTERNS = {
     "male_childcare_leave_ratio": ("男性労働者の育児休業取得率", "男性の育児休業取得率"),
     "gender_wage_gap": ("男女の賃金の差異", "男女賃金差異"),
 }
-CURRENT_PERIOD_MARKERS = ("当期", "当年", "当連結会計年度", "提出者")
+
+# 「当期」を含む値で当事業年度の指標を識別。
+# 提出会社XBRL は「当期末」なので「当期」の部分一致でカバーされる。
+CURRENT_PERIOD_MARKERS = ("当期", "当年", "当連結会計年度", "提出者", "当事業年度")
+
+# 「従業員の状況」テキストブロックの項目名 (Layer 3 のトリガー)
+EMPLOYEE_STATUS_BLOCK_LABEL = "従業員の状況"
+
+
+# ------------------------------------------------------------------ #
+#  Layer 1: 要素ID 分類器
+# ------------------------------------------------------------------ #
+
+
+def classify_element_id(element_id: str | None) -> tuple[str, str, str] | None:
+    """XBRL 要素ID から (metric_name, scope, worker_type) を判定する.
+
+    要素IDの構造例:
+      jpcrp_cor:RatioOfFemaleEmployeesInManagerialPositionsMetricsOfReportingCompany
+      jpcrp_cor:AllEmployees...RatioOfMaleEmployeesTakingChildcareLeaveMetricsOfReportingCompany
+      jpcrp_cor:RegularEmployeesDifferencesInWagesBetweenMaleAndFemaleEmployeesMetricsOfReportingCompany
+
+    判定不能なら None。
+    """
+    if not element_id:
+        return None
+
+    # scope (末尾サフィックス)
+    if "MetricsOfReportingCompany" in element_id:
+        scope = SCOPE_REPORTING_COMPANY
+    elif "MetricsOfConsolidatedSubsidiaries" in element_id:
+        scope = SCOPE_CONSOLIDATED_SUBSIDIARY
+    else:
+        return None
+
+    # 指標種別 (中央サブストリング)
+    if "RatioOfFemaleEmployeesInManagerialPositions" in element_id:
+        metric = "female_manager_ratio"
+        # 女性管理職比率は worker_type の区分なし → "all" に集約
+        return (metric, scope, WORKER_TYPE_ALL)
+    if "RatioOfMaleEmployeesTakingChildcareLeave" in element_id:
+        metric = "male_childcare_leave_ratio"
+    elif "DifferencesInWagesBetweenMaleAndFemaleEmployees" in element_id:
+        metric = "gender_wage_gap"
+    else:
+        return None
+
+    # worker_type (プレフィックス)
+    local_part = element_id.split(":", 1)[-1]
+    if local_part.startswith("AllEmployees"):
+        worker_type = WORKER_TYPE_ALL
+    elif local_part.startswith("RegularEmployees"):
+        worker_type = WORKER_TYPE_REGULAR
+    elif local_part.startswith("NonRegularEmployees"):
+        worker_type = WORKER_TYPE_NON_REGULAR
+    else:
+        worker_type = WORKER_TYPE_ALL  # フォールバック
+
+    return (metric, scope, worker_type)
+
+
+# ------------------------------------------------------------------ #
+#  共通ユーティリティ
+# ------------------------------------------------------------------ #
 
 
 def empty_parsed_document() -> ParsedDocument:
+    """全フィールドが None / 空リストの ParsedDocument を作成."""
     return ParsedDocument(
         financial_metrics={name: None for name in FINANCIAL_FIELDS},
-        human_metrics={name: None for name in HUMAN_FIELDS},
+        human_metrics=[],
         evidence=[],
         raw_facts=[],
     )
 
 
 def normalize_text(value: object) -> str:
+    """NFKC 正規化し前後空白を除去 (NaN/None は空文字列)."""
     if value is None or pd.isna(value):
         return ""
     return unicodedata.normalize("NFKC", str(value)).strip()
 
 
 def stringify_raw(value: object) -> str | None:
+    """値を文字列化 (NaN/None は None)."""
     if value is None or pd.isna(value):
         return None
     return str(value)
 
 
 def extract_numeric(value: object) -> float | None:
+    """文字列から数値を抽出. (1,000) は -1000、"-" や空は None."""
     text = normalize_text(value)
-    if not text or text in {"-", "nan", "None"}:
+    if not text or text in {"-", "nan", "None", "－", "―"}:
         return None
 
     negative = False
@@ -74,57 +162,75 @@ def extract_numeric(value: object) -> float | None:
     return number
 
 
-def parse_metric_tokens(compact_text: str) -> list[float | None]:
-    normalized = normalize_text(compact_text).replace("－", "-").replace("―", "-")
-    normalized = re.sub(r"[%％,]", "", normalized)
-    tokens: list[float | None] = []
-    for token in re.findall(r"-|\d+(?:\.\d+)?", normalized):
-        if token == "-":
-            tokens.append(None)
-        else:
-            tokens.append(float(token))
-    return tokens
+def convert_to_percentage(value: float, unit_id: str | None) -> float:
+    """unit_id='pure' (XBRLの割合表記 0.024) を ％ に換算 (×100)."""
+    if unit_id and unit_id.strip().lower() == "pure":
+        return value * 100.0
+    return value
 
 
 def is_relevant_relative_year(relative_year: str) -> bool:
+    """relative_year が当期/当事業年度/当期末等を含むか.
+
+    空文字列の場合は True (フィルタしない)。
+    """
     normalized = normalize_text(relative_year)
     if not normalized:
         return True
     return any(marker in normalized for marker in CURRENT_PERIOD_MARKERS)
 
 
+# ------------------------------------------------------------------ #
+#  Layer 3a: 正規表現ベースのテキスト抽出 (旧来の fallback ロジック)
+# ------------------------------------------------------------------ #
+
+
 def _extract_label_value(
     section: str,
     labels: tuple[str, ...],
     *,
+    other_labels: tuple[str, ...] = (),
     max_ratio: float = DEFAULT_HUMAN_METRIC_MAX_RATIO,
 ) -> float | None:
+    """ラベル直後の最初の妥当な数値を抽出する.
+
+    F=M同値バグ対策として `other_labels` を受け取り、ラベル直後の走査窓内に
+    他のラベルが存在する場合はそこまでで打ち切る。これにより、
+    「ラベル群が並んだあと数値群が来る」レイアウトで全ラベルが先頭の数値に
+    マッチしてしまう問題を防ぐ。
+    """
     for label in labels:
         start = section.find(label)
         if start == -1:
             continue
         after_label = section[start + len(label):]
 
-        # 邪魔な「年」「号」「名」などの数字や注釈番号を除去
+        # 他ラベルの直前で打ち切り
+        cutoff = len(after_label)
+        for other in other_labels:
+            if other in labels:
+                continue
+            pos = after_label.find(other)
+            if pos != -1 and pos < cutoff:
+                cutoff = pos
+        window = after_label[:cutoff]
+
+        # 邪魔な単位付き数字を除去
         cleaned = re.sub(
             r"\d+(?:\.\d+)?\s*(?:年|月|日|号|条|項|名|人|円|千円|百万円|歳|ヶ月)",
             "",
-            after_label,
+            window,
         )
         cleaned = re.sub(r"[\(（]?注[)）]?\s*\d+", "", cleaned)
         cleaned = re.sub(r"※\s*\d+", "", cleaned)
-        # 不要な記号も消す（例として "①" などの丸数字や、本文中の不要な注釈の名残）
         cleaned = re.sub(r"[①②③④⑤⑥⑦⑧⑨⑩]", "", cleaned)
 
-        # 全ての数字（またはハイフン）を順番に見ていく
         for match in re.finditer(r"(-|\d+(?:\.\d+)?)", cleaned):
             token = match.group(1)
             if token == "-":
                 return None
             try:
                 val = float(token)
-                # 割合としてあり得ない異常値は誤検知 (注釈番号など) の可能性が高いためスキップ。
-                # 閾値は max_ratio (既定: Settings.human_metric_max_ratio) で調整可能。
                 if val > max_ratio:
                     continue
                 return val
@@ -138,43 +244,112 @@ def extract_human_capital_from_text(
     *,
     max_ratio: float = DEFAULT_HUMAN_METRIC_MAX_RATIO,
 ) -> dict[str, float]:
+    """「従業員の状況」テキストから人的資本3指標を抽出 (regex ベース).
+
+    抽出範囲を「管理職に占める女性労働者の割合」直後の 800 文字に限定し、
+    各ラベル間の干渉を `_extract_label_value(other_labels=...)` で防ぐ。
+    """
     normalized = normalize_text(text)
-    if "管理職に占める女性労働者の割合" not in normalized:
+    anchor = "管理職に占める女性労働者の割合"
+    if anchor not in normalized:
         return {}
 
-    start = normalized.find("管理職に占める女性労働者の割合")
+    start = normalized.find(anchor)
     section = normalized[start : start + 800]
     section = re.sub(r"[\(（]注[^)）]*[\)）]\s*[0-9０-９]?", "", section)
     section = re.sub(r"\s+", " ", section)
 
-    metric_labels = [
+    female_labels = ("管理職に占める女性労働者の割合",)
+    male_labels = ("男性労働者の育児休業取得率", "男性の育児休業取得率")
+    wage_labels = (
         "労働者の男女の賃金の差異(%)",
         "男女の賃金の差異(%)",
         "労働者の男女賃金差異(%)",
-    ]
-
-    result = {}
-    female_manager_ratio = _extract_label_value(
-        section, ("管理職に占める女性労働者の割合",), max_ratio=max_ratio,
+        "男女の賃金の差異",
     )
-    if female_manager_ratio is not None:
-        result["female_manager_ratio"] = female_manager_ratio
+    all_labels = female_labels + male_labels + wage_labels
 
-    male_childcare_leave_ratio = _extract_label_value(
-        section,
-        ("男性労働者の育児休業取得率", "男性の育児休業取得率"),
-        max_ratio=max_ratio,
+    result: dict[str, float] = {}
+    female_value = _extract_label_value(
+        section, female_labels, other_labels=all_labels, max_ratio=max_ratio,
     )
-    if male_childcare_leave_ratio is not None:
-        result["male_childcare_leave_ratio"] = male_childcare_leave_ratio
+    if female_value is not None:
+        result["female_manager_ratio"] = female_value
 
-    gender_wage_gap = _extract_label_value(
-        section, tuple(metric_labels), max_ratio=max_ratio,
+    male_value = _extract_label_value(
+        section, male_labels, other_labels=all_labels, max_ratio=max_ratio,
     )
-    if gender_wage_gap is not None:
-        result["gender_wage_gap"] = gender_wage_gap
+    if male_value is not None:
+        result["male_childcare_leave_ratio"] = male_value
+
+    wage_value = _extract_label_value(
+        section, wage_labels, other_labels=all_labels, max_ratio=max_ratio,
+    )
+    if wage_value is not None:
+        result["gender_wage_gap"] = wage_value
 
     return result
+
+
+# ------------------------------------------------------------------ #
+#  HumanMetricsBuilder — 多次元キーで複数行の HumanMetricRecord を集約
+# ------------------------------------------------------------------ #
+
+
+class HumanMetricsBuilder:
+    """(scope, worker_type) ごとに HumanMetricRecord の値を集約するビルダー.
+
+    同一キー・同一指標で重複登録された場合は最初の値が保持される (first-wins)。
+    """
+
+    def __init__(self) -> None:
+        # (scope, worker_type) -> {metric_name: value}
+        self._buckets: dict[tuple[str, str], dict[str, float | None]] = {}
+
+    def has_value(self, scope: str, worker_type: str, metric_name: str) -> bool:
+        bucket = self._buckets.get((scope, worker_type))
+        if bucket is None:
+            return False
+        return bucket.get(metric_name) is not None
+
+    def has_any_value_for_reporting_company(self) -> bool:
+        """提出会社の指標が1つでも入っているか (LLM フォールバック判定用)."""
+        for (scope, _), bucket in self._buckets.items():
+            if scope != SCOPE_REPORTING_COMPANY:
+                continue
+            if any(v is not None for v in bucket.values()):
+                return True
+        return False
+
+    def set_value(
+        self, scope: str, worker_type: str, metric_name: str, value: float,
+    ) -> bool:
+        """値を設定. 既に値があれば False を返してスキップ (first-wins)."""
+        key = (scope, worker_type)
+        if key not in self._buckets:
+            self._buckets[key] = {name: None for name in HUMAN_FIELDS}
+        if self._buckets[key].get(metric_name) is not None:
+            return False
+        self._buckets[key][metric_name] = value
+        return True
+
+    def to_records(self) -> list[HumanMetricRecord]:
+        """累積した値を HumanMetricRecord のリストに変換."""
+        return [
+            HumanMetricRecord(
+                scope=scope,
+                worker_type=worker_type,
+                female_manager_ratio=values["female_manager_ratio"],
+                male_childcare_leave_ratio=values["male_childcare_leave_ratio"],
+                gender_wage_gap=values["gender_wage_gap"],
+            )
+            for (scope, worker_type), values in sorted(self._buckets.items())
+        ]
+
+
+# ------------------------------------------------------------------ #
+#  メイン関数: ZIP → ParsedDocument
+# ------------------------------------------------------------------ #
 
 
 def parse_document_zip(
@@ -182,14 +357,26 @@ def parse_document_zip(
     *,
     max_ratio: float = DEFAULT_HUMAN_METRIC_MAX_RATIO,
 ) -> ParsedDocument:
+    """書類CSV ZIPをパースし、財務指標と人的資本指標を抽出する.
+
+    抽出順序:
+      Layer 1: element_id マッチ (要素ID完全一致)
+      Layer 2: item_name マッチ (項目名部分一致) — financial 指標と HC を扱う
+      Layer 3a: text_fallback (regex ベースのテキスト抽出)
+    Layer 3b (LLM) は jobs.py 側で `text_block` を引数に呼び出される。
+    """
     parsed = empty_parsed_document()
+    hm_builder = HumanMetricsBuilder()
+    employee_status_text: str | None = None  # Layer 3 の入力候補を保持
+
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
         csv_files = [
             name
             for name in archive.namelist()
             if name.endswith(".csv")
             and (
-                "jpcrp" in name.lower() or "jpaud" in name.lower() or "xbrl_to_csv" in name.lower()
+                "jpcrp" in name.lower() or "jpaud" in name.lower()
+                or "xbrl_to_csv" in name.lower()
             )
         ]
         if not csv_files:
@@ -225,18 +412,56 @@ def parse_document_zip(
                 raw_text = normalize_text(raw_value)
                 relative_year = normalize_text(raw_fact.relative_year)
 
+                # 「従業員の状況 [テキストブロック]」を Layer 3 のためにキャッシュ
+                if (
+                    EMPLOYEE_STATUS_BLOCK_LABEL in item_name
+                    and "テキストブロック" in item_name
+                    and raw_text
+                ):
+                    employee_status_text = raw_text
+
                 if not item_name and not raw_text:
                     continue
 
+                # ---- Layer 1: 要素IDマッチ (人的資本のみ) ---------------- #
+                classification = classify_element_id(raw_fact.element_id)
+                if classification is not None:
+                    metric_name, scope, worker_type = classification
+                    if not hm_builder.has_value(scope, worker_type, metric_name):
+                        numeric_value = extract_numeric(raw_value)
+                        if numeric_value is not None:
+                            converted = convert_to_percentage(
+                                numeric_value, raw_fact.unit_id,
+                            )
+                            if 0.0 <= converted <= max_ratio:
+                                if hm_builder.set_value(
+                                    scope, worker_type, metric_name, converted,
+                                ):
+                                    parsed.evidence.append(
+                                        MetricEvidenceRecord(
+                                            metric_name=metric_name,
+                                            item_name=item_name or metric_name,
+                                            raw_value=raw_text,
+                                            relative_year=relative_year,
+                                            source_file=csv_file,
+                                            matched_by="element_id_match",
+                                            element_id=raw_fact.element_id,
+                                            scope=scope,
+                                            worker_type=worker_type,
+                                        )
+                                    )
+                    continue  # 要素IDで処理済みなので Layer 2 に降りない
+
+                # ---- Layer 2: 項目名マッチ -------------------------------- #
                 for metric_name, patterns in EXPLICIT_PATTERNS.items():
-                    if (
-                        metric_name in parsed.financial_metrics
-                        and parsed.financial_metrics[metric_name] is not None
-                    ):
+                    is_financial = metric_name in parsed.financial_metrics
+                    if is_financial and parsed.financial_metrics[metric_name] is not None:
                         continue
                     if (
-                        metric_name in parsed.human_metrics
-                        and parsed.human_metrics[metric_name] is not None
+                        not is_financial
+                        and hm_builder.has_value(
+                            SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL, metric_name,
+                        )
                     ):
                         continue
                     if not is_relevant_relative_year(relative_year):
@@ -248,35 +473,145 @@ def parse_document_zip(
                     if numeric_value is None:
                         continue
 
-                    evidence = MetricEvidenceRecord(
-                        metric_name=metric_name,
-                        item_name=item_name or metric_name,
-                        raw_value=raw_text,
-                        relative_year=relative_year,
-                        source_file=csv_file,
-                        matched_by="item_name_match",
-                    )
-                    parsed.evidence.append(evidence)
-
-                    if metric_name in parsed.financial_metrics:
+                    if is_financial:
                         parsed.financial_metrics[metric_name] = int(round(numeric_value))
-                    else:
-                        parsed.human_metrics[metric_name] = numeric_value
-
-                fallback_metrics = extract_human_capital_from_text(raw_text, max_ratio=max_ratio)
-                for metric_name, metric_value in fallback_metrics.items():
-                    if parsed.human_metrics[metric_name] is not None:
-                        continue
-                    parsed.human_metrics[metric_name] = metric_value
-                    parsed.evidence.append(
-                        MetricEvidenceRecord(
-                            metric_name=metric_name,
-                            item_name=item_name or metric_name,
-                            raw_value=raw_text,
-                            relative_year=relative_year,
-                            source_file=csv_file,
-                            matched_by="text_fallback",
+                        parsed.evidence.append(
+                            MetricEvidenceRecord(
+                                metric_name=metric_name,
+                                item_name=item_name or metric_name,
+                                raw_value=raw_text,
+                                relative_year=relative_year,
+                                source_file=csv_file,
+                                matched_by="item_name_match",
+                                element_id=raw_fact.element_id,
+                            )
                         )
-                    )
+                    else:
+                        converted = convert_to_percentage(numeric_value, raw_fact.unit_id)
+                        if 0.0 <= converted <= max_ratio:
+                            if hm_builder.set_value(
+                                SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL,
+                                metric_name, converted,
+                            ):
+                                parsed.evidence.append(
+                                    MetricEvidenceRecord(
+                                        metric_name=metric_name,
+                                        item_name=item_name or metric_name,
+                                        raw_value=raw_text,
+                                        relative_year=relative_year,
+                                        source_file=csv_file,
+                                        matched_by="item_name_match",
+                                        element_id=raw_fact.element_id,
+                                        scope=SCOPE_REPORTING_COMPANY,
+                                        worker_type=WORKER_TYPE_ALL,
+                                    )
+                                )
 
+                # ---- Layer 3a: regex によるテキストフォールバック ------- #
+                fallback_metrics = extract_human_capital_from_text(
+                    raw_text, max_ratio=max_ratio,
+                )
+                for metric_name, metric_value in fallback_metrics.items():
+                    if hm_builder.has_value(
+                        SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL, metric_name,
+                    ):
+                        continue
+                    if hm_builder.set_value(
+                        SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL,
+                        metric_name, metric_value,
+                    ):
+                        parsed.evidence.append(
+                            MetricEvidenceRecord(
+                                metric_name=metric_name,
+                                item_name=item_name or metric_name,
+                                raw_value=raw_text,
+                                relative_year=relative_year,
+                                source_file=csv_file,
+                                matched_by="text_fallback",
+                                scope=SCOPE_REPORTING_COMPANY,
+                                worker_type=WORKER_TYPE_ALL,
+                            )
+                        )
+
+    parsed.human_metrics = hm_builder.to_records()
+    parsed.employee_status_text = employee_status_text
     return parsed
+
+
+# ------------------------------------------------------------------ #
+#  Layer 3b: LLM 抽出結果のマージ
+# ------------------------------------------------------------------ #
+
+
+def merge_llm_records(
+    parsed: ParsedDocument,
+    llm_records: list[HumanMetricRecord],
+    *,
+    source_file: str | None = None,
+) -> int:
+    """LLMで抽出した HumanMetricRecord を ParsedDocument にマージする.
+
+    既存レコードと (scope, worker_type) が衝突する場合、空欄のフィールドのみ
+    LLM 値で埋める (first-wins; element_id_match / item_name_match の値は温存)。
+
+    Args:
+        parsed: parse_document_zip の戻り値
+        llm_records: LLM 抽出結果 (extract_via_llm の出力)
+        source_file: evidence に記録するファイル名 (NULL 不可カラムの保護)
+
+    Returns:
+        新規にセットしたフィールド数 (0 ならマージで埋まったフィールドなし)
+    """
+    if not llm_records:
+        return 0
+
+    # 既存 records を (scope, worker_type) → dict に展開
+    existing: dict[tuple[str, str], dict[str, float | None]] = {}
+    for rec in parsed.human_metrics:
+        existing[(rec.scope, rec.worker_type)] = {
+            "female_manager_ratio": rec.female_manager_ratio,
+            "male_childcare_leave_ratio": rec.male_childcare_leave_ratio,
+            "gender_wage_gap": rec.gender_wage_gap,
+        }
+
+    filled_count = 0
+    for llm_rec in llm_records:
+        key = (llm_rec.scope, llm_rec.worker_type)
+        bucket = existing.setdefault(
+            key,
+            {
+                "female_manager_ratio": None,
+                "male_childcare_leave_ratio": None,
+                "gender_wage_gap": None,
+            },
+        )
+        for metric_name in HUMAN_FIELDS:
+            llm_value = getattr(llm_rec, metric_name)
+            if llm_value is None or bucket[metric_name] is not None:
+                continue
+            bucket[metric_name] = llm_value
+            filled_count += 1
+            parsed.evidence.append(
+                MetricEvidenceRecord(
+                    metric_name=metric_name,
+                    item_name=EMPLOYEE_STATUS_BLOCK_LABEL + " [テキストブロック]",
+                    raw_value=str(llm_value),
+                    relative_year="",
+                    source_file=source_file or "(llm_fallback)",
+                    matched_by="llm_fallback",
+                    scope=llm_rec.scope,
+                    worker_type=llm_rec.worker_type,
+                )
+            )
+
+    # 再構築
+    parsed.human_metrics = [
+        HumanMetricRecord(
+            scope=scope, worker_type=worker_type,
+            female_manager_ratio=values["female_manager_ratio"],
+            male_childcare_leave_ratio=values["male_childcare_leave_ratio"],
+            gender_wage_gap=values["gender_wage_gap"],
+        )
+        for (scope, worker_type), values in sorted(existing.items())
+    ]
+    return filled_count

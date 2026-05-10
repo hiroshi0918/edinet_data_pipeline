@@ -47,6 +47,8 @@ COMPANY_YEAR_METRICS_COLUMNS = [
     "operating_profit",
     "net_profit",
     "employee_count",
+    "scope",
+    "worker_type",
     "female_manager_ratio",
     "male_childcare_leave_ratio",
     "gender_wage_gap",
@@ -66,6 +68,9 @@ METRIC_EVIDENCE_COLUMNS = [
     "relative_year",
     "source_file",
     "matched_by",
+    "element_id",
+    "scope",
+    "worker_type",
 ]
 
 # PyArrow スキーマ — Parquet 出力時の型を明示的に指定
@@ -82,6 +87,8 @@ DATASET_SCHEMAS = {
             ("operating_profit", pa.int64()),
             ("net_profit", pa.int64()),
             ("employee_count", pa.int64()),
+            ("scope", pa.string()),
+            ("worker_type", pa.string()),
             ("female_manager_ratio", pa.decimal128(5, 2)),
             ("male_childcare_leave_ratio", pa.decimal128(5, 2)),
             ("gender_wage_gap", pa.decimal128(5, 2)),
@@ -102,6 +109,9 @@ DATASET_SCHEMAS = {
             ("relative_year", pa.string()),
             ("source_file", pa.string()),
             ("matched_by", pa.string()),
+            ("element_id", pa.string()),
+            ("scope", pa.string()),
+            ("worker_type", pa.string()),
         ]
     ),
 }

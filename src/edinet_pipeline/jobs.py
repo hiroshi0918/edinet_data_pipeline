@@ -17,9 +17,10 @@ from typing import Any
 from edinet_pipeline.client import CsvUnavailableError, EdinetClient
 from edinet_pipeline.config import Settings
 from edinet_pipeline.db import DatabasePool, PipelineRepository, db_connection
-from edinet_pipeline.extractors import parse_document_zip
+from edinet_pipeline.extractors import merge_llm_records, parse_document_zip
+from edinet_pipeline.llm_extractor import extract_via_llm
 from edinet_pipeline.logging_utils import log_event
-from edinet_pipeline.models import DocumentRecord
+from edinet_pipeline.models import DocumentRecord, ParsedDocument
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,56 @@ def fetch_documents_for_date(
     }
     log_event(logger, "info", "fetch_completed", target_date=target_date.isoformat(), **summary)
     return summary
+
+
+# ------------------------------------------------------------------ #
+#  Layer 3b: LLM フォールバック呼び出し
+# ------------------------------------------------------------------ #
+
+
+def _has_reporting_company_metrics(parsed: ParsedDocument) -> bool:
+    """提出会社の人的資本指標が1つでも取れているか."""
+    for record in parsed.human_metrics:
+        if record.scope != "reporting_company":
+            continue
+        if (
+            record.female_manager_ratio is not None
+            or record.male_childcare_leave_ratio is not None
+            or record.gender_wage_gap is not None
+        ):
+            return True
+    return False
+
+
+def _maybe_run_llm_fallback(
+    parsed: ParsedDocument,
+    *,
+    settings: Settings,
+    pool: DatabasePool,
+) -> None:
+    """Layer 1/2 で提出会社の指標が取れていない場合のみ LLM 抽出を試行する.
+
+    LLMが無効 (settings.llm_enabled == False) なら何もしない。
+    """
+    if not settings.llm_enabled:
+        return
+    if not parsed.employee_status_text:
+        return
+    if _has_reporting_company_metrics(parsed):
+        return  # 既に取れているので LLM 不要
+
+    with pool.connection() as cache_conn:
+        result = extract_via_llm(
+            parsed.employee_status_text,
+            settings=settings,
+            cache_connection=cache_conn,
+        )
+    filled = merge_llm_records(parsed, result.records, source_file="(llm_fallback)")
+    log_event(
+        logger, "info", "llm_fallback_executed",
+        cache_hit=result.cache_hit, fields_filled=filled,
+        records=len(result.records),
+    )
 
 
 # ------------------------------------------------------------------ #
@@ -255,15 +306,21 @@ def process_documents(
                 edinet_code = document["edinet_code"]
                 fiscal_year = document["fiscal_year"]
                 try:
-                    # CSV ZIP ダウンロード → 指標抽出 → DB 書き込み
+                    # CSV ZIP ダウンロード → 指標抽出 → (必要なら) LLM フォールバック
                     zip_bytes = client.download_document_csv(doc_id)
                     parsed = parse_document_zip(
                         zip_bytes, max_ratio=settings.human_metric_max_ratio
                     )
+                    _maybe_run_llm_fallback(parsed, settings=settings, pool=pool)
+
                     with pool.connection() as connection:
                         repository = PipelineRepository(connection)
                         repository.replace_raw_facts(doc_id, parsed.raw_facts)
                         repository.mark_processed(doc_id, parsed)
+                        # 既存の人的資本レコードを全消去 → 新次元で再upsert (整合性確保)
+                        repository.delete_human_metrics_for_doc(
+                            edinet_code=edinet_code, fiscal_year=fiscal_year,
+                        )
                         repository.upsert_human_metrics(
                             edinet_code=edinet_code,
                             fiscal_year=fiscal_year,

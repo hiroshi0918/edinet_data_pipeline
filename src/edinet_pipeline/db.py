@@ -307,39 +307,81 @@ class PipelineRepository:
         fiscal_year: int,
         parsed: ParsedDocument,
         source_name: str = "EDINET_CSV",
-    ) -> None:
-        """人的資本指標を INSERT or UPDATE.
+    ) -> int:
+        """人的資本指標を (scope × worker_type) ごとに INSERT or UPDATE.
 
-        全値が None の場合は何もしない (空レコード防止)。
+        ParsedDocument.human_metrics は HumanMetricRecord のリスト。各レコードは
+        次元キー (scope, worker_type) で識別され、複合 UNIQUE 制約と整合する。
+        指標が全て None のレコードはスキップする。
+
+        Returns:
+            実際に upsert した行数
         """
-        if all(value is None for value in parsed.human_metrics.values()):
-            return
+        rows_to_upsert = [
+            (
+                edinet_code,
+                fiscal_year,
+                record.scope,
+                record.worker_type,
+                record.female_manager_ratio,
+                record.male_childcare_leave_ratio,
+                record.gender_wage_gap,
+                source_name,
+            )
+            for record in parsed.human_metrics
+            if any(
+                value is not None
+                for value in (
+                    record.female_manager_ratio,
+                    record.male_childcare_leave_ratio,
+                    record.gender_wage_gap,
+                )
+            )
+        ]
+        if not rows_to_upsert:
+            return 0
 
         with self.connection.cursor() as cursor:
-            cursor.execute(
+            execute_values(
+                cursor,
                 """
                 INSERT INTO human_capital_metrics (
-                    edinet_code,
-                    fiscal_year,
-                    female_manager_ratio,
-                    male_childcare_leave_ratio,
-                    gender_wage_gap,
-                    source_name
+                    edinet_code, fiscal_year, scope, worker_type,
+                    female_manager_ratio, male_childcare_leave_ratio,
+                    gender_wage_gap, source_name
                 )
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (edinet_code, fiscal_year, source_name) DO UPDATE SET
+                VALUES %s
+                ON CONFLICT (edinet_code, fiscal_year, scope, worker_type, source_name)
+                DO UPDATE SET
                     female_manager_ratio = EXCLUDED.female_manager_ratio,
                     male_childcare_leave_ratio = EXCLUDED.male_childcare_leave_ratio,
                     gender_wage_gap = EXCLUDED.gender_wage_gap
                 """,
-                (
-                    edinet_code,
-                    fiscal_year,
-                    parsed.human_metrics["female_manager_ratio"],
-                    parsed.human_metrics["male_childcare_leave_ratio"],
-                    parsed.human_metrics["gender_wage_gap"],
-                    source_name,
-                ),
+                rows_to_upsert,
+                page_size=100,
+            )
+        return len(rows_to_upsert)
+
+    def delete_human_metrics_for_doc(
+        self,
+        *,
+        edinet_code: str,
+        fiscal_year: int,
+        source_name: str = "EDINET_CSV",
+    ) -> None:
+        """指定 (会社, 年度, source_name) の既存人的資本レコードを全削除.
+
+        upsert_human_metrics は ON CONFLICT で個別行を更新するが、再抽出で
+        次元の組合せが変わった場合 (例: 連結子会社の値が消える) に古い行が
+        残ってしまう。再処理時はまず全消ししてから upsert することで整合性を保つ。
+        """
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                DELETE FROM human_capital_metrics
+                WHERE edinet_code = %s AND fiscal_year = %s AND source_name = %s
+                """,
+                (edinet_code, fiscal_year, source_name),
             )
 
     def _replace_child_records(
@@ -384,18 +426,24 @@ class PipelineRepository:
         )
 
     def replace_metric_evidence(self, doc_id: str, evidence: list[MetricEvidenceRecord]) -> None:
-        """抽出根拠を全削除 → 再挿入 (冪等な洗い替え方式)."""
+        """抽出根拠を全削除 → 再挿入 (冪等な洗い替え方式).
+
+        次元情報 (element_id, scope, worker_type) は v0.3 で追加されたため、
+        旧 evidence 行 (NULL) と混在する可能性がある。
+        """
         self._replace_child_records(
             doc_id,
             "metric_evidence",
             [
                 "doc_id", "metric_name", "item_name", "raw_value",
                 "relative_year", "source_file", "matched_by",
+                "element_id", "scope", "worker_type",
             ],
             [
                 (
                     doc_id, r.metric_name, r.item_name, r.raw_value,
                     r.relative_year, r.source_file, r.matched_by,
+                    r.element_id, r.scope, r.worker_type,
                 )
                 for r in evidence
             ],
@@ -406,7 +454,11 @@ class PipelineRepository:
     # ------------------------------------------------------------------ #
 
     def fetch_company_year_metrics_rows(self) -> list[dict]:
-        """vw_company_year_metrics ビューから全行を取得 (Parquet / DuckDB 出力用)."""
+        """vw_company_year_metrics ビューから全行を取得 (Parquet / DuckDB 出力用).
+
+        ビューが scope/worker_type で複数行を返すようになったため、
+        ORDER BY にも次元キーを含める。
+        """
         with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute(
                 """
@@ -421,12 +473,14 @@ class PipelineRepository:
                     operating_profit,
                     net_profit,
                     employee_count,
+                    scope,
+                    worker_type,
                     female_manager_ratio,
                     male_childcare_leave_ratio,
                     gender_wage_gap,
                     source_name
                 FROM vw_company_year_metrics
-                ORDER BY fiscal_year, edinet_code, doc_id
+                ORDER BY fiscal_year, edinet_code, doc_id, scope, worker_type
                 """
             )
             return list(cursor.fetchall())
@@ -448,7 +502,10 @@ class PipelineRepository:
                     me.raw_value,
                     me.relative_year,
                     me.source_file,
-                    me.matched_by
+                    me.matched_by,
+                    me.element_id,
+                    me.scope,
+                    me.worker_type
                 FROM metric_evidence me
                 JOIN financial_reports fr
                   ON fr.doc_id = me.doc_id

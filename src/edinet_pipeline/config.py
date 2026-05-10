@@ -59,6 +59,11 @@ class Settings:
     human_metric_max_ratio: float = DEFAULT_HUMAN_METRIC_MAX_RATIO
     db_pool_min_size: int = 1
     db_pool_max_size: int = 5
+    # --- LLM フォールバック (Ollama) ---
+    llm_enabled: bool = False
+    llm_endpoint: str = "http://localhost:11434/api/generate"
+    llm_model: str = "qwen3.5:9b"
+    llm_timeout: int = 120
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -79,6 +84,12 @@ class Settings:
             ),
             db_pool_min_size=int(_get_env("DB_POOL_MIN_SIZE", default="1")),
             db_pool_max_size=int(_get_env("DB_POOL_MAX_SIZE", default="5")),
+            llm_enabled=_get_env("LLM_FALLBACK_ENABLED", default="false").lower() == "true",
+            llm_endpoint=_get_env(
+                "LLM_ENDPOINT", default="http://localhost:11434/api/generate"
+            ),
+            llm_model=_get_env("LLM_MODEL", default="qwen3.5:9b"),
+            llm_timeout=int(_get_env("LLM_TIMEOUT", default="120")),
         )
 
     @property
