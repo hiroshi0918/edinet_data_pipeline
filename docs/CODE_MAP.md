@@ -16,8 +16,10 @@
 │                   fetch/process  Parquet・DuckDB エクスポート       │
 │                   /backfill                                         │
 ├────────────────────────────────────────────────────────────────────┤
-│  ドメイン層       extractors.py  client.py     config.py            │
-│                   CSV→指標抽出   EDINET API    環境変数             │
+│  ドメイン層       extractors.py    llm_extractor.py                 │
+│                   3層抽出戦略       Layer 3b (Ollama)                │
+│                   client.py        config.py                        │
+│                   EDINET API       環境変数                          │
 ├────────────────────────────────────────────────────────────────────┤
 │  データ層         db.py          models.py                          │
 │                   PostgreSQL     データクラス                       │
@@ -42,15 +44,16 @@
 
 | 順 | ファイル | 読む狙い | 目安行数 |
 | --- | --- | --- | --- |
-| 1 | `models.py` | 全体で受け渡しされる「共通のレコード型」を頭に入れる | 64 |
-| 2 | `config.py` | 環境変数と動作パラメータの全体像を把握する | 97 |
+| 1 | `models.py` | 全体で受け渡しされる「共通のレコード型」を頭に入れる (`HumanMetricRecord` 含む) | 139 |
+| 2 | `config.py` | 環境変数と動作パラメータの全体像を把握する (LLM 設定含む) | 108 |
 | 3 | `cli.py` | サブコマンドの一覧と、それぞれが呼び出す関数を確認する | 150 |
 | 4 | `client.py` | EDINET API の HTTP レイヤを把握する（短くて読みやすい） | 128 |
-| 5 | `extractors.py` | CSV 1 ファイルからどう指標を抜くかを読む | 278 |
-| 6 | `db.py` | 永続化層の責務を把握する（最初は SQL を斜め読みで OK） | 460 |
-| 7 | `jobs.py` | 上記をどう組み合わせて 1 ジョブが動くかを読む（**最後に読むのが効率的**） | 330 |
-| 8 | `analytics.py` | DB → Parquet/DuckDB の変換を読む | 300 |
-| 9 | `dashboard/` | DuckDB から Streamlit までの可視化フロー | - |
+| 5 | `extractors.py` | 3層抽出戦略 (要素ID / 項目名 / テキスト) を読む | 617 |
+| 6 | `llm_extractor.py` | Layer 3b の Ollama 連携と SHA256 キャッシュを読む | 278 |
+| 7 | `db.py` | 永続化層の責務を把握する（多次元 upsert の実装に注目） | 517 |
+| 8 | `jobs.py` | 上記をどう組み合わせて 1 ジョブが動くかを読む（**最後に読むのが効率的**） | 414 |
+| 9 | `analytics.py` | DB → Parquet/DuckDB の変換を読む | 310 |
+| 10 | `dashboard/` | DuckDB から Streamlit までの可視化フロー (次元フィルタ含む) | - |
 
 ジョブ全体の挙動は [DATA_FLOW.md](DATA_FLOW.md) で時系列に追えます。
 
@@ -60,10 +63,11 @@
 
 | ファイル | 責務 | 主要なクラス・関数 |
 | --- | --- | --- |
-| `models.py` | レイヤ間で受け渡す不変レコードの定義 | `DocumentRecord`, `ParsedDocument`, `RawFactRecord`, `MetricEvidenceRecord`, `FilingFilters` |
+| `models.py` | レイヤ間で受け渡す不変レコードの定義 | `DocumentRecord`, `ParsedDocument`, `RawFactRecord`, `MetricEvidenceRecord`, `HumanMetricRecord`, `FilingFilters` |
 | `config.py` | 環境変数 → `Settings` への変換と、出力パスの導出 | `Settings.from_env()` |
 | `client.py` | EDINET API への HTTP 通信（リトライ・タイムアウト・404 判定） | `EdinetClient`, `EdinetApiError`, `CsvUnavailableError` |
-| `extractors.py` | CSV ZIP のパースと、項目名・テキストフォールバックでの指標抽出 | `parse_document_zip`, `extract_human_capital_from_text` |
+| `extractors.py` | CSV ZIP のパースと 3層抽出 (要素ID / 項目名 / テキスト) | `parse_document_zip`, `classify_element_id`, `convert_to_percentage`, `extract_human_capital_from_text`, `merge_llm_records` |
+| `llm_extractor.py` | Layer 3b: Ollama によるテキストブロックからの指標抽出 + SHA256 キャッシュ | `extract_via_llm`, `llm_result_to_records` |
 | `db.py` | PostgreSQL への CRUD、状態遷移、子テーブルの洗い替え | `PipelineRepository`, `DatabasePool`, `db_connection` |
 
 ### 3.2 ジョブ・CLI 層
@@ -101,9 +105,15 @@ cli.py
  │    ├── db.PipelineRepository.claim_documents_for_processing
  │    ├── client.EdinetClient.download_document_csv
  │    ├── extractors.parse_document_zip
- │    │    └── extractors.extract_human_capital_from_text
+ │    │    ├── extractors.classify_element_id     (Layer 1: 要素ID)
+ │    │    ├── extractors.convert_to_percentage   (unit='pure' → ×100)
+ │    │    └── extractors.extract_human_capital_from_text  (Layer 3a: regex)
+ │    ├── jobs._maybe_run_llm_fallback             (Layer 3b: LLM_ENABLED 時のみ)
+ │    │    ├── llm_extractor.extract_via_llm
+ │    │    └── extractors.merge_llm_records
  │    └── db.PipelineRepository.{mark_processed,mark_failed,mark_skipped,
  │                               replace_raw_facts,replace_metric_evidence,
+ │                               delete_human_metrics_for_doc,
  │                               upsert_human_metrics,reset_to_pending}
  ├── jobs.backfill_documents
  │    └── 上記 fetch + process を日付ごとにループ
@@ -127,9 +137,12 @@ dashboard/app.py
 | 書類 | `DocumentRecord` / `financial_reports` テーブル | 1 件の有価証券報告書 |
 | 処理状態 | `financial_reports.status` | `pending` / `processing` / `processed` / `skipped` / `failed` の 5 値 |
 | 指標 | `financial_metrics`, `human_metrics` (`ParsedDocument` 内) | 売上高・営業利益・女性管理職比率など |
+| 人的資本指標の次元 | `HumanMetricRecord(scope, worker_type, ...)` / `human_capital_metrics` テーブル | `(scope, worker_type)` の組合せで複数行 |
+| 抽出経路 | `metric_evidence.matched_by` | `element_id_match` / `item_name_match` / `text_fallback` / `llm_fallback` |
 | 抽出根拠 | `MetricEvidenceRecord` / `metric_evidence` | どの行・どのファイルから値を抜いたかの監査証跡 |
 | 元 CSV 行 | `RawFactRecord` / `raw_edinet_facts` | 元 CSV の 1 行をそのまま保存（再抽出・監査用） |
-| 分析ビュー | `vw_company_year_metrics` | 企業×年度に集約した分析向けビュー |
+| LLM キャッシュ | `llm_extraction_cache` | SHA256(モデル+テキスト) をキーにした LLM 結果の永続化 |
+| 分析ビュー | `vw_company_year_metrics` | 企業×年度×次元 に集約した分析向けビュー (1 書類が最大 6 行を返す) |
 
 ## 6. ジョブの状態遷移（要点）
 
@@ -169,6 +182,7 @@ processed   failed   skipped
 | `config.py` | `test_config.py` |
 | `db.py` | `test_db_unit.py` + `test_cli_integration.py`（要 PostgreSQL） |
 | `extractors.py` | `test_extractors.py` |
+| `llm_extractor.py` | `test_llm_extractor.py`（mock ベース、Ollama 接続不要） |
 | `jobs.py` | `test_jobs.py` + `test_cli_integration.py` |
 | `analytics.py` | `test_analytics_export.py` |
 | `dashboard/data.py` | `test_dashboard_data.py`（インメモリ DuckDB） |
@@ -192,7 +206,9 @@ processed   failed   skipped
   必要なら `parquet/` 自体に versioned suffix を付けて切り替える方式が候補です。
 - **`processing` 状態の stale reset**: プロセスが kill / OOM などで突然落ちた場合、
   `processing` のまま残ります。`processing_started_at` を持って一定時間経過で
-  pending に戻すバッチを足すと、運用が楽になります。
+  pending に戻すバッチを足すと、運用が楽になります。応急処置としては、
+  `UPDATE financial_reports SET status='pending' WHERE status='processing'` を
+  手動で叩けば停滞分はキューに戻せます。
 - **`reset_to_pending` と SIGINT 経路のテスト追加**: 中断系のテストが現状無いため、
   リファクタ耐性が低いです。`signal` を使った中断シミュレーションテストを足すと安心です。
 - **Dashboard ページの共通チャートユーティリティ**: `financial.py` /

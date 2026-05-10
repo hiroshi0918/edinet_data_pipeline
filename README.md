@@ -110,24 +110,32 @@ graph LR
 
 > **現行方針:** raw層では `raw_edinet_facts` テーブルに9列をすべて保持します。抽出ロジック自体は引き続き主に `項目名` `値` `相対年度` を使い、監査用には `metric_evidence` を別で保持します。
 
-### 2. データ抽出（Extraction）のロジック
-抽出処理は大きく分けて「表データからの抽出」と「文章データからの抽出（フォールバック）」の2段構えになっています。
+### 2. データ抽出（Extraction）のロジック — 3層戦略
 
-*   **A. 表データ（構造化データ）からの抽出:**
-    CSVの各行を順番に見ていき、「相対年度」が当期のもので、「項目名」が事前定義されたキーワード（例：売上高、営業利益、従業員数、管理職に占める女性労働者の割合 など）と一致するデータを取得し、数値化します。
-*   **B. 文章データからの抽出（人的資本指標のフォールバック）:**
-    人的資本の情報（女性管理職比率など）は、自由記述のテキストブロック内に書かれていることが多々あります。表データから見つからなかった場合、テキスト内に「管理職に占める女性労働者の割合」という文字列が含まれているか探し、そこから後方800文字を切り出します。その後、不要な脚注番号や記号を除外してクリーンアップし、該当する指標のラベルのすぐ後ろに出現する最初の数値を抜き出します。
+人的資本指標は v0.3 から **要素ID → 項目名 → テキスト** の3層フォールバック方式で抽出します。決定論的に取れる構造化XBRLを優先し、テキスト解析や LLM は最終手段に格下げしました。
+
+*   **Layer 1: 要素ID完全一致（最優先）**
+    CSV の `要素ID` 列が `jpcrp_cor:RatioOfFemaleEmployeesInManagerialPositionsMetricsOfReportingCompany` のような XBRL タクソノミー識別子と一致するかを判定します。識別子のサフィックス (`MetricsOfReportingCompany` / `MetricsOfConsolidatedSubsidiaries`) から **scope** を、プレフィックス (`AllEmployees` / `RegularEmployees` / `NonRegularEmployees`) から **worker_type** を導出し、`(scope, worker_type)` の次元キーで `human_capital_metrics` テーブルに格納します。`unit='pure'` の値（割合表記 0.024）は ×100 で % に換算します。
+*   **Layer 2: 項目名部分一致（旧タクソノミー救済）**
+    Layer 1 で取れなかった行に対し、`項目名` 列に「管理職に占める女性労働者の割合」等のキーワードが含まれるかを判定します。財務指標（売上高・営業利益・当期純利益・従業員数）もこの層で抽出されます。
+*   **Layer 3a: テキストフォールバック（regex）**
+    `従業員の状況 [テキストブロック]` のような自由記述テキストに対し、ラベル直後の数値を正規表現で抽出します。複数ラベルが並ぶ表形式テキストでの「F=M=W同値バグ」を防ぐため、走査窓を他ラベル直前で打ち切る方式を採用しています。
+*   **Layer 3b: LLM フォールバック（任意）**
+    `LLM_FALLBACK_ENABLED=true` を設定すると、Layer 1/2 で提出会社の指標が1つも取れていない書類のみ、ローカル LLM (Ollama / `qwen3.5:9b`) でテキストブロックから JSON 形式で値を抽出します。SHA256(テキスト+モデル名) でキャッシュされ、同じテキストの2回目以降は無料です。LLM 呼び出しが失敗してもパイプラインは止まりません。
+
+抽出方法は `metric_evidence.matched_by` 列に `element_id_match` / `item_name_match` / `text_fallback` / `llm_fallback` のいずれかとして記録され、後から監査できます。
 
 ### 3. 分析データ化・出力（Analytics）のロジック
 抽出されたデータは一旦PostgreSQLに保存され、その後データサイエンティストやBIツールが直接読み込みやすい形式（Parquet / DuckDB）に変換・出力されます。
 
 *   **PostgreSQL に保持する主なデータ:**
     1.  **`raw_edinet_facts`:** 元CSVの1行 = 1レコードで保持する raw テーブルです。再抽出や監査の基礎になります。
-    2.  **`metric_evidence`:** 「どのファイルの、どの文字列から、どういうロジックでその数値を拾ったか」という証拠（監査証跡）を記録したテーブルです。
-    3.  **`financial_reports` / `human_capital_metrics`:** 抽出後の財務指標・人的資本指標を保持する運用テーブルです。
+    2.  **`metric_evidence`:** 「どのファイルの、どの文字列から、どういうロジックでその数値を拾ったか」という証拠（監査証跡）を記録したテーブルです。`element_id` / `scope` / `worker_type` も記録され、Layer 1〜3 のどれで取得したかを追跡できます。
+    3.  **`financial_reports` / `human_capital_metrics`:** 抽出後の財務指標・人的資本指標を保持する運用テーブルです。`human_capital_metrics` は v0.3 から `(scope, worker_type)` の次元キーを持ち、提出会社/連結子会社・全労働者/正規/非正規 の組合せで複数行を持ちます。
+    4.  **`llm_extraction_cache`:** Layer 3b (LLM 抽出) の結果を SHA256 キーで永続化するキャッシュテーブル。
 
 *   **分析用に出力される2つのデータセット:**
-    1.  **`company_year_metrics`:** 企業・年度ごとの各指標（売上、利益、女性管理職比率など）をまとめたメインのテーブルです。
+    1.  **`company_year_metrics`:** 企業・年度・**(scope, worker_type)** ごとの各指標をまとめたテーブル。1 書類につき最大 6 行 (`reporting_company`/`consolidated_subsidiary` × `all`/`regular`/`non_regular`)。
     2.  **`metric_evidence`:** 「どのファイルの、どの文字列から、どういうロジックでその数値を拾ったか」という証拠（監査証跡）を記録したテーブルです。
 
 ## 主な機能
@@ -135,7 +143,8 @@ graph LR
 - `edinet fetch`
   - 指定日の書類一覧を取得し、対象書類を `financial_reports` に登録・更新します。
 - `edinet process`
-  - 未処理キューを取得し、CSV ZIP から財務指標・人的資本指標を抽出します。
+  - 未処理キューを取得し、CSV ZIP から **3層抽出戦略** (要素ID → 項目名 → テキスト) で財務指標・人的資本指標を抽出します。
+  - `LLM_FALLBACK_ENABLED=true` 時は Layer 1/2 で取れなかった書類のみ Ollama 経由で再抽出 (Layer 3b)。
   - 元CSVの全行は `raw_edinet_facts` に保存します。
 - `edinet backfill`
   - 日付範囲を日単位で `fetch -> process` し、途中停止後も再開できます。
@@ -144,10 +153,13 @@ graph LR
 - `edinet dashboard`
   - DuckDB をデータソースとした Streamlit ダッシュボードを起動します。
   - 財務指標の推移・企業比較、人的資本指標の分布・散布図、データ品質のカバレッジを可視化します。
+  - サイドバーで `scope` (提出会社 / 連結子会社) と `worker_type` (全労働者 / 正規 / 非正規) を切り替えられます。
 - 抽出根拠の保存
-  - 指標の抽出元を `metric_evidence` に保存し、後から監査できます。
+  - 指標の抽出元を `metric_evidence` に保存し、`matched_by` (`element_id_match` / `item_name_match` / `text_fallback` / `llm_fallback`) で抽出方法を区別できます。
 - 元CSV生データの保存
   - 元CSVの9列全行を `raw_edinet_facts` に保存し、後から再抽出・再監査できます。
+- LLM 抽出のキャッシュ
+  - 同じテキストブロックに対する LLM 呼び出しは `llm_extraction_cache` (SHA256 キー) で再利用されます。
 
 ## リポジトリ構成
 
@@ -156,20 +168,22 @@ graph LR
 ├── src/edinet_pipeline/
 │   ├── cli.py            # edinet コマンドの入口
 │   ├── client.py         # EDINET API クライアント
-│   ├── config.py         # 環境変数と設定
-│   ├── db.py             # PostgreSQL repository
-│   ├── extractors.py     # 財務/人的資本指標の抽出
+│   ├── config.py         # 環境変数と設定 (LLM 設定含む)
+│   ├── db.py             # PostgreSQL repository (多次元 upsert 対応)
+│   ├── extractors.py     # 3層抽出戦略 (要素ID / 項目名 / テキスト)
+│   ├── llm_extractor.py  # Layer 3b: Ollama 連携 + SHA256 キャッシュ
 │   ├── jobs.py           # fetch/process/backfill の実行ロジック
 │   ├── analytics.py      # Parquet / DuckDB エクスポート
 │   └── dashboard/        # Streamlit ダッシュボード
 │       ├── app.py        # マルチページアプリの入口
-│       ├── data.py       # DuckDB クエリ関数群
-│       ├── constants.py  # 共通定数（指標ラベル等）
-│       ├── components/   # 共通 UI コンポーネント
+│       ├── data.py       # DuckDB クエリ関数群 (scope/worker_type フィルタ)
+│       ├── constants.py  # 共通定数 (指標ラベル + 次元ラベル)
+│       ├── components/   # 共通 UI (フィルタ・次元セレクタ)
 │       └── pages/        # 各ページ (overview, financial, human_capital, data_quality)
-├── alembic/              # DB migration
+├── alembic/              # DB migration (0001 / 0002 / 0003)
 ├── airflow/dags/         # 任意の Airflow DAG
 ├── tests/                # unit / integration tests
+├── notebooks/            # 01_eda_basics, 02_extraction_quality_check
 ├── docker-compose.yml    # app, db, optional airflow
 ├── pyproject.toml        # 依存管理、pytest、ruff 設定
 └── README.md
@@ -207,6 +221,19 @@ cp .env.example .env
 | `PROCESS_SLEEP_SECONDS` | No | 書類ごとの待機秒 | `1` |
 | `LOG_LEVEL` | No | ログレベル | `INFO` |
 | `ANALYTICS_OUTPUT_DIR` | No | Parquet / DuckDB の出力先 | `artifacts/analytics` |
+| `LLM_FALLBACK_ENABLED` | No | LLM フォールバック層を有効化 (`true` / `false`) | `false` |
+| `LLM_ENDPOINT` | No | Ollama API エンドポイント | `http://localhost:11434/api/generate` |
+| `LLM_MODEL` | No | 使用する Ollama モデル名 | `qwen3.5:9b` |
+| `LLM_TIMEOUT` | No | LLM リクエストのタイムアウト秒 | `120` |
+
+**LLM フォールバックの利用方法:**
+
+1. ホストで Ollama を起動: `ollama serve`
+2. モデルを取得: `ollama pull qwen3.5:9b`
+3. `.env` に `LLM_FALLBACK_ENABLED=true` を追加
+4. `edinet process` を再実行 — Layer 1/2 で取れなかった書類のみ自動的に LLM が呼ばれる
+
+LLM の結果は `llm_extraction_cache` テーブルに SHA256 キーで永続化されるため、同じテキストブロックを持つ書類を再処理しても 2 回目以降は無料です。
 
 `.env.example` の `DATABASE_URL` は Compose 上の `app` コンテナから使う前提で `@db` を使っています。
 
@@ -461,19 +488,34 @@ pip install -e '.[viz]'
 
 ### `human_capital_metrics`
 
-会社・年度・ソース単位の人的資本指標です。
-`(edinet_code, fiscal_year, source_name)` は一意です。
+会社・年度・**次元 (scope, worker_type)** ・ソース単位の人的資本指標です。
+v0.3 から次元キーが追加され、`(edinet_code, fiscal_year, scope, worker_type, source_name)` が一意です。
 
 | カラム名 | データ型 | 制約・デフォルト | 説明 |
 | --- | --- | --- | --- |
 | `id` | `Integer` | **PK** (Auto) | 内部サロゲートキー |
 | `edinet_code` | `String(10)` | FK (`companies`) | 企業のEDINETコード |
 | `fiscal_year` | `Integer` | NOT NULL | 対象となる決算年度（年） |
-| `female_manager_ratio` | `Numeric(5,2)`| Nullable | 女性管理職比率 (%) |
+| `scope` | `String(40)` | `reporting_company` | 開示範囲: `reporting_company` / `consolidated_subsidiary` |
+| `worker_type` | `String(40)` | `all` | 労働者区分: `all` / `regular` / `non_regular` |
+| `female_manager_ratio` | `Numeric(5,2)`| Nullable | 女性管理職比率 (%) — `worker_type='all'` 行にのみ格納 |
 | `male_childcare_leave_ratio`| `Numeric(5,2)`| Nullable | 男性の育児休業取得率 (%) |
 | `gender_wage_gap` | `Numeric(5,2)`| Nullable | 男女間賃金格差 (%) |
-| `engagement_score` | `Numeric(5,2)`| Nullable | エンゲージメントスコア |
-| `source_name` | `String(100)` | `EDINET_CSV` | データ抽出元（デフォルトはEDINET_CSV） |
+| `engagement_score` | `Numeric(5,2)`| Nullable | エンゲージメントスコア (将来用) |
+| `source_name` | `String(100)` | `EDINET_CSV` | データ抽出元 |
+
+EDINET XBRL は同一書類内に「提出会社/連結子会社」「全労働者/正規雇用/非正規雇用」の組合せで個別の値を持つため、1書類が最大 6 行を生成し得ます。
+
+### `llm_extraction_cache`
+
+Layer 3b (LLM フォールバック) の結果を SHA256 キャッシュするテーブル。
+
+| カラム名 | データ型 | 制約 | 説明 |
+| --- | --- | --- | --- |
+| `text_hash` | `CHAR(64)` | **PK** | SHA256(モデル名 + テキスト本文) |
+| `model` | `String(80)` | NOT NULL | 使用した Ollama モデル名 |
+| `result` | `JSONB` | NOT NULL | LLM の生 JSON レスポンス |
+| `created_at` | `DateTime` | `CURRENT_TIMESTAMP` | キャッシュ作成日時 |
 
 ### `raw_edinet_facts`
 
@@ -513,11 +555,16 @@ pip install -e '.[viz]'
 | `raw_value` | `Text` | NOT NULL | 正規化済みの抽出元のテキストまたは値 |
 | `relative_year` | `String(100)` | Nullable | XBRL上の相対年度（当期、前期など） |
 | `source_file` | `Text` | NOT NULL | 抽出元のCSVファイル名 |
-| `matched_by` | `String(50)` | NOT NULL | 一致ロジック（`item_name_match` や `text_fallback`） |
+| `matched_by` | `String(50)` | NOT NULL | 一致ロジック（`element_id_match` / `item_name_match` / `text_fallback` / `llm_fallback`） |
+| `element_id` | `Text` | Nullable | XBRL 要素ID (Layer 1 で抽出されたときのみ) |
+| `scope` | `String(40)` | Nullable | 抽出された値の `scope` 次元 |
+| `worker_type` | `String(40)` | Nullable | 抽出された値の `worker_type` 次元 |
 
 ### `vw_company_year_metrics`
 
 分析向けの結合済みビューです。企業、年度、財務指標、人的資本指標をまとめて参照できます。
+
+> **重要**: v0.3 以降、人的資本側 (`human_capital_metrics`) が `(scope, worker_type)` の次元を持つようになったため、このビューは **1 書類につき最大 6 行** を返します（提出会社/連結子会社 × 全労働者/正規/非正規）。財務指標 (`sales` など) はその次元数だけ重複表示されるので、集計時は必ず `WHERE scope = 'reporting_company' AND worker_type = 'all'` で絞り込んでください。
 
 ## 分析用エクスポート
 
@@ -554,12 +601,35 @@ duckdb artifacts/analytics/edinet_analytics.duckdb
 ```
 
 ```sql
-SELECT COUNT(*) FROM analytics.company_year_metrics;
+-- analytics.company_year_metrics は 1 書類につき最大 6 行 (scope × worker_type) を返すため、
+-- 財務指標を集計するときは必ず scope/worker_type で絞り込む。
+SELECT COUNT(*) FROM analytics.company_year_metrics
+WHERE scope = 'reporting_company' AND worker_type = 'all';
+
 SELECT * FROM analytics.metric_evidence LIMIT 20;
+
+-- 提出会社・全労働者の女性管理職比率の年度別平均
 SELECT fiscal_year, AVG(female_manager_ratio)
 FROM analytics.company_year_metrics
+WHERE scope = 'reporting_company' AND worker_type = 'all'
 GROUP BY fiscal_year
 ORDER BY fiscal_year;
+
+-- 雇用形態別の賃金差異を比較 (提出会社のみ、2024年度)
+SELECT worker_type,
+       AVG(gender_wage_gap) AS avg_wage_gap,
+       COUNT(gender_wage_gap) AS n
+FROM analytics.company_year_metrics
+WHERE scope = 'reporting_company' AND fiscal_year = 2024
+GROUP BY worker_type
+ORDER BY worker_type;
+
+-- 抽出経路の分布 (Layer 1 がどの程度効いているかを確認)
+SELECT metric_name, matched_by, COUNT(*) AS n
+FROM analytics.metric_evidence
+WHERE metric_name IN ('female_manager_ratio','male_childcare_leave_ratio','gender_wage_gap')
+GROUP BY metric_name, matched_by
+ORDER BY metric_name, n DESC;
 ```
 
 ## 運用・分析に役立つSQLクエリ集
@@ -577,7 +647,7 @@ LIMIT 30;
 ```
 
 ### 2. 抽出が完了した財務・人的資本データを一覧表示する
-抽出に成功した売上高や女性管理職比率、育休取得率など、実際に分析に使うデータを企業・年度ごとに一覧するクエリです。
+抽出に成功した売上高や女性管理職比率、育休取得率など、実際に分析に使うデータを企業・年度ごとに一覧するクエリです。`vw_company_year_metrics` は 1 書類につき最大 6 行 (scope × worker_type) を返すため、デフォルトの「提出会社・全労働者」で絞ります。
 
 ```bash
 docker compose exec db psql -U user -d edinet_db -c "
@@ -592,8 +662,31 @@ SELECT
   male_childcare_leave_ratio,
   gender_wage_gap
 FROM vw_company_year_metrics
+WHERE scope = 'reporting_company' AND worker_type = 'all'
 ORDER BY fiscal_year DESC, sales DESC NULLS LAST
 LIMIT 20;
+"
+```
+
+連結子会社や正規/非正規の雇用区分を見たい場合は WHERE 句を変更します。
+
+```bash
+# 連結子会社の女性管理職比率
+docker compose exec db psql -U user -d edinet_db -c "
+SELECT company_name, fiscal_year, female_manager_ratio
+FROM vw_company_year_metrics
+WHERE scope = 'consolidated_subsidiary' AND worker_type = 'all'
+  AND female_manager_ratio IS NOT NULL
+ORDER BY fiscal_year DESC, female_manager_ratio DESC LIMIT 20;
+"
+
+# 正規/非正規ごとの賃金差異の比較
+docker compose exec db psql -U user -d edinet_db -c "
+SELECT company_name, fiscal_year, worker_type, gender_wage_gap
+FROM vw_company_year_metrics
+WHERE scope = 'reporting_company'
+  AND gender_wage_gap IS NOT NULL
+ORDER BY fiscal_year DESC, company_name, worker_type LIMIT 30;
 "
 ```
 

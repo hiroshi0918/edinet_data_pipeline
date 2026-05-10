@@ -8,18 +8,22 @@
 ## 0. 全体像
 
 ```text
-EDINET API
-   │
-   │ ① fetch  (1 日分の書類一覧を取得)
-   ▼
-financial_reports        ← 状態: pending / skipped
-   │
-   │ ② process (CSV ZIP をダウンロードして指標抽出)
+EDINET API                                    Ollama (任意)
+   │                                              ▲
+   │ ① fetch                                      │ Layer 3b: LLM 抽出
+   ▼                                              │ (LLM_FALLBACK_ENABLED=true 時)
+financial_reports        ← 状態: pending / skipped │
+   │                                              │
+   │ ② process                                    │
+   │   - CSV ZIP DL                               │
+   │   - 3層抽出 (要素ID → 項目名 → テキスト)      │
+   │   - LLM フォールバック (オプション)──────────┘
    ▼
 financial_reports        ← 状態: processed / failed / skipped
-human_capital_metrics
-metric_evidence
+human_capital_metrics    ← 1 書類につき最大 6 行 (scope × worker_type)
+metric_evidence          ← matched_by + element_id + scope + worker_type
 raw_edinet_facts
+llm_extraction_cache     ← SHA256(モデル+テキスト) → JSONB
    │
    │ ③ export-analytics (運用 DB → 分析ファイル)
    ▼
@@ -28,8 +32,11 @@ artifacts/analytics/edinet_analytics.duckdb
    │
    │ ④ dashboard (DuckDB を直接読む)
    ▼
-ブラウザ (Streamlit)
+ブラウザ (Streamlit) — サイドバーで scope / worker_type を切替
 ```
+
+スキーマは Alembic マイグレーション (`0001` → `0002` → `0003`) で管理。
+`0003_add_dimension_columns` で `(scope, worker_type)` 次元と `llm_extraction_cache` が追加されている。
 
 下の各セクションで、それぞれの段階を詳細に追います。
 
@@ -89,35 +96,49 @@ jobs.process_documents(settings, limit, retry_failed, ...)
   │    │       不正レスポンス → EdinetApiError
   │    │
   │    ├─ extractors.parse_document_zip(zip_bytes)
+  │    │    │  ★ 3層抽出戦略 (v0.3〜)
   │    │    │
   │    │    ├─ ZIP を展開し jpcrp/jpaud/xbrl_to_csv の CSV を列挙
   │    │    ├─ pd.read_csv (encoding='utf-16le', sep='\t')
   │    │    │
   │    │    ├─ for each row in CSV:
-  │    │    │    ├─ RawFactRecord として 9 列をそのまま保持
-  │    │    │    │    （raw_edinet_facts への保存用）
+  │    │    │    ├─ RawFactRecord として 11 列をそのまま保持
   │    │    │    │
-  │    │    │    ├─ A. 表データからの抽出
+  │    │    │    ├─ Layer 1: 要素ID完全一致 (最優先)
+  │    │    │    │    classify_element_id() で
+  │    │    │    │      jpcrp_cor:RatioOfFemaleEmployees... 等から
+  │    │    │    │      (metric, scope, worker_type) を判定
+  │    │    │    │    + unit='pure' の値は ×100 で % 換算
+  │    │    │    │    + MetricEvidenceRecord (matched_by='element_id_match')
+  │    │    │    │
+  │    │    │    ├─ Layer 2: 項目名部分一致 (旧タクソノミー救済)
   │    │    │    │    EXPLICIT_PATTERNS の項目名にマッチ
   │    │    │    │    + 相対年度が「当期」相当
-  │    │    │    │    → financial_metrics / human_metrics に格納
   │    │    │    │    + MetricEvidenceRecord (matched_by='item_name_match')
   │    │    │    │
-  │    │    │    └─ B. テキストからのフォールバック抽出 (人的資本のみ)
+  │    │    │    └─ Layer 3a: テキストフォールバック (regex)
   │    │    │         "管理職に占める女性労働者の割合" を含む
   │    │    │         自由記述テキストから後方 800 文字を切出
-  │    │    │         → ラベル直後の数値を抽出
+  │    │    │         + 走査窓を「他ラベル直前」で打ち切り (F=M同値バグ対策)
   │    │    │         + MetricEvidenceRecord (matched_by='text_fallback')
   │    │    │
-  │    │    └─ ParsedDocument を返す
+  │    │    └─ ParsedDocument (human_metrics は (scope, worker_type) ごとに複数行)
+  │    │
+  │    ├─ Layer 3b: LLM フォールバック  ※ LLM_FALLBACK_ENABLED=true 時のみ
+  │    │    Layer 1/2 で提出会社の指標が1つも取れていない場合のみ実行
+  │    │    └─ llm_extractor.extract_via_llm()
+  │    │         ├─ "従業員の状況 [テキストブロック]" を Ollama (qwen3.5:9b) に送信
+  │    │         ├─ JSON モードで構造化レスポンスを取得
+  │    │         ├─ SHA256(text+model) で llm_extraction_cache に永続化
+  │    │         └─ merge_llm_records() で空欄のみ埋める (first-wins)
+  │    │         + MetricEvidenceRecord (matched_by='llm_fallback')
   │    │
   │    └─ DB に書き込み（1 書類で 1 トランザクション）
   │         ├─ replace_raw_facts(doc_id, raw_facts)
-  │         │    └─ DELETE → INSERT で冪等な洗い替え
-  │         ├─ mark_processed(doc_id, parsed)
-  │         │    └─ status='processed', 財務指標を更新
+  │         ├─ mark_processed(doc_id, parsed)  (status + financial_metrics)
+  │         ├─ delete_human_metrics_for_doc(...)  (旧次元レコード掃除)
   │         ├─ upsert_human_metrics(...)
-  │         │    └─ ON CONFLICT (edinet_code, fiscal_year, source_name) DO UPDATE
+  │         │    └─ ON CONFLICT (edinet_code, fiscal_year, scope, worker_type, source_name)
   │         ├─ replace_metric_evidence(doc_id, evidence)
   │         └─ connection.commit()
   │
@@ -199,15 +220,20 @@ dashboard/__init__.py.launch_dashboard(host, port, duckdb_path)
        └─ dashboard/app.py
             │
             ├─ dashboard/components/filters.py の共通フィルタを描画
+            │   ├─ render_fiscal_year_filter (年度範囲スライダー)
+            │   ├─ render_dimension_filter   (scope / worker_type セレクタ)
+            │   └─ render_company_filter     (企業マルチセレクト)
             │
             └─ st.navigation でページを切り替え
                  ├─ pages/overview.py        (KPI / ステータス分布)
                  ├─ pages/financial.py       (推移・ランキング・統計)
-                 ├─ pages/human_capital.py   (分布・散布図・推移)
+                 ├─ pages/human_capital.py   (分布・散布図・推移、scope/worker_type 対応)
                  └─ pages/data_quality.py    (カバレッジ・充足率)
                       │
                       └─ dashboard/data.py.query_* で
                          DuckDB に SELECT を発行（read-only）
+                         ※ 全クエリが scope/worker_type を WHERE 句で絞る前提。
+                           デフォルトは reporting_company × all。
 ```
 
 `dashboard/data.py` の各関数は `@st.cache_data(ttl=300)` で 5 分間結果を
