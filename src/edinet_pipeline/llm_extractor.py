@@ -21,6 +21,7 @@ import psycopg2
 import requests
 
 from edinet_pipeline.config import Settings
+from edinet_pipeline.db import DatabasePool
 from edinet_pipeline.logging_utils import log_event
 from edinet_pipeline.models import (
     SCOPE_REPORTING_COMPANY,
@@ -226,17 +227,22 @@ def extract_via_llm(
     text: str,
     *,
     settings: Settings,
-    cache_connection: psycopg2.extensions.connection | None = None,
+    pool: DatabasePool | None = None,
 ) -> LlmExtractionResult:
     """テキストブロックから LLM で人的資本指標を抽出する.
 
     Args:
         text: 「従業員の状況 [テキストブロック]」の全文
         settings: Settings (llm_endpoint / llm_model / llm_timeout を参照)
-        cache_connection: キャッシュ参照/書き込み用DB接続 (None ならキャッシュ無効)
+        pool: キャッシュ参照/書き込み用 DB プール (None ならキャッシュ無効)
 
     Returns:
         LlmExtractionResult (records は空リストの可能性あり)
+
+    Note:
+        DB プール接続は **キャッシュ参照** と **キャッシュ保存** の 2 フェーズで
+        それぞれ短時間だけ取得し、HTTP 呼び出し中は接続を保持しない。
+        これにより並行ワーカー時の pool starvation を防ぐ。
     """
     if not settings.llm_enabled:
         return LlmExtractionResult(records=[], cache_hit=False)
@@ -245,34 +251,33 @@ def extract_via_llm(
 
     cache_key = _compute_cache_key(text, settings.llm_model)
 
-    # キャッシュ参照
-    if cache_connection is not None:
-        cached = _load_from_cache(cache_connection, cache_key)
+    # フェーズ 1: キャッシュ参照 (短時間で接続返却)
+    if pool is not None:
+        with pool.connection() as conn:
+            cached = _load_from_cache(conn, cache_key)
         if cached is not None:
             return LlmExtractionResult(
-                records=llm_result_to_records(cached),
-                cache_hit=True,
+                records=llm_result_to_records(cached), cache_hit=True,
             )
 
-    # Ollama 呼び出し
+    # フェーズ 2: Ollama HTTP 呼び出し (DB 接続は持たない)
     payload = _call_ollama(text, settings=settings)
     if payload is None:
         return LlmExtractionResult(records=[], cache_hit=False)
 
-    # キャッシュ保存
-    if cache_connection is not None:
-        try:
-            _save_to_cache(
-                cache_connection, cache_key=cache_key,
-                model=settings.llm_model, result=payload,
-            )
-            cache_connection.commit()
-        except psycopg2.Error as exc:
-            # キャッシュ保存失敗はパイプラインを止めない
-            log_event(logger, "warning", "llm_cache_save_failed", error=str(exc))
-            cache_connection.rollback()
+    # フェーズ 3: キャッシュ保存 (短時間で接続返却)
+    if pool is not None:
+        with pool.connection() as conn:
+            try:
+                _save_to_cache(
+                    conn, cache_key=cache_key,
+                    model=settings.llm_model, result=payload,
+                )
+                conn.commit()
+            except psycopg2.Error as exc:
+                log_event(logger, "warning", "llm_cache_save_failed", error=str(exc))
+                conn.rollback()
 
     return LlmExtractionResult(
-        records=llm_result_to_records(payload),
-        cache_hit=False,
+        records=llm_result_to_records(payload), cache_hit=False,
     )

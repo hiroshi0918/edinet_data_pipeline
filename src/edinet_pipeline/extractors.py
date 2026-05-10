@@ -368,6 +368,7 @@ def parse_document_zip(
     parsed = empty_parsed_document()
     hm_builder = HumanMetricsBuilder()
     employee_status_text: str | None = None  # Layer 3 の入力候補を保持
+    employee_status_source: str | None = None  # 同上の出処 CSV ファイル名
 
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
         csv_files = [
@@ -419,6 +420,7 @@ def parse_document_zip(
                     and raw_text
                 ):
                     employee_status_text = raw_text
+                    employee_status_source = csv_file
 
                 if not item_name and not raw_text:
                     continue
@@ -426,30 +428,12 @@ def parse_document_zip(
                 # ---- Layer 1: 要素IDマッチ (人的資本のみ) ---------------- #
                 classification = classify_element_id(raw_fact.element_id)
                 if classification is not None:
-                    metric_name, scope, worker_type = classification
-                    if not hm_builder.has_value(scope, worker_type, metric_name):
-                        numeric_value = extract_numeric(raw_value)
-                        if numeric_value is not None:
-                            converted = convert_to_percentage(
-                                numeric_value, raw_fact.unit_id,
-                            )
-                            if 0.0 <= converted <= max_ratio:
-                                if hm_builder.set_value(
-                                    scope, worker_type, metric_name, converted,
-                                ):
-                                    parsed.evidence.append(
-                                        MetricEvidenceRecord(
-                                            metric_name=metric_name,
-                                            item_name=item_name or metric_name,
-                                            raw_value=raw_text,
-                                            relative_year=relative_year,
-                                            source_file=csv_file,
-                                            matched_by="element_id_match",
-                                            element_id=raw_fact.element_id,
-                                            scope=scope,
-                                            worker_type=worker_type,
-                                        )
-                                    )
+                    _try_apply_element_id_match(
+                        hm_builder, parsed, classification,
+                        raw_fact=raw_fact, item_name=item_name,
+                        raw_text=raw_text, relative_year=relative_year,
+                        csv_file=csv_file, max_ratio=max_ratio,
+                    )
                     continue  # 要素IDで処理済みなので Layer 2 に降りない
 
                 # ---- Layer 2: 項目名マッチ -------------------------------- #
@@ -507,35 +491,95 @@ def parse_document_zip(
                                     )
                                 )
 
-                # ---- Layer 3a: regex によるテキストフォールバック ------- #
-                fallback_metrics = extract_human_capital_from_text(
-                    raw_text, max_ratio=max_ratio,
-                )
-                for metric_name, metric_value in fallback_metrics.items():
-                    if hm_builder.has_value(
-                        SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL, metric_name,
-                    ):
-                        continue
-                    if hm_builder.set_value(
-                        SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL,
-                        metric_name, metric_value,
-                    ):
-                        parsed.evidence.append(
-                            MetricEvidenceRecord(
-                                metric_name=metric_name,
-                                item_name=item_name or metric_name,
-                                raw_value=raw_text,
-                                relative_year=relative_year,
-                                source_file=csv_file,
-                                matched_by="text_fallback",
-                                scope=SCOPE_REPORTING_COMPANY,
-                                worker_type=WORKER_TYPE_ALL,
-                            )
-                        )
+    # ---- Layer 3a: regex によるテキストフォールバック (1書類1回) ----- #
+    # 旧実装は CSV 全行に対して fallback regex を走らせていたが、人的資本の
+    # 自由記述は「従業員の状況 [テキストブロック]」にしか入らないため、
+    # ここでまとめて 1 回だけ実行することで N倍の重複処理を排除する。
+    if employee_status_text and employee_status_source is not None:
+        _apply_text_fallback(
+            hm_builder, parsed,
+            text=employee_status_text,
+            source_file=employee_status_source,
+            max_ratio=max_ratio,
+        )
 
     parsed.human_metrics = hm_builder.to_records()
     parsed.employee_status_text = employee_status_text
     return parsed
+
+
+# ------------------------------------------------------------------ #
+#  parse_document_zip 内部ヘルパー
+# ------------------------------------------------------------------ #
+
+
+def _try_apply_element_id_match(
+    hm_builder: "HumanMetricsBuilder",
+    parsed: ParsedDocument,
+    classification: tuple[str, str, str],
+    *,
+    raw_fact: RawFactRecord,
+    item_name: str,
+    raw_text: str,
+    relative_year: str,
+    csv_file: str,
+    max_ratio: float,
+) -> None:
+    """Layer 1 (要素IDマッチ) の適用. 早期 return でネストを平坦化."""
+    metric_name, scope, worker_type = classification
+    if hm_builder.has_value(scope, worker_type, metric_name):
+        return
+    numeric_value = extract_numeric(raw_fact.raw_value)
+    if numeric_value is None:
+        return
+    converted = convert_to_percentage(numeric_value, raw_fact.unit_id)
+    if not (0.0 <= converted <= max_ratio):
+        return
+    if not hm_builder.set_value(scope, worker_type, metric_name, converted):
+        return
+    parsed.evidence.append(
+        MetricEvidenceRecord(
+            metric_name=metric_name,
+            item_name=item_name or metric_name,
+            raw_value=raw_text,
+            relative_year=relative_year,
+            source_file=csv_file,
+            matched_by="element_id_match",
+            element_id=raw_fact.element_id,
+            scope=scope,
+            worker_type=worker_type,
+        )
+    )
+
+
+def _apply_text_fallback(
+    hm_builder: "HumanMetricsBuilder",
+    parsed: ParsedDocument,
+    *,
+    text: str,
+    source_file: str,
+    max_ratio: float,
+) -> None:
+    """Layer 3a (regex テキスト抽出) の適用. 1 書類で 1 回だけ呼ばれる前提."""
+    fallback_metrics = extract_human_capital_from_text(text, max_ratio=max_ratio)
+    raw_text = normalize_text(text)
+    for metric_name, metric_value in fallback_metrics.items():
+        if not hm_builder.set_value(
+            SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL, metric_name, metric_value,
+        ):
+            continue
+        parsed.evidence.append(
+            MetricEvidenceRecord(
+                metric_name=metric_name,
+                item_name=EMPLOYEE_STATUS_BLOCK_LABEL + " [テキストブロック]",
+                raw_value=raw_text,
+                relative_year="提出日時点",
+                source_file=source_file,
+                matched_by="text_fallback",
+                scope=SCOPE_REPORTING_COMPANY,
+                worker_type=WORKER_TYPE_ALL,
+            )
+        )
 
 
 # ------------------------------------------------------------------ #
@@ -565,31 +609,26 @@ def merge_llm_records(
     if not llm_records:
         return 0
 
-    # 既存 records を (scope, worker_type) → dict に展開
-    existing: dict[tuple[str, str], dict[str, float | None]] = {}
+    # 既存 records を HumanMetricsBuilder にリロードし、first-wins で LLM 値をマージ。
+    # マージロジックを Builder に集約することで、parse_document_zip と同じ
+    # 「同一キー・同一指標で初出値を保持する」セマンティクスを再利用する。
+    builder = HumanMetricsBuilder()
     for rec in parsed.human_metrics:
-        existing[(rec.scope, rec.worker_type)] = {
-            "female_manager_ratio": rec.female_manager_ratio,
-            "male_childcare_leave_ratio": rec.male_childcare_leave_ratio,
-            "gender_wage_gap": rec.gender_wage_gap,
-        }
+        for metric_name in HUMAN_FIELDS:
+            value = getattr(rec, metric_name)
+            if value is not None:
+                builder.set_value(rec.scope, rec.worker_type, metric_name, value)
 
     filled_count = 0
     for llm_rec in llm_records:
-        key = (llm_rec.scope, llm_rec.worker_type)
-        bucket = existing.setdefault(
-            key,
-            {
-                "female_manager_ratio": None,
-                "male_childcare_leave_ratio": None,
-                "gender_wage_gap": None,
-            },
-        )
         for metric_name in HUMAN_FIELDS:
             llm_value = getattr(llm_rec, metric_name)
-            if llm_value is None or bucket[metric_name] is not None:
+            if llm_value is None:
                 continue
-            bucket[metric_name] = llm_value
+            if not builder.set_value(
+                llm_rec.scope, llm_rec.worker_type, metric_name, llm_value,
+            ):
+                continue  # 既存値があり上書きしない
             filled_count += 1
             parsed.evidence.append(
                 MetricEvidenceRecord(
@@ -604,14 +643,5 @@ def merge_llm_records(
                 )
             )
 
-    # 再構築
-    parsed.human_metrics = [
-        HumanMetricRecord(
-            scope=scope, worker_type=worker_type,
-            female_manager_ratio=values["female_manager_ratio"],
-            male_childcare_leave_ratio=values["male_childcare_leave_ratio"],
-            gender_wage_gap=values["gender_wage_gap"],
-        )
-        for (scope, worker_type), values in sorted(existing.items())
-    ]
+    parsed.human_metrics = builder.to_records()
     return filled_count

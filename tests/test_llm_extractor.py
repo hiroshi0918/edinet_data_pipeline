@@ -179,26 +179,62 @@ def test_extract_via_llm_returns_empty_on_invalid_json() -> None:
     assert result.records == []
 
 
+def _make_pool_mock(cached_payload: dict | None) -> MagicMock:
+    """DatabasePool の mock — pool.connection() コンテキストで連想結果を返す."""
+    cursor_mock = MagicMock()
+    cursor_mock.__enter__ = MagicMock(return_value=cursor_mock)
+    cursor_mock.__exit__ = MagicMock(return_value=False)
+    cursor_mock.fetchone.return_value = (cached_payload,) if cached_payload is not None else None
+
+    conn_mock = MagicMock()
+    conn_mock.cursor.return_value = cursor_mock
+
+    pool_mock = MagicMock()
+    pool_mock.connection.return_value.__enter__ = MagicMock(return_value=conn_mock)
+    pool_mock.connection.return_value.__exit__ = MagicMock(return_value=False)
+    return pool_mock
+
+
 def test_extract_via_llm_uses_cache_when_available() -> None:
-    """キャッシュ接続を渡せば、2回目の呼び出しは Ollama を叩かない."""
+    """プールを渡せば、2回目の呼び出しは Ollama を叩かない (キャッシュHIT)."""
     settings = _make_settings(llm_enabled=True)
     cached_payload = {
         "female_manager_ratio": 10.0, "male_childcare_leave_ratio": None,
         "gender_wage_gap_all": None, "gender_wage_gap_regular": None,
         "gender_wage_gap_non_regular": None,
     }
-
-    # mock の DB 接続: SELECT で結果あり
-    cursor_mock = MagicMock()
-    cursor_mock.__enter__ = MagicMock(return_value=cursor_mock)
-    cursor_mock.__exit__ = MagicMock(return_value=False)
-    cursor_mock.fetchone.return_value = (cached_payload,)
-    conn_mock = MagicMock()
-    conn_mock.cursor.return_value = cursor_mock
+    pool_mock = _make_pool_mock(cached_payload)
 
     with patch("edinet_pipeline.llm_extractor.requests.post") as mock_post:
-        result = extract_via_llm("text", settings=settings, cache_connection=conn_mock)
+        result = extract_via_llm("text", settings=settings, pool=pool_mock)
 
     assert result.cache_hit is True
     assert result.records[0].female_manager_ratio == 10.0
     mock_post.assert_not_called()  # キャッシュヒットなので Ollama 不要
+
+
+def test_extract_via_llm_releases_connection_during_http() -> None:
+    """HTTP 呼び出し中は DB 接続が pool に返却されていること (pool starvation 防止)."""
+    settings = _make_settings(llm_enabled=True)
+    pool_mock = _make_pool_mock(cached_payload=None)  # キャッシュ miss
+
+    # HTTP 呼び出し時点での pool.connection() の出入り回数を記録
+    enter_count_at_http = {"value": -1}
+
+    def record_then_respond(*_args, **_kwargs):
+        enter_count_at_http["value"] = pool_mock.connection.call_count
+        return _mock_ollama_response({
+            "female_manager_ratio": 5.0, "male_childcare_leave_ratio": None,
+            "gender_wage_gap_all": None, "gender_wage_gap_regular": None,
+            "gender_wage_gap_non_regular": None,
+        })
+
+    with patch("edinet_pipeline.llm_extractor.requests.post", side_effect=record_then_respond):
+        result = extract_via_llm("text", settings=settings, pool=pool_mock)
+
+    # フェーズ 1 (lookup) で 1 回 connection() が呼ばれた状態で HTTP に入る
+    # = HTTP 中は __exit__ 済み (with ブロック終了)
+    assert enter_count_at_http["value"] == 1
+    # フェーズ 3 (save) でもう 1 回呼ばれる
+    assert pool_mock.connection.call_count == 2
+    assert result.cache_hit is False

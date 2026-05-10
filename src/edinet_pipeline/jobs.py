@@ -170,12 +170,11 @@ def _maybe_run_llm_fallback(
     if _has_reporting_company_metrics(parsed):
         return  # 既に取れているので LLM 不要
 
-    with pool.connection() as cache_conn:
-        result = extract_via_llm(
-            parsed.employee_status_text,
-            settings=settings,
-            cache_connection=cache_conn,
-        )
+    # extract_via_llm は内部で pool 接続を transient に取得・解放するため、
+    # HTTP 呼び出し中は DB 接続を保持しない (pool starvation 防止)。
+    result = extract_via_llm(
+        parsed.employee_status_text, settings=settings, pool=pool,
+    )
     filled = merge_llm_records(parsed, result.records, source_file="(llm_fallback)")
     log_event(
         logger, "info", "llm_fallback_executed",
