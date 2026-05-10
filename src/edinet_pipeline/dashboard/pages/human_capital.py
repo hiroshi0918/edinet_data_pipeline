@@ -1,4 +1,4 @@
-"""人的資本指標ページ — 分布・推移・散布図."""
+"""人的資本指標ページ — 分布・推移・散布図 (scope/worker_type 次元切替対応)."""
 
 from __future__ import annotations
 
@@ -7,8 +7,16 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from edinet_pipeline.dashboard.components.filters import render_fiscal_year_filter
-from edinet_pipeline.dashboard.constants import HC_METRIC_LABELS, HC_TREND_LABEL_MAP
+from edinet_pipeline.dashboard.components.filters import (
+    render_dimension_filter,
+    render_fiscal_year_filter,
+)
+from edinet_pipeline.dashboard.constants import (
+    HC_METRIC_LABELS,
+    HC_TREND_LABEL_MAP,
+    SCOPE_LABELS,
+    WORKER_TYPE_LABELS,
+)
 from edinet_pipeline.dashboard.data import (
     query_hc_distribution,
     query_hc_scatter,
@@ -23,10 +31,15 @@ def render(conn: duckdb.DuckDBPyConnection) -> None:
     year_min, year_max = render_fiscal_year_filter(conn, key_prefix="hc")
     if year_min == 0:
         return
+    scope, worker_type = render_dimension_filter(key_prefix="hc")
 
-    dist_df = _render_distribution(conn, year_min, year_max)
-    _render_trends(conn, year_min, year_max)
-    _render_scatter(conn, year_min, year_max)
+    st.caption(
+        f"表示中の次元: **{SCOPE_LABELS[scope]} × {WORKER_TYPE_LABELS[worker_type]}**"
+    )
+
+    dist_df = _render_distribution(conn, year_min, year_max, scope, worker_type)
+    _render_trends(conn, year_min, year_max, scope, worker_type)
+    _render_scatter(conn, year_min, year_max, scope, worker_type)
 
     if not dist_df.empty:
         st.subheader("詳細データ")
@@ -34,7 +47,11 @@ def render(conn: duckdb.DuckDBPyConnection) -> None:
 
 
 def _render_distribution(
-    conn: duckdb.DuckDBPyConnection, year_min: int, year_max: int
+    conn: duckdb.DuckDBPyConnection,
+    year_min: int,
+    year_max: int,
+    scope: str,
+    worker_type: str,
 ) -> pd.DataFrame:
     """分布プロットセクション."""
     st.subheader("指標の分布")
@@ -50,9 +67,9 @@ def _render_distribution(
     )
 
     label = HC_METRIC_LABELS[metric]
-    dist_df = query_hc_distribution(conn, metric, year)
+    dist_df = query_hc_distribution(conn, metric, year, scope=scope, worker_type=worker_type)
     if dist_df.empty:
-        st.info(f"{label}のデータがありません ({year}年度)")
+        st.info(f"{label}のデータがありません ({year}年度・選択次元)")
         return dist_df
 
     tab_hist, tab_box = st.tabs(["ヒストグラム", "箱ひげ図"])
@@ -71,10 +88,16 @@ def _render_distribution(
     return dist_df
 
 
-def _render_trends(conn: duckdb.DuckDBPyConnection, year_min: int, year_max: int) -> None:
+def _render_trends(
+    conn: duckdb.DuckDBPyConnection,
+    year_min: int,
+    year_max: int,
+    scope: str,
+    worker_type: str,
+) -> None:
     """年度別平均推移セクション."""
     st.subheader("年度別 平均推移")
-    trends_df = query_hc_trends(conn, year_min, year_max)
+    trends_df = query_hc_trends(conn, year_min, year_max, scope, worker_type)
     if trends_df.empty:
         st.info("推移データがありません")
         return
@@ -94,15 +117,21 @@ def _render_trends(conn: duckdb.DuckDBPyConnection, year_min: int, year_max: int
     st.plotly_chart(fig, use_container_width=True)
 
 
-def _render_scatter(conn: duckdb.DuckDBPyConnection, year_min: int, year_max: int) -> None:
+def _render_scatter(
+    conn: duckdb.DuckDBPyConnection,
+    year_min: int,
+    year_max: int,
+    scope: str,
+    worker_type: str,
+) -> None:
     """散布図セクション."""
     st.subheader("女性管理職比率 vs 男性育休取得率")
     year = st.number_input(
         "年度", min_value=year_min, max_value=year_max, value=year_max, key="hc_scatter_year"
     )
-    scatter_df = query_hc_scatter(conn, year)
+    scatter_df = query_hc_scatter(conn, year, scope=scope, worker_type=worker_type)
     if scatter_df.empty:
-        st.info(f"両指標を持つデータがありません ({year}年度)")
+        st.info(f"両指標を持つデータがありません ({year}年度・選択次元)")
         return
 
     fig = px.scatter(

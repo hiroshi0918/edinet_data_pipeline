@@ -49,4 +49,15 @@ def main() -> None:
     _PAGES[page_name](conn)
 
 
-main()
+# Streamlit はスクリプト全体を毎リクエストで実行するため main() を import 時に呼ぶ必要がある。
+# ただし pytest 経由など Streamlit ランタイム外からの import 時は副作用を避ける。
+def _running_under_streamlit() -> bool:
+    try:
+        from streamlit.runtime import exists  # type: ignore[import-not-found]
+    except Exception:
+        return False
+    return bool(exists())
+
+
+if _running_under_streamlit():
+    main()

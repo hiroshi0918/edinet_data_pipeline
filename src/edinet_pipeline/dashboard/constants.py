@@ -53,3 +53,22 @@ STATUS_COLOR_MAP: dict[str, str] = {
 HC_TREND_LABEL_MAP: dict[str, str] = {
     f"avg_{k}": v for k, v in ALL_METRIC_LABELS.items() if k in HC_METRIC_LABELS
 }
+
+# --- 次元ラベル (v0.3 で追加) -------------------------------------- #
+
+# 開示範囲 (scope) のラベル
+SCOPE_LABELS: dict[str, str] = {
+    "reporting_company": "提出会社",
+    "consolidated_subsidiary": "連結子会社",
+}
+
+# 労働者区分 (worker_type) のラベル
+WORKER_TYPE_LABELS: dict[str, str] = {
+    "all": "全労働者",
+    "regular": "正規雇用",
+    "non_regular": "非正規雇用",
+}
+
+# デフォルト次元 (サイドバー初期値・analytics 既定行を表示)
+DEFAULT_SCOPE = "reporting_company"
+DEFAULT_WORKER_TYPE = "all"

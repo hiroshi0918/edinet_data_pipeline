@@ -5,6 +5,12 @@ from __future__ import annotations
 import duckdb
 import streamlit as st
 
+from edinet_pipeline.dashboard.constants import (
+    DEFAULT_SCOPE,
+    DEFAULT_WORKER_TYPE,
+    SCOPE_LABELS,
+    WORKER_TYPE_LABELS,
+)
 from edinet_pipeline.dashboard.data import query_available_companies, query_available_fiscal_years
 
 
@@ -28,6 +34,35 @@ def render_fiscal_year_filter(
         key=f"{key_prefix}_fiscal_year",
     )
     return year_range[0], year_range[1]
+
+
+def render_dimension_filter(
+    key_prefix: str = "",
+    *,
+    scope_default: str = DEFAULT_SCOPE,
+    worker_type_default: str = DEFAULT_WORKER_TYPE,
+) -> tuple[str, str]:
+    """サイドバーに次元 (scope/worker_type) のセレクタを描画し、選択値を返す.
+
+    人的資本指標が次元別にスキーマ化されたことに伴い、ダッシュボード全体で
+    同じ次元を切り替えられるよう共通化する。
+    """
+    st.sidebar.markdown("**人的資本の開示範囲**")
+    scope = st.sidebar.selectbox(
+        "対象範囲",
+        options=list(SCOPE_LABELS.keys()),
+        index=list(SCOPE_LABELS.keys()).index(scope_default),
+        format_func=lambda code: SCOPE_LABELS[code],
+        key=f"{key_prefix}_scope",
+    )
+    worker_type = st.sidebar.selectbox(
+        "労働者区分",
+        options=list(WORKER_TYPE_LABELS.keys()),
+        index=list(WORKER_TYPE_LABELS.keys()).index(worker_type_default),
+        format_func=lambda code: WORKER_TYPE_LABELS[code],
+        key=f"{key_prefix}_worker_type",
+    )
+    return scope, worker_type
 
 
 def render_company_filter(
