@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import io
 import re
+import statistics
 import unicodedata
 import zipfile
 
@@ -299,49 +300,75 @@ def extract_human_capital_from_text(
 class HumanMetricsBuilder:
     """(scope, worker_type) ごとに HumanMetricRecord の値を集約するビルダー.
 
-    同一キー・同一指標で重複登録された場合は最初の値が保持される (first-wins)。
+    値の保持には 2 つのモードがある:
+      - observe (Layer 1 = element_id_match 用):
+          XBRL の同一 element_id に対して contextRef 違いで複数値が並ぶケース
+          （連結子会社が複数社並列で書かれる等）を全て蓄積し、to_records で
+          中央値に集約する。外れ値（例: 連結子会社 18 社中 1 社だけ 200%）が
+          採用値を爆発させるバグへの対処。
+      - set_value (Layer 2/3 = item_name_match / text_fallback / LLM 用):
+          first-wins。Layer 1 で 1 つでも観測があれば has_value=True となり、
+          Layer 2/3 値は混入しないので信頼性順序は崩れない。
     """
 
     def __init__(self) -> None:
-        # (scope, worker_type) -> {metric_name: value}
-        self._buckets: dict[tuple[str, str], dict[str, float | None]] = {}
+        # (scope, worker_type) -> {metric_name: list[float]}
+        # 値のリスト。to_records 時点で中央値（1要素なら値そのもの）を採用。
+        self._buckets: dict[tuple[str, str], dict[str, list[float]]] = {}
+
+    def _ensure_bucket(self, scope: str, worker_type: str) -> dict[str, list[float]]:
+        key = (scope, worker_type)
+        if key not in self._buckets:
+            self._buckets[key] = {name: [] for name in HUMAN_FIELDS}
+        return self._buckets[key]
 
     def has_value(self, scope: str, worker_type: str, metric_name: str) -> bool:
         bucket = self._buckets.get((scope, worker_type))
         if bucket is None:
             return False
-        return bucket.get(metric_name) is not None
+        return bool(bucket.get(metric_name))
 
     def has_any_value_for_reporting_company(self) -> bool:
         """提出会社の指標が1つでも入っているか (LLM フォールバック判定用)."""
         for (scope, _), bucket in self._buckets.items():
             if scope != SCOPE_REPORTING_COMPANY:
                 continue
-            if any(v is not None for v in bucket.values()):
+            if any(bucket.values()):
                 return True
         return False
+
+    def observe(
+        self, scope: str, worker_type: str, metric_name: str, value: float,
+    ) -> None:
+        """Layer 1 用. 観測値をリストに追加 (first-wins チェックなし)."""
+        self._ensure_bucket(scope, worker_type)[metric_name].append(value)
 
     def set_value(
         self, scope: str, worker_type: str, metric_name: str, value: float,
     ) -> bool:
-        """値を設定. 既に値があれば False を返してスキップ (first-wins)."""
-        key = (scope, worker_type)
-        if key not in self._buckets:
-            self._buckets[key] = {name: None for name in HUMAN_FIELDS}
-        if self._buckets[key].get(metric_name) is not None:
+        """Layer 2/3 用. 既に値があれば False を返してスキップ (first-wins)."""
+        bucket = self._ensure_bucket(scope, worker_type)
+        if bucket[metric_name]:
             return False
-        self._buckets[key][metric_name] = value
+        bucket[metric_name].append(value)
         return True
 
+    @staticmethod
+    def _aggregate(values: list[float]) -> float | None:
+        if not values:
+            return None
+        # 1 件のときは値そのもの。複数件は中央値で外れ値の影響を抑制する。
+        return statistics.median(values)
+
     def to_records(self) -> list[HumanMetricRecord]:
-        """累積した値を HumanMetricRecord のリストに変換."""
+        """累積した値を HumanMetricRecord のリストに変換 (中央値集約)."""
         return [
             HumanMetricRecord(
                 scope=scope,
                 worker_type=worker_type,
-                female_manager_ratio=values["female_manager_ratio"],
-                male_childcare_leave_ratio=values["male_childcare_leave_ratio"],
-                gender_wage_gap=values["gender_wage_gap"],
+                female_manager_ratio=self._aggregate(values["female_manager_ratio"]),
+                male_childcare_leave_ratio=self._aggregate(values["male_childcare_leave_ratio"]),
+                gender_wage_gap=self._aggregate(values["gender_wage_gap"]),
             )
             for (scope, worker_type), values in sorted(self._buckets.items())
         ]
@@ -525,18 +552,21 @@ def _try_apply_element_id_match(
     csv_file: str,
     max_ratio: float,
 ) -> None:
-    """Layer 1 (要素IDマッチ) の適用. 早期 return でネストを平坦化."""
+    """Layer 1 (要素IDマッチ) の適用.
+
+    同一 (scope, worker_type, metric_name) に対して contextRef 違いで複数値が
+    並ぶケース（連結子会社が複数社並列）を全て観測リストに溜め、to_records
+    で中央値に集約する。evidence には観測した全 raw_fact を記録するため、
+    後段で「どの値が採用されたか」を辿れる。
+    """
     metric_name, scope, worker_type = classification
-    if hm_builder.has_value(scope, worker_type, metric_name):
-        return
     numeric_value = extract_numeric(raw_fact.raw_value)
     if numeric_value is None:
         return
     converted = convert_to_percentage(numeric_value, raw_fact.unit_id)
     if not (0.0 <= converted <= max_ratio):
         return
-    if not hm_builder.set_value(scope, worker_type, metric_name, converted):
-        return
+    hm_builder.observe(scope, worker_type, metric_name, converted)
     parsed.evidence.append(
         MetricEvidenceRecord(
             metric_name=metric_name,
