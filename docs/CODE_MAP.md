@@ -12,9 +12,11 @@
 │  CLI 層           cli.py                                            │
 │                   ↑ argparse で各サブコマンドへ振り分け             │
 ├────────────────────────────────────────────────────────────────────┤
-│  ジョブ層         jobs.py        analytics.py                       │
-│                   fetch/process  Parquet・DuckDB エクスポート       │
+│  ジョブ層         jobs.py             analytics.py                  │
+│                   fetch/process       Parquet・DuckDB エクスポート  │
 │                   /backfill                                         │
+│                   industry_master.py                                │
+│                   update-industries (EDINETコード集約一覧)          │
 ├────────────────────────────────────────────────────────────────────┤
 │  ドメイン層       extractors.py    llm_extractor.py                 │
 │                   3層抽出戦略       Layer 3b (Ollama)                │
@@ -29,7 +31,7 @@
 │                   構造化ログ                                        │
 ├────────────────────────────────────────────────────────────────────┤
 │  可視化           dashboard/                                        │
-│                   app.py / data.py / pages/ / components/           │
+│                   app.py / data.py / views/ / components/           │
 │                   ↑ DuckDB を直接読んで Streamlit で表示            │
 └────────────────────────────────────────────────────────────────────┘
 ```
@@ -76,6 +78,7 @@
 | --- | --- | --- |
 | `jobs.py` | 「fetch」「process」「backfill」の 3 つのジョブを実行する | `fetch_documents_for_date`, `process_documents`, `backfill_documents` |
 | `analytics.py` | 運用 DB のスナップショットを Parquet と DuckDB へ出力（一時ディレクトリ → リネーム方式。Parquet は `rmtree → replace` のため厳密なアトミック性は無い） | `export_analytics`, `export_parquet_snapshot`, `export_duckdb_snapshot` |
+| `industry_master.py` | EDINETコード集約一覧 (`Edinetcode.zip`) から `companies.industry` を一括更新する（API レスポンスに業種が無いため別取り込み経路） | `fetch_edinet_code_zip`, `parse_edinet_code_master`, `update_industries` |
 | `cli.py` | argparse でサブコマンドを定義し、対応する関数を呼ぶ | `build_parser`, `main` |
 | `logging_utils.py` | 構造化ログ（JSON 1 行）の出力ヘルパー | `configure_logging`, `log_event` |
 
@@ -85,13 +88,18 @@
 | --- | --- |
 | `dashboard/__init__.py` | Streamlit アプリを subprocess で起動するラッパー |
 | `dashboard/app.py` | Streamlit のマルチページアプリのエントリポイント |
-| `dashboard/data.py` | DuckDB へのクエリ関数群（read-only） |
-| `dashboard/constants.py` | テーブル名、指標ラベル、色などの共通定数 |
+| `dashboard/data.py` | DuckDB へのクエリ関数群（read-only）。許可リスト検証は `models.ALLOWED_SCOPES`/`ALLOWED_WORKER_TYPES` を再利用 |
+| `dashboard/constants.py` | テーブル名・指標ラベル・色などの共通定数。男性育休の表示クリップ範囲 `RATIO_DISPLAY_MIN/MAX`、理想クラスタ閾値 `IDEAL_CLUSTER_THRESHOLDS` も集約 |
 | `dashboard/components/filters.py` | フィルター UI（年度選択など）の共通コンポーネント |
-| `dashboard/pages/overview.py` | 概要ページ（KPI、ステータス分布） |
-| `dashboard/pages/financial.py` | 財務指標の推移・ランキング |
-| `dashboard/pages/human_capital.py` | 人的資本指標の分布・散布図 |
-| `dashboard/pages/data_quality.py` | カバレッジヒートマップ、充足率の推移 |
+| `dashboard/views/overview.py` | 概要ページ（KPI、ステータス分布） |
+| `dashboard/views/financial.py` | 財務指標の推移・ランキング |
+| `dashboard/views/human_capital.py` | 人的資本指標の分布・散布図、男性育休取得率の外れ値注記（100% 超・0%・集計外れ値の 3 種カード） |
+| `dashboard/views/company_spotlight.py` | 単一企業の peer 比較。業界 peer + 規模類似 peer（対数スケール ±0.3 dex）+ 理想クラスタ平均との差分を表示。持株会社は `detect_evaluation_scope` で自動的に連結子会社 scope に切替 |
+| `dashboard/views/data_quality.py` | カバレッジヒートマップ、充足率の推移 |
+
+> ディレクトリ名は `views/` です。Streamlit の `pages/` 規約と衝突しないよう
+> あえて中立な名前を使っています（`pages/` だと自動検出機能が発動し、自前の
+> `st.sidebar.radio` ナビゲーションと二重に並んでしまう）。
 
 ## 4. 主要な依存グラフ（簡略版）
 
@@ -117,15 +125,23 @@ cli.py
  │                               upsert_human_metrics,reset_to_pending}
  ├── jobs.backfill_documents
  │    └── 上記 fetch + process を日付ごとにループ
- └── analytics.export_analytics
-      ├── analytics.load_analytics_frames
-      │    └── db.PipelineRepository.fetch_*_rows
-      ├── analytics.export_parquet_snapshot
-      └── analytics.export_duckdb_snapshot
+ ├── analytics.export_analytics
+ │    ├── analytics.load_analytics_frames
+ │    │    └── db.PipelineRepository.fetch_*_rows  (industry 含む vw_company_year_metrics)
+ │    ├── analytics.export_parquet_snapshot
+ │    └── analytics.export_duckdb_snapshot
+ └── industry_master.update_industries        (`edinet update-industries` で呼ばれる)
+      ├── industry_master.fetch_edinet_code_zip   (URL or ローカル ZIP を取得)
+      ├── industry_master.parse_edinet_code_master (Shift-JIS CSV → DataFrame)
+      └── db.PipelineRepository.update_industries  (companies.industry を VALUES 句で一括 UPDATE)
 
 dashboard/app.py
- └── dashboard/pages/*.py
+ └── dashboard/views/*.py
       └── dashboard/data.py.query_*
+           ├── query_company_profile / search_company_by_name
+           ├── query_industry_peers / query_size_peers (対数スケール ±0.3 dex)
+           ├── query_ideal_cluster (3 HC P75 + 営業利益率 P50)
+           └── detect_evaluation_scope (持株会社判定)
 ```
 
 ## 5. 用語と DB スキーマの対応

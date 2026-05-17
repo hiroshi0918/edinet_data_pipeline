@@ -8,16 +8,16 @@
 ## 0. 全体像
 
 ```text
-EDINET API                                    Ollama (任意)
-   │                                              ▲
-   │ ① fetch                                      │ Layer 3b: LLM 抽出
-   ▼                                              │ (LLM_FALLBACK_ENABLED=true 時)
-financial_reports        ← 状態: pending / skipped │
-   │                                              │
-   │ ② process                                    │
-   │   - CSV ZIP DL                               │
-   │   - 3層抽出 (要素ID → 項目名 → テキスト)      │
-   │   - LLM フォールバック (オプション)──────────┘
+EDINET API                                          Ollama (任意)
+   │                                                      ▲
+   │ ① fetch                                             │ Layer 3b: LLM 抽出
+   ▼                                                      │ (LLM_FALLBACK_ENABLED=true 時)
+financial_reports        ← 状態: pending / skipped         │
+   │                                                      │
+   │ ② process                                           │
+   │   - CSV ZIP DL                                       │
+   │   - 3層抽出 (要素ID → 項目名 → テキスト)                  │
+   │   - LLM フォールバック (オプション)───────────────────────┘
    ▼
 financial_reports        ← 状態: processed / failed / skipped
 human_capital_metrics    ← 1 書類につき最大 6 行 (scope × worker_type)
@@ -158,6 +158,31 @@ jobs.process_documents(settings, limit, retry_failed, ...)
 
 これにより**処理途中で停止しても、同じコマンドを再実行すれば残りを続行**できます。
 
+## 2.5 update-industries — 業種マスタの取り込み（industry_master.py）
+
+`companies.industry` カラムは `alembic 0001` で予約されているが、EDINET API の
+レスポンスには業種フィールドが含まれないため `upsert_company` では埋まらない。
+業界 peer 比較を有効にするには、金融庁が別途配布する「EDINETコード集約一覧
+(`Edinetcode.zip`)」を取り込むワンショットコマンドを使う。
+
+```text
+edinet update-industries --source-file <PATH or URL>
+  │
+  ├─ industry_master.fetch_edinet_code_zip(source)
+  │    └─ URL なら HTTP GET、ローカルパスならファイル読み取り
+  │
+  ├─ industry_master.parse_edinet_code_master(zip_bytes)
+  │    └─ Shift-JIS CSV を解凍し
+  │       「ＥＤＩＮＥＴコード」「提出者業種」を抽出
+  │
+  └─ PipelineRepository.update_industries(mapping)
+       └─ UPDATE companies FROM (VALUES ...) WHERE edinet_code = ...
+          （1 SQL で 4,000+ 行を一括更新）
+```
+
+取り込み後は `edinet export-analytics --format duckdb` を再実行することで、
+`vw_company_year_metrics` 経由で DuckDB の `industry` 列が更新される。
+
 ## 3. export-analytics — 分析用ファイルへの変換（analytics.py）
 
 `edinet export-analytics --format both` を実行すると、PostgreSQL の現在の状態を
@@ -224,11 +249,12 @@ dashboard/__init__.py.launch_dashboard(host, port, duckdb_path)
             │   ├─ render_dimension_filter   (scope / worker_type セレクタ)
             │   └─ render_company_filter     (企業マルチセレクト)
             │
-            └─ st.navigation でページを切り替え
-                 ├─ pages/overview.py        (KPI / ステータス分布)
-                 ├─ pages/financial.py       (推移・ランキング・統計)
-                 ├─ pages/human_capital.py   (分布・散布図・推移、scope/worker_type 対応)
-                 └─ pages/data_quality.py    (カバレッジ・充足率)
+            └─ st.sidebar.radio でページを切り替え
+                 ├─ views/overview.py          (KPI / ステータス分布)
+                 ├─ views/financial.py         (推移・ランキング・統計)
+                 ├─ views/human_capital.py     (分布・散布図・推移、scope/worker_type 対応)
+                 ├─ views/data_quality.py      (カバレッジ・充足率)
+                 └─ views/company_spotlight.py (単一企業の peer 比較・理想値差分)
                       │
                       └─ dashboard/data.py.query_* で
                          DuckDB に SELECT を発行（read-only）

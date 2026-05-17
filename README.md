@@ -179,8 +179,8 @@ graph LR
 │       ├── data.py       # DuckDB クエリ関数群 (scope/worker_type フィルタ)
 │       ├── constants.py  # 共通定数 (指標ラベル + 次元ラベル)
 │       ├── components/   # 共通 UI (フィルタ・次元セレクタ)
-│       └── pages/        # 各ページ (overview, financial, human_capital, data_quality)
-├── alembic/              # DB migration (0001 / 0002 / 0003)
+│       └── views/        # 各ページ (overview, financial, human_capital, data_quality, company_spotlight)
+├── alembic/              # DB migration (0001 / 0002 / 0003 / 0004)
 ├── airflow/dags/         # 任意の Airflow DAG
 ├── tests/                # unit / integration tests
 ├── notebooks/            # 01_eda_basics, 02_extraction_quality_check
@@ -392,6 +392,26 @@ docker compose exec app edinet export-analytics --format duckdb
 - `both` は同じ PostgreSQL snapshot を 1 回だけ読み、Parquet と DuckDB を両方更新します。
 - v1 では `process/backfill` 完了後に自動更新しません。必要なタイミングで明示実行します。
 
+### `edinet update-industries`
+
+EDINET API のレスポンスには業種フィールドが含まれないため、金融庁が別途配布する「EDINETコード集約一覧 (`Edinetcode.zip`)」を取り込んで `companies.industry` を埋めるためのコマンドです。`--source-url` か `--source-file` のいずれかが必須です（相互排他）。
+
+```bash
+# 事前にダウンロードした ZIP を取り込む（推奨）
+docker compose run --rm app edinet update-industries \
+  --source-file /app/artifacts/edinet_code/Edinetcode_YYYYMMDD.zip
+
+# URL から直接取得する（公式ダウンロード URL を指定）
+docker compose run --rm app edinet update-industries --source-url https://...
+```
+
+挙動:
+
+- ZIP 内 Shift-JIS CSV を解凍し、「ＥＤＩＮＥＴコード」「提出者業種」列を抽出。
+- `companies` に存在する `edinet_code` だけが `UPDATE` 対象（`UPDATE ... FROM (VALUES %s)` の 1 SQL で一括更新）。
+- 取り込み後は `edinet export-analytics --format duckdb` を実行して DuckDB の `industry` 列も更新してください（`vw_company_year_metrics` 経由で反映されます）。
+- 公式ダウンロード URL は JavaScript で動的生成されるため、ブラウザでダウンロードして `--source-file` で渡す運用が確実です。
+
 ### `edinet dashboard`
 
 DuckDB をデータソースとしたインタラクティブな分析ダッシュボードを起動します。
@@ -408,14 +428,15 @@ edinet dashboard --duckdb-path /path/to/edinet_analytics.duckdb
 pip install -e '.[viz]'
 ```
 
-ダッシュボードは以下の 4 ページで構成されます。
+ダッシュボードは以下の 5 ページで構成されます。
 
 | ページ | 内容 |
 | --- | --- |
 | 概要 | KPI カード（企業数・年度数・レコード数）、年度別処理ステータス分布 |
 | 財務指標 | 売上高・営業利益・純利益・従業員数の推移（折れ線）、企業ランキング（棒）、集計統計テーブル |
-| 人的資本指標 | 女性管理職比率・男性育休取得率・男女賃金格差の分布（ヒストグラム/箱ひげ図）、年度別平均推移、散布図 |
-| データ品質 | 指標カバレッジヒートマップ、年度別充足率推移、抽出方法の分布 |
+| 人的資本指標 | 女性管理職比率・男性育休取得率・男女賃金格差の分布（ヒストグラム/箱ひげ図）、年度別平均推移、散布図、男性育休取得率の外れ値（100%超・0%報告・集計外れ値）の補足カード |
+| 企業スポットライト | 単一企業を選んで peer と並べる。業界 peer (`industry` 列) と規模類似 peer（対数スケール ±0.3 dex）の両系列、4 種の「理想値」（業界 P75 / 規模 peer P75 / 理想クラスタ平均 / 業界トップ10）テーブル。持株会社は自動的に連結子会社 scope で評価。`industry` が未取得の場合は業界 peer のみ非表示で動作 |
+| データ品質 | 指標カバレッジヒートマップ（凡例・hover 付き）、年度別充足率推移、抽出方法の分布（信頼性順の解説付き） |
 
 オプション:
 
@@ -429,6 +450,7 @@ pip install -e '.[viz]'
 
 - ダッシュボードは DuckDB ファイルのみ参照します。PostgreSQL や EDINET API キーは不要です。
 - データを最新化するには先に `edinet export-analytics --format duckdb` を実行してください。
+- Docker から起動する場合は `--host 0.0.0.0` の指定が必須です（既定の `localhost` だとコンテナ内 loopback のみで待ち受けるため、ホスト側ブラウザからアクセスできません）。例: `docker compose run --rm -p 8501:8501 app edinet dashboard --host 0.0.0.0`
 
 ## 状態管理
 
