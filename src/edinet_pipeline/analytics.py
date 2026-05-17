@@ -39,6 +39,7 @@ DATASET_ORDER = (COMPANY_YEAR_METRICS_DATASET, METRIC_EVIDENCE_DATASET)
 COMPANY_YEAR_METRICS_COLUMNS = [
     "edinet_code",
     "company_name",
+    "industry",
     "fiscal_year",
     "doc_id",
     "submitted_date",
@@ -79,6 +80,7 @@ DATASET_SCHEMAS = {
         [
             ("edinet_code", pa.string()),
             ("company_name", pa.string()),
+            ("industry", pa.string()),
             ("fiscal_year", pa.int64()),
             ("doc_id", pa.string()),
             ("submitted_date", pa.date32()),
@@ -264,9 +266,12 @@ def export_duckdb_snapshot(settings: Settings, frames: dict[str, pd.DataFrame]) 
         connection.execute(f"CREATE SCHEMA IF NOT EXISTS {ANALYTICS_SCHEMA}")
         for dataset_name in DATASET_ORDER:
             frame = frames[dataset_name]
-            # DataFrame を一時リレーション名で登録 → CTAS でテーブル化
+            # PyArrow Table 経由で型を明示的に固定する。
+            # pandas DataFrame を直接 register すると DuckDB が DECIMAL 精度を
+            # 推論し、後続値 (例 100.00) が DECIMAL(4,2) に収まらず失敗する。
+            table = _frame_to_table(dataset_name, frame)
             relation_name = f"{dataset_name}_frame"
-            connection.register(relation_name, frame)
+            connection.register(relation_name, table)
             connection.execute(
                 f"CREATE OR REPLACE TABLE analytics.{dataset_name} AS SELECT * FROM {relation_name}"
             )

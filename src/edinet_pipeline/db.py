@@ -115,6 +115,29 @@ class PipelineRepository:
                 (edinet_code, company_name),
             )
 
+    def update_industries(self, mapping: list[tuple[str, str]]) -> int:
+        """companies.industry を一括 UPDATE する.
+
+        EDINET API レスポンスには業種フィールドが無いため、本メソッドは
+        `industry_master` から取り込んだ (edinet_code, industry) ペア群を
+        UPDATE する単一の経路となる。VALUES 句で一括処理することで
+        4,000+ 行の更新も 1 SQL で完結させる。
+        """
+        if not mapping:
+            return 0
+        with self.connection.cursor() as cursor:
+            execute_values(
+                cursor,
+                """
+                UPDATE companies AS c
+                   SET industry = data.industry
+                  FROM (VALUES %s) AS data(edinet_code, industry)
+                 WHERE c.edinet_code = data.edinet_code
+                """,
+                mapping,
+            )
+            return cursor.rowcount
+
     def upsert_document(self, document: DocumentRecord) -> None:
         """書類メタデータを INSERT or UPDATE.
 
@@ -465,6 +488,7 @@ class PipelineRepository:
                 SELECT
                     edinet_code,
                     company_name,
+                    industry,
                     fiscal_year,
                     doc_id,
                     submitted_date,

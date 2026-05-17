@@ -8,6 +8,7 @@ from datetime import datetime
 
 from edinet_pipeline.analytics import export_analytics
 from edinet_pipeline.config import Settings
+from edinet_pipeline.industry_master import update_industries
 from edinet_pipeline.jobs import backfill_documents, fetch_documents_for_date, process_documents
 from edinet_pipeline.logging_utils import configure_logging
 
@@ -79,6 +80,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output format to refresh",
     )
 
+    # --- update-industries: EDINETコード集約一覧から業種を取り込む ---
+    update_industries_parser = subparsers.add_parser(
+        "update-industries",
+        help="Update companies.industry from EDINETコード集約一覧 (Edinetcode.zip)",
+    )
+    source_group = update_industries_parser.add_mutually_exclusive_group(required=True)
+    source_group.add_argument(
+        "--source-url",
+        type=str,
+        default=None,
+        help="URL of Edinetcode ZIP (公式集約一覧)",
+    )
+    source_group.add_argument(
+        "--source-file",
+        type=str,
+        default=None,
+        help="Path to a pre-downloaded Edinetcode ZIP",
+    )
+
     # --- dashboard: 分析ダッシュボードの起動 ---
     dashboard_parser = subparsers.add_parser(
         "dashboard",
@@ -144,6 +164,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "export-analytics":
         export_analytics(settings, args.format)
+        return 0
+
+    if args.command == "update-industries":
+        source = args.source_url or args.source_file
+        summary = update_industries(settings, source=source)
+        print(
+            f"industries_updated: fetched={summary['fetched_rows']}, "
+            f"industry_filled_total={summary['industry_filled_total']}"
+        )
         return 0
 
     parser.error(f"Unsupported command: {args.command}")
