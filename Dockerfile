@@ -12,6 +12,6 @@ COPY src ./src
 
 # editable install: src/ への編集が再ビルド無しで反映される
 # (compose.yml で `.:/app` が mount されている前提)
-RUN pip install --upgrade pip && pip install -e .[dev]
+RUN pip install --upgrade pip && pip install -e .[dev,viz]
 
 CMD ["bash"]
