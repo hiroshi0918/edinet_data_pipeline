@@ -14,6 +14,8 @@ from edinet_pipeline.dashboard.components.filters import (
 from edinet_pipeline.dashboard.constants import (
     HC_METRIC_LABELS,
     HC_TREND_LABEL_MAP,
+    RATIO_DISPLAY_MAX,
+    RATIO_DISPLAY_MIN,
     SCOPE_LABELS,
     WORKER_TYPE_LABELS,
 )
@@ -21,6 +23,9 @@ from edinet_pipeline.dashboard.data import (
     query_hc_distribution,
     query_hc_scatter,
     query_hc_trends,
+    query_male_childcare_aggregation_anomalies,
+    query_male_childcare_outliers,
+    query_male_childcare_zero_summary,
 )
 
 
@@ -40,6 +45,7 @@ def render(conn: duckdb.DuckDBPyConnection) -> None:
     dist_df = _render_distribution(conn, year_min, year_max, scope, worker_type)
     _render_trends(conn, year_min, year_max, scope, worker_type)
     _render_scatter(conn, year_min, year_max, scope, worker_type)
+    _render_male_childcare_notes(conn)
 
     if not dist_df.empty:
         st.subheader("詳細データ")
@@ -72,18 +78,30 @@ def _render_distribution(
         st.info(f"{label}のデータがありません ({year}年度・選択次元)")
         return dist_df
 
+    is_male_cc = metric == "male_childcare_leave_ratio"
+    if is_male_cc:
+        st.caption(
+            f"**注:** {label}は 0-100% を超える値（最大 200%）が EDINET 原本に含まれます。"
+            "下のグラフは Y/X 軸を 0-100% にクリップして表示しています。"
+            "100% 超の社・0% の社の一覧はページ下部のエキスパンダで確認できます。"
+        )
+
     tab_hist, tab_box = st.tabs(["ヒストグラム", "箱ひげ図"])
     with tab_hist:
         fig = px.histogram(
             dist_df, x=metric, nbins=20,
             labels={metric: label}, title=f"{label} 分布 ({year}年度)",
         )
+        if is_male_cc:
+            fig.update_xaxes(range=[RATIO_DISPLAY_MIN, RATIO_DISPLAY_MAX])
         st.plotly_chart(fig, use_container_width=True)
     with tab_box:
         fig = px.box(
             dist_df, y=metric, points="all",
             labels={metric: label}, title=f"{label} 箱ひげ図 ({year}年度)",
         )
+        if is_male_cc:
+            fig.update_yaxes(range=[RATIO_DISPLAY_MIN, RATIO_DISPLAY_MAX])
         st.plotly_chart(fig, use_container_width=True)
     return dist_df
 
@@ -145,4 +163,62 @@ def _render_scatter(
         },
         title=f"女性管理職比率 vs 男性育休取得率 ({year}年度)",
     )
+    fig.update_yaxes(range=[RATIO_DISPLAY_MIN, RATIO_DISPLAY_MAX])
+    fig.update_xaxes(range=[RATIO_DISPLAY_MIN, RATIO_DISPLAY_MAX])
     st.plotly_chart(fig, use_container_width=True)
+
+
+def _render_expander_table(
+    title: str, caption: str, df: pd.DataFrame, empty_msg: str
+) -> None:
+    """件数つきタイトルの expander に caption と DataFrame (空時は info) を並べる."""
+    with st.expander(title, expanded=False):
+        st.caption(caption)
+        if df.empty:
+            st.info(empty_msg)
+        else:
+            st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+def _render_male_childcare_notes(conn: duckdb.DuckDBPyConnection) -> None:
+    """男性育休取得率の外れ値・0% 報告を別カードで注記表示する."""
+    st.subheader("男性育休取得率に関する補足")
+
+    outliers_df = query_male_childcare_outliers(conn)
+    zero_df = query_male_childcare_zero_summary(conn)
+    anomaly_df = query_male_childcare_aggregation_anomalies(conn)
+
+    _render_expander_table(
+        title=f"100% を超えて報告された企業（{len(outliers_df)} 件・要確認）",
+        caption=(
+            "EDINET 正本の値をそのまま表示しています。100% 超は前年度発生分の翌年度取得など"
+            "制度的にあり得るケースもありますが、200% などの極端な値は集計ミスの可能性があります。"
+            "doc_id を EDINET 検索で参照すると原本を確認できます。"
+        ),
+        df=outliers_df,
+        empty_msg="100% を超える値はありません",
+    )
+    _render_expander_table(
+        title="0% を報告した企業（年度別カウント・参考）",
+        caption=(
+            "0% は EDINET に `0.000` として明示報告された値であり、欠損値の補完ではありません。"
+            "2023年4月の育介法改正で取得率の公表義務化に伴い、対象男性ゼロでも 0.000 と"
+            "記載する運用が広まっているため、解釈には注意が必要です。"
+        ),
+        df=zero_df,
+        empty_msg="0% 報告のレコードはありません",
+    )
+    _render_expander_table(
+        title=(
+            f"集計時に外れ値を含んでいた書類（中央値採用後の検証用・{len(anomaly_df)} 件）"
+        ),
+        caption=(
+            "同一書類内で連結子会社などの複数値が並列で報告された書類のうち、"
+            "**最大値が中央値から大きく乖離している** ものを表示しています。"
+            "extractor は外れ値の影響を抑えるため中央値を採用していますが、"
+            "原本では特定の子会社が極端な値（例: 200%）を報告している可能性があり、"
+            "doc_id を EDINET で参照すると元の値を確認できます。"
+        ),
+        df=anomaly_df,
+        empty_msg="該当書類はありません",
+    )

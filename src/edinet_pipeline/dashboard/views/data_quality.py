@@ -36,6 +36,10 @@ def _render_coverage(
     year = st.number_input(
         "年度", min_value=year_min, max_value=year_max, value=year_max, key="dq_coverage_year"
     )
+    st.caption(
+        "1行=1企業、1列=1指標。**緑=値あり / 赤=欠損**。"
+        "セルにマウスを乗せると企業名・指標名・値の有無が表示されます。"
+    )
     cov_df = query_coverage_matrix(conn, year)
     if cov_df.empty:
         st.info(f"データがありません ({year}年度)")
@@ -47,8 +51,15 @@ def _render_coverage(
         heat_data,
         color_continuous_scale=["#e74c3c", "#2ecc71"],
         aspect="auto",
-        labels={"color": "有無"},
+        labels={"color": "値あり=1 / 欠損=0", "x": "指標", "y": "企業"},
         title=f"指標カバレッジ ({year}年度)",
+    )
+    fig.update_coloraxes(
+        cmin=0, cmax=1,
+        colorbar=dict(tickvals=[0, 1], ticktext=["欠損", "あり"]),
+    )
+    fig.update_traces(
+        hovertemplate="企業: %{y}<br>指標: %{x}<br>状態: %{z}<extra></extra>"
     )
     fig.update_layout(height=max(400, len(cov_df) * 25))
     st.plotly_chart(fig, use_container_width=True)
@@ -66,6 +77,10 @@ def _render_coverage(
 def _render_completeness(conn: duckdb.DuckDBPyConnection) -> None:
     """年度別指標充足率の推移."""
     st.subheader("年度別 指標充足率")
+    st.caption(
+        "**充足率 = その年度に当該指標を 1 件以上報告した企業の割合（全企業中）**。"
+        "100% に近いほど開示企業が多い指標であることを意味します。"
+    )
     comp_df = query_completeness_over_time(conn)
     if comp_df.empty:
         st.info("充足率データがありません")
@@ -91,6 +106,13 @@ def _render_completeness(conn: duckdb.DuckDBPyConnection) -> None:
 def _render_evidence(conn: duckdb.DuckDBPyConnection) -> None:
     """抽出方法分布."""
     st.subheader("抽出方法の分布")
+    st.caption(
+        "各指標がどの方法で抽出されたかの内訳。"
+        "**element_id_match**（XBRL要素IDで一致 / 最も信頼性高）→ "
+        "**item_name_match**（項目名で一致）→ "
+        "**text_fallback**（テキストブロックから正規表現抽出）→ "
+        "**llm_fallback**（LLM で抽出）の順に信頼性が下がります。"
+    )
     evidence_df = query_evidence_summary(conn)
     if evidence_df.empty:
         st.info("抽出根拠データがありません")

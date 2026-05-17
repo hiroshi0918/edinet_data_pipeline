@@ -11,12 +11,19 @@ import streamlit as st
 
 from edinet_pipeline.config import DEFAULT_DUCKDB_PATH
 from edinet_pipeline.dashboard.data import get_connection
-from edinet_pipeline.dashboard.pages import data_quality, financial, human_capital, overview
+from edinet_pipeline.dashboard.views import (
+    company_spotlight,
+    data_quality,
+    financial,
+    human_capital,
+    overview,
+)
 
 _PAGES: dict[str, Callable[[duckdb.DuckDBPyConnection], None]] = {
     "概要": overview.render,
     "財務指標": financial.render,
     "人的資本指標": human_capital.render,
+    "企業スポットライト": company_spotlight.render,
     "データ品質": data_quality.render,
 }
 

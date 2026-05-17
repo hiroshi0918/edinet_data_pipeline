@@ -72,3 +72,16 @@ WORKER_TYPE_LABELS: dict[str, str] = {
 # デフォルト次元 (サイドバー初期値・analytics 既定行を表示)
 DEFAULT_SCOPE = "reporting_company"
 DEFAULT_WORKER_TYPE = "all"
+
+# Company Spotlight: 「理想クラスタ」の閾値定義
+# 3 つの HC 指標すべてが業界の上位四分位 (P75) 以上、
+# かつ営業利益率が業界の中央値 (P50) 以上の企業群を「理想クラスタ」と定義する。
+IDEAL_CLUSTER_THRESHOLDS = {
+    "hc_percentile": 75,
+    "operating_margin_percentile": 50,
+}
+
+# 男性育休取得率の表示クリップ範囲 (%)
+# EDINET 正本は 100% 超 (集計ミス疑い) を含むが、グラフは 0-100% にクリップする。
+RATIO_DISPLAY_MIN = 0
+RATIO_DISPLAY_MAX = 100
