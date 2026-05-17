@@ -64,7 +64,7 @@ def query_available_companies(_conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
         f"""
         SELECT DISTINCT edinet_code, company_name
         FROM {_T}
-        ORDER BY company_name
+        ORDER BY UPPER(company_name)
         """
     ).fetchdf()
 
@@ -152,7 +152,7 @@ def query_financial_trends(
         WHERE edinet_code IN ({placeholders})
           AND fiscal_year BETWEEN ? AND ?
           AND scope = ? AND worker_type = ?
-        ORDER BY fiscal_year, company_name
+        ORDER BY fiscal_year, UPPER(company_name)
         """,
         [*edinet_codes, year_min, year_max, DEFAULT_SCOPE, DEFAULT_WORKER_TYPE],
     ).fetchdf()
@@ -315,7 +315,7 @@ def query_coverage_matrix(
         f"  CASE WHEN gender_wage_gap IS NOT NULL THEN 1 ELSE 0 END AS gender_wage_gap "
         f"FROM {_T} "
         f"WHERE fiscal_year = ? AND scope = ? AND worker_type = ? "
-        f"ORDER BY company_name",
+        f"ORDER BY UPPER(company_name)",
         [fiscal_year, scope, worker_type],
     ).fetchdf()
 
@@ -374,7 +374,7 @@ def query_male_childcare_outliers(_conn: duckdb.DuckDBPyConnection) -> pd.DataFr
                male_childcare_leave_ratio, doc_id, submitted_date, source_name
         FROM {_T}
         WHERE male_childcare_leave_ratio > 100
-        ORDER BY male_childcare_leave_ratio DESC, company_name
+        ORDER BY male_childcare_leave_ratio DESC, UPPER(company_name)
         """
     ).fetchdf()
 
@@ -426,7 +426,7 @@ def query_male_childcare_aggregation_anomalies(
           FROM ratios
          GROUP BY doc_id, company_name, fiscal_year, scope, worker_type
         HAVING COUNT(*) >= 2 AND (MAX(r) - MEDIAN(r)) >= 0.5
-         ORDER BY (MAX(r) - MEDIAN(r)) DESC, company_name
+         ORDER BY (MAX(r) - MEDIAN(r)) DESC, UPPER(company_name)
         """
     ).fetchdf()
 
@@ -633,7 +633,7 @@ def search_company_by_name(
         SELECT DISTINCT edinet_code, company_name, industry
           FROM {_T}
          WHERE company_name ILIKE ?
-         ORDER BY company_name
+         ORDER BY UPPER(company_name)
          LIMIT ?
         """,
         [pattern, limit],

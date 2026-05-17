@@ -230,7 +230,7 @@ def _render_peer_violin(
                 showlegend=False,
             )
             if metric == "male_childcare_leave_ratio":
-                fig.update_yaxes(range=[_RATIO_DISPLAY_MIN, _RATIO_DISPLAY_MAX])
+                fig.update_yaxes(range=[RATIO_DISPLAY_MIN, RATIO_DISPLAY_MAX])
             st.plotly_chart(fig, use_container_width=True)
 
 
