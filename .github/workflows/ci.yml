@@ -14,16 +14,20 @@ jobs:
         env:
           POSTGRES_USER: user
           POSTGRES_PASSWORD: password
-          POSTGRES_DB: edinet_db
+          POSTGRES_DB: edinet_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U user -d edinet_db"
+          --health-cmd "pg_isready -U user -d edinet_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
     env:
-      DATABASE_URL: postgresql://user:password@localhost:5432/edinet_db
+      # conftest.py の二重ガード (TEST_DATABASE_URL + DB 名に "test" を含むこと) に
+      # 合わせて、CI でも専用 test DB を使う。DATABASE_URL は alembic/env.py が
+      # 参照するため同じ URL を渡す。
+      DATABASE_URL: postgresql://user:password@localhost:5432/edinet_test
+      TEST_DATABASE_URL: postgresql://user:password@localhost:5432/edinet_test
       EDINET_API_KEY: dummy-edinet-key
       PROCESS_SLEEP_SECONDS: 0
     steps:
