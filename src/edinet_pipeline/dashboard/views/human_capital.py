@@ -1,4 +1,8 @@
-"""人的資本指標ページ — 分布・推移・散布図 (scope/worker_type 次元切替対応)."""
+"""人的資本指標ページ — 分布・推移・散布図 + 業種比較・改善率・規模別 (v0.4).
+
+v0.4 改修: 業種×指標ヒートマップ、改善率ランキング、規模別クロス集計を追加。
+既存の分布・推移・散布図・男性育休外れ値カードは維持。
+"""
 
 from __future__ import annotations
 
@@ -16,6 +20,7 @@ from edinet_pipeline.dashboard.constants import (
     HC_TREND_LABEL_MAP,
     RATIO_DISPLAY_MAX,
     RATIO_DISPLAY_MIN,
+    SALES_TIER_ORDER,
     SCOPE_LABELS,
     WORKER_TYPE_LABELS,
 )
@@ -23,9 +28,12 @@ from edinet_pipeline.dashboard.data import (
     query_hc_distribution,
     query_hc_scatter,
     query_hc_trends,
+    query_improvement_rate_ranking,
+    query_industry_metric_summary,
     query_male_childcare_aggregation_anomalies,
     query_male_childcare_outliers,
     query_male_childcare_zero_summary,
+    query_size_tier_metric_summary,
 )
 
 
@@ -42,6 +50,10 @@ def render(conn: duckdb.DuckDBPyConnection) -> None:
         f"表示中の次元: **{SCOPE_LABELS[scope]} × {WORKER_TYPE_LABELS[worker_type]}**"
     )
 
+    _render_industry_heatmap(conn, year_max, scope, worker_type)
+    _render_improvement_ranking(conn, year_max, scope, worker_type)
+    _render_size_tier_cross(conn, year_max, scope, worker_type)
+
     dist_df = _render_distribution(conn, year_min, year_max, scope, worker_type)
     _render_trends(conn, year_min, year_max, scope, worker_type)
     _render_scatter(conn, year_min, year_max, scope, worker_type)
@@ -50,6 +62,142 @@ def render(conn: duckdb.DuckDBPyConnection) -> None:
     if not dist_df.empty:
         st.subheader("詳細データ")
         st.dataframe(dist_df, use_container_width=True, hide_index=True)
+
+
+def _render_industry_heatmap(
+    conn: duckdb.DuckDBPyConnection,
+    year_max: int,
+    scope: str,
+    worker_type: str,
+) -> None:
+    """業種×3 HC指標 のヒートマップ（中央値）."""
+    st.subheader("業種別 人的資本指標ヒートマップ")
+    st.caption(
+        f"{year_max}年度の業種別中央値。色が濃い業種ほどその指標が高い水準にあります。"
+        "ホバーで件数を確認できます。"
+    )
+
+    rows = []
+    for metric_col, metric_label in HC_METRIC_LABELS.items():
+        df = query_industry_metric_summary(
+            conn, metric_col, year_max, scope=scope, worker_type=worker_type, min_companies=5
+        )
+        if df.empty:
+            continue
+        df = df.copy()
+        df["metric_label"] = metric_label
+        rows.append(df[["industry", "metric_label", "median_value", "n"]])
+    if not rows:
+        st.info("業種別データが不足しています")
+        return
+    merged = pd.concat(rows, ignore_index=True)
+
+    industries_top15 = (
+        merged.groupby("industry")["n"].sum().sort_values(ascending=False).head(15).index.tolist()
+    )
+    pivot_median = merged[merged["industry"].isin(industries_top15)].pivot_table(
+        index="industry", columns="metric_label", values="median_value"
+    ).reindex(industries_top15)
+    pivot_n = merged[merged["industry"].isin(industries_top15)].pivot_table(
+        index="industry", columns="metric_label", values="n"
+    ).reindex(industries_top15)
+
+    fig = px.imshow(
+        pivot_median,
+        text_auto=".1f",
+        aspect="auto",
+        color_continuous_scale="Tealgrn",
+        labels={"color": "中央値 (%)", "x": "指標", "y": "業種"},
+        title=f"業種×指標 中央値ヒートマップ（{year_max}年度・TOP15業種）",
+    )
+    customdata = pivot_n.values
+    fig.update_traces(
+        customdata=customdata,
+        hovertemplate="業種: %{y}<br>指標: %{x}<br>中央値: %{z:.1f}%<br>件数: %{customdata}<extra></extra>",
+    )
+    fig.update_layout(height=500, margin=dict(l=0, r=0, t=40, b=0))
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def _render_improvement_ranking(
+    conn: duckdb.DuckDBPyConnection,
+    year_max: int,
+    scope: str,
+    worker_type: str,
+) -> None:
+    """前年比改善率ランキング."""
+    st.subheader("前年比 改善率ランキング TOP10")
+    metric = st.selectbox(
+        "改善を見たい指標",
+        options=list(HC_METRIC_LABELS.keys()),
+        format_func=lambda m: HC_METRIC_LABELS[m],
+        key="hc_improvement_metric",
+    )
+    df = query_improvement_rate_ranking(
+        conn, metric, year_max, top_n=10, scope=scope, worker_type=worker_type
+    )
+    if df.empty:
+        st.info(f"前年比のデータがありません（{year_max - 1}年度との比較）")
+        return
+    display_df = df.rename(
+        columns={
+            "company_name": "企業名",
+            "industry": "業種",
+            "value_from": f"{year_max - 1}年度",
+            "value_to": f"{year_max}年度",
+            "delta": "前年比 (pt)",
+        }
+    )[["企業名", "業種", f"{year_max - 1}年度", f"{year_max}年度", "前年比 (pt)"]]
+    st.dataframe(
+        display_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            f"{year_max - 1}年度": st.column_config.NumberColumn(format="%.1f %%"),
+            f"{year_max}年度": st.column_config.NumberColumn(format="%.1f %%"),
+            "前年比 (pt)": st.column_config.NumberColumn(format="%+.1f pt"),
+        },
+    )
+
+
+def _render_size_tier_cross(
+    conn: duckdb.DuckDBPyConnection,
+    year_max: int,
+    scope: str,
+    worker_type: str,
+) -> None:
+    """売上階層×3 HC指標 のクロス集計テーブル."""
+    st.subheader("売上規模 × 人的資本指標")
+    st.caption(
+        "売上階層ごとの 3 HC 指標中央値。規模パラドックス（大企業ほど女性管理職比率が低い）を"
+        "数値で確認できます。"
+    )
+    rows = []
+    for metric_col, metric_label in HC_METRIC_LABELS.items():
+        df = query_size_tier_metric_summary(
+            conn, metric_col, year_max, scope=scope, worker_type=worker_type
+        )
+        if df.empty:
+            continue
+        df = df.copy()
+        df["metric_label"] = metric_label
+        rows.append(df[["tier", "metric_label", "median_value", "n"]])
+    if not rows:
+        st.info("規模別データが不足しています")
+        return
+    merged = pd.concat(rows, ignore_index=True)
+    pivot = (
+        merged.pivot_table(index="tier", columns="metric_label", values="median_value")
+        .reindex(SALES_TIER_ORDER)
+        .dropna(how="all")
+    )
+    st.dataframe(
+        pivot,
+        use_container_width=True,
+        column_config={
+            col: st.column_config.NumberColumn(format="%.1f %%") for col in pivot.columns
+        },
+    )
 
 
 def _render_distribution(

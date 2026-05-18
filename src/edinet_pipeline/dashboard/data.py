@@ -24,6 +24,7 @@ from edinet_pipeline.dashboard.constants import (
     IDEAL_CLUSTER_THRESHOLDS,
     TABLE_COMPANY_YEAR_METRICS,
     TABLE_METRIC_EVIDENCE,
+    sales_tier_case_sql,
 )
 from edinet_pipeline.models import (
     ALLOWED_SCOPES,
@@ -164,22 +165,58 @@ def query_company_comparison(
     fiscal_year: int,
     top_n: int = 20,
     *,
+    industry_filter: tuple[str, ...] = (),
     scope: str = DEFAULT_SCOPE,
     worker_type: str = DEFAULT_WORKER_TYPE,
 ) -> pd.DataFrame:
-    """指定年度・指定指標で企業をランキングする (HC指標は scope/worker_type で次元を選択可能)."""
+    """指定年度・指定指標で企業をランキングする (業種絞り込みと scope/worker_type 対応)."""
     _validate_metric(metric, ALLOWED_ALL_METRICS)
-    return conn.execute(
-        f"""
-        SELECT edinet_code, company_name, {metric}
-        FROM {_T}
-        WHERE fiscal_year = ? AND {metric} IS NOT NULL
-          AND scope = ? AND worker_type = ?
-        ORDER BY {metric} DESC
-        LIMIT ?
-        """,
-        [fiscal_year, scope, worker_type, top_n],
-    ).fetchdf()
+    base_sql = f"""
+        SELECT edinet_code, company_name, industry, {metric}
+          FROM {_T}
+         WHERE fiscal_year = ?
+           AND {metric} IS NOT NULL
+           AND scope = ? AND worker_type = ?
+    """
+    params: list[object] = [fiscal_year, scope, worker_type]
+    if industry_filter:
+        placeholders = ", ".join(["?"] * len(industry_filter))
+        base_sql += f"   AND industry IN ({placeholders})\n"
+        params.extend(industry_filter)
+    base_sql += f" ORDER BY {metric} DESC LIMIT ?"
+    params.append(top_n)
+    return conn.execute(base_sql, params).fetchdf()
+
+
+@st.cache_data(ttl=300)
+def query_metric_overall_median(
+    _conn: duckdb.DuckDBPyConnection,
+    metric: str,
+    fiscal_year: int,
+    industry_filter: tuple[str, ...] = (),
+    scope: str = DEFAULT_SCOPE,
+    worker_type: str = DEFAULT_WORKER_TYPE,
+) -> float | None:
+    """指定指標の全体中央値（業種フィルタ反映）を返す.
+
+    財務指標ページのランキングで「業種中央値ライン」を重ねるために使う。
+    フィルタが空なら全体中央値、業種フィルタが指定されればその業種範囲の中央値。
+    """
+    _validate_metric(metric, ALLOWED_ALL_METRICS)
+    base_sql = f"""
+        SELECT MEDIAN({metric}) AS median_value
+          FROM {_T}
+         WHERE fiscal_year = ?
+           AND {metric} IS NOT NULL
+           AND scope = ? AND worker_type = ?
+    """
+    params: list[object] = [fiscal_year, scope, worker_type]
+    if industry_filter:
+        placeholders = ", ".join(["?"] * len(industry_filter))
+        base_sql += f"   AND industry IN ({placeholders})\n"
+        params.extend(industry_filter)
+    row = _conn.execute(base_sql, params).fetchone()
+    return float(row[0]) if row and row[0] is not None else None
 
 
 @st.cache_data(ttl=300)
@@ -638,3 +675,646 @@ def search_company_by_name(
         """,
         [pattern, limit],
     ).fetchdf()
+
+
+# ====================================================================== #
+#  v0.4 改修: ダッシュボードを「データを並べる」から「発見を提示する」へ
+#  概要ハイライト、業種・規模比較、改善率、充足率診断、プリセット選択
+# ====================================================================== #
+
+
+@st.cache_data(ttl=300)
+def query_available_industries(_conn: duckdb.DuckDBPyConnection) -> list[str]:
+    """業種一覧を企業数の多い順で返す（フィルタ用）.
+
+    NULL を除外し、デフォルト次元 (reporting_company, all) に絞ることで業種を
+    重複なくカウントする。企業数が多い業種ほど選択候補として上位に並ぶ。
+    """
+    df = _conn.execute(
+        f"""
+        SELECT industry, COUNT(DISTINCT edinet_code) AS n
+          FROM {_T}
+         WHERE industry IS NOT NULL
+           AND scope = ? AND worker_type = ?
+         GROUP BY industry
+         ORDER BY n DESC, industry
+        """,
+        [DEFAULT_SCOPE, DEFAULT_WORKER_TYPE],
+    ).fetchdf()
+    return df["industry"].tolist()
+
+
+@st.cache_data(ttl=300)
+def query_overview_highlights(_conn: duckdb.DuckDBPyConnection) -> dict:
+    """概要ページの「データストーリー」3カード用集計を一括取得する.
+
+    3 つの観点でデータの強い特徴を引き出す:
+      1. 業種格差: 最新年度の女性管理職比率の業種別中央値（最高 vs 最低）
+      2. 急速な改善: 男性育休取得率の年度推移（前年比の改善幅）
+      3. 規模パラドックス: 売上階層別の女性管理職比率の中央値（規模↑で値↓）
+    """
+    industry_gap = _conn.execute(
+        f"""
+        SELECT industry,
+               MEDIAN(female_manager_ratio) AS median_value,
+               COUNT(*) AS n
+          FROM {_T}
+         WHERE fiscal_year = (SELECT MAX(fiscal_year) FROM {_T})
+           AND scope = ? AND worker_type = ?
+           AND female_manager_ratio IS NOT NULL
+           AND industry IS NOT NULL
+         GROUP BY industry
+        HAVING COUNT(*) >= 5
+         ORDER BY median_value DESC
+        """,
+        [DEFAULT_SCOPE, DEFAULT_WORKER_TYPE],
+    ).fetchdf()
+
+    improvement = _conn.execute(
+        f"""
+        SELECT fiscal_year,
+               MEDIAN(male_childcare_leave_ratio) AS median_value,
+               AVG(male_childcare_leave_ratio)    AS avg_value,
+               COUNT(male_childcare_leave_ratio)  AS n
+          FROM {_T}
+         WHERE scope = ? AND worker_type = ?
+           AND male_childcare_leave_ratio IS NOT NULL
+           AND male_childcare_leave_ratio <= 100
+         GROUP BY fiscal_year
+         ORDER BY fiscal_year
+        """,
+        [DEFAULT_SCOPE, DEFAULT_WORKER_TYPE],
+    ).fetchdf()
+
+    size_paradox = _conn.execute(
+        f"""
+        SELECT {sales_tier_case_sql('sales')} AS tier,
+               MEDIAN(female_manager_ratio) AS median_value,
+               AVG(female_manager_ratio) AS avg_value,
+               COUNT(*) AS n
+          FROM {_T}
+         WHERE fiscal_year = (SELECT MAX(fiscal_year) FROM {_T})
+           AND scope = ? AND worker_type = ?
+           AND female_manager_ratio IS NOT NULL
+           AND sales IS NOT NULL
+         GROUP BY tier
+        """,
+        [DEFAULT_SCOPE, DEFAULT_WORKER_TYPE],
+    ).fetchdf()
+
+    return {
+        "industry_gap": industry_gap,
+        "improvement": improvement,
+        "size_paradox": size_paradox,
+    }
+
+
+@st.cache_data(ttl=300)
+def query_industry_metric_summary(
+    _conn: duckdb.DuckDBPyConnection,
+    metric: str,
+    fiscal_year: int,
+    scope: str = DEFAULT_SCOPE,
+    worker_type: str = DEFAULT_WORKER_TYPE,
+    min_companies: int = 3,
+) -> pd.DataFrame:
+    """業種×指標の中央値・平均・件数を返す.
+
+    指標名は動的に列名として埋め込むため許可リスト検証を行う。min_companies で
+    集計対象とする業種の最小企業数を指定（少なすぎる業種を除外して安定化）。
+    """
+    _validate_metric(metric, ALLOWED_ALL_METRICS)
+    return _conn.execute(
+        f"""
+        SELECT industry,
+               MEDIAN({metric}) AS median_value,
+               AVG({metric}) AS avg_value,
+               COUNT(*) AS n
+          FROM {_T}
+         WHERE fiscal_year = ?
+           AND scope = ? AND worker_type = ?
+           AND {metric} IS NOT NULL
+           AND industry IS NOT NULL
+         GROUP BY industry
+        HAVING COUNT(*) >= ?
+         ORDER BY median_value DESC NULLS LAST
+        """,
+        [fiscal_year, scope, worker_type, min_companies],
+    ).fetchdf()
+
+
+@st.cache_data(ttl=300)
+def query_size_tier_metric_summary(
+    _conn: duckdb.DuckDBPyConnection,
+    metric: str,
+    fiscal_year: int,
+    scope: str = DEFAULT_SCOPE,
+    worker_type: str = DEFAULT_WORKER_TYPE,
+) -> pd.DataFrame:
+    """売上階層×指標の中央値・平均・件数を返す（規模パラドックス可視化用）."""
+    _validate_metric(metric, ALLOWED_ALL_METRICS)
+    return _conn.execute(
+        f"""
+        SELECT {sales_tier_case_sql('sales')} AS tier,
+               MEDIAN({metric}) AS median_value,
+               AVG({metric}) AS avg_value,
+               COUNT(*) AS n
+          FROM {_T}
+         WHERE fiscal_year = ?
+           AND scope = ? AND worker_type = ?
+           AND {metric} IS NOT NULL
+           AND sales IS NOT NULL
+         GROUP BY tier
+        """,
+        [fiscal_year, scope, worker_type],
+    ).fetchdf()
+
+
+# 百分率系メトリクス（0〜100% に常識的範囲を制限すべきもの）
+# 男性育休取得率は EDINET 原本に 200% 等の極端値が含まれるため、改善率ランキングでは除外する。
+_HC_PERCENT_METRICS: set[str] = {
+    "female_manager_ratio",
+    "male_childcare_leave_ratio",
+    "gender_wage_gap",
+}
+
+
+@st.cache_data(ttl=300)
+def query_improvement_rate_ranking(
+    _conn: duckdb.DuckDBPyConnection,
+    metric: str,
+    year_to: int,
+    top_n: int = 10,
+    scope: str = DEFAULT_SCOPE,
+    worker_type: str = DEFAULT_WORKER_TYPE,
+) -> pd.DataFrame:
+    """前年比で最も改善した企業 TOP N を返す（差分 delta = year_to - year_to-1）.
+
+    改善 = 値が上昇した方向。男女賃金格差のように「下がってほしい」指標もあるが
+    ダッシュボード側で表現を反転する想定。ここでは純粋な delta で返す。
+
+    HC 百分率系指標は 100% 超を含めるとランキングが外れ値レースになるため、
+    SQL レベルで 0〜100% の範囲に絞り込む。財務指標は範囲が広いためフィルタしない。
+    """
+    _validate_metric(metric, ALLOWED_ALL_METRICS)
+    extra_filter = ""
+    if metric in _HC_PERCENT_METRICS:
+        extra_filter = f"           AND {metric} BETWEEN 0 AND 100\n"
+    return _conn.execute(
+        f"""
+        WITH curr AS (
+            SELECT edinet_code, company_name, industry, {metric} AS value_to
+              FROM {_T}
+             WHERE fiscal_year = ?
+               AND scope = ? AND worker_type = ?
+               AND {metric} IS NOT NULL
+{extra_filter}        ),
+        prev AS (
+            SELECT edinet_code, {metric} AS value_from
+              FROM {_T}
+             WHERE fiscal_year = ? - 1
+               AND scope = ? AND worker_type = ?
+               AND {metric} IS NOT NULL
+{extra_filter}        )
+        SELECT c.edinet_code, c.company_name, c.industry,
+               p.value_from, c.value_to,
+               (c.value_to - p.value_from) AS delta
+          FROM curr c
+          JOIN prev p USING (edinet_code)
+         ORDER BY delta DESC NULLS LAST
+         LIMIT ?
+        """,
+        [year_to, scope, worker_type, year_to, scope, worker_type, top_n],
+    ).fetchdf()
+
+
+@st.cache_data(ttl=300)
+def query_overall_completeness_kpi(
+    _conn: duckdb.DuckDBPyConnection,
+    fiscal_year: int,
+    scope: str = DEFAULT_SCOPE,
+    worker_type: str = DEFAULT_WORKER_TYPE,
+) -> dict:
+    """データ品質ページの KPI（全体充足率の状況）を返す.
+
+    full_pct = 7 指標すべてを揃えた企業の割合
+    avg_completeness_pct = 各企業の充足率（7 指標中いくつ報告したか）の平均
+    """
+    row = _conn.execute(
+        f"""
+        SELECT
+            COUNT(DISTINCT edinet_code) AS total_companies,
+            COUNT(DISTINCT CASE
+                WHEN sales IS NOT NULL
+                  AND operating_profit IS NOT NULL
+                  AND net_profit IS NOT NULL
+                  AND employee_count IS NOT NULL
+                  AND female_manager_ratio IS NOT NULL
+                  AND male_childcare_leave_ratio IS NOT NULL
+                  AND gender_wage_gap IS NOT NULL
+                THEN edinet_code END) AS full_companies,
+            AVG(
+                (CASE WHEN sales IS NOT NULL THEN 1 ELSE 0 END
+               + CASE WHEN operating_profit IS NOT NULL THEN 1 ELSE 0 END
+               + CASE WHEN net_profit IS NOT NULL THEN 1 ELSE 0 END
+               + CASE WHEN employee_count IS NOT NULL THEN 1 ELSE 0 END
+               + CASE WHEN female_manager_ratio IS NOT NULL THEN 1 ELSE 0 END
+               + CASE WHEN male_childcare_leave_ratio IS NOT NULL THEN 1 ELSE 0 END
+               + CASE WHEN gender_wage_gap IS NOT NULL THEN 1 ELSE 0 END
+                ) * 100.0 / 7
+            ) AS avg_completeness_pct
+          FROM {_T}
+         WHERE fiscal_year = ?
+           AND scope = ? AND worker_type = ?
+        """,
+        [fiscal_year, scope, worker_type],
+    ).fetchone()
+    total = row[0] or 0
+    full = row[1] or 0
+    return {
+        "total_companies": total,
+        "full_companies": full,
+        "full_pct": (full / total * 100.0) if total else 0.0,
+        "avg_completeness_pct": float(row[2] or 0),
+    }
+
+
+@st.cache_data(ttl=300)
+def query_industry_completeness(
+    _conn: duckdb.DuckDBPyConnection,
+    fiscal_year: int,
+    scope: str = DEFAULT_SCOPE,
+    worker_type: str = DEFAULT_WORKER_TYPE,
+    min_companies: int = 3,
+) -> pd.DataFrame:
+    """業種別の各指標充足率を返す.
+
+    overall_pct = 7 指標を平均した「業種としての開示充足度」。最終ソート軸に
+    使う。HC 3 指標だけ抽出した hc_pct も併せて返す（人的資本に絞った比較用）。
+    """
+    return _conn.execute(
+        f"""
+        SELECT industry,
+               COUNT(*) AS n_companies,
+               COUNT(sales) * 100.0 / COUNT(*) AS sales_pct,
+               COUNT(operating_profit) * 100.0 / COUNT(*) AS operating_profit_pct,
+               COUNT(net_profit) * 100.0 / COUNT(*) AS net_profit_pct,
+               COUNT(employee_count) * 100.0 / COUNT(*) AS employee_count_pct,
+               COUNT(female_manager_ratio) * 100.0 / COUNT(*) AS female_manager_ratio_pct,
+               COUNT(male_childcare_leave_ratio) * 100.0 / COUNT(*)
+                   AS male_childcare_leave_ratio_pct,
+               COUNT(gender_wage_gap) * 100.0 / COUNT(*) AS gender_wage_gap_pct,
+               (COUNT(sales) + COUNT(operating_profit) + COUNT(net_profit)
+                + COUNT(employee_count) + COUNT(female_manager_ratio)
+                + COUNT(male_childcare_leave_ratio) + COUNT(gender_wage_gap))
+                * 100.0 / (COUNT(*) * 7) AS overall_pct,
+               (COUNT(female_manager_ratio) + COUNT(male_childcare_leave_ratio)
+                + COUNT(gender_wage_gap)) * 100.0 / (COUNT(*) * 3) AS hc_pct
+          FROM {_T}
+         WHERE fiscal_year = ?
+           AND scope = ? AND worker_type = ?
+           AND industry IS NOT NULL
+         GROUP BY industry
+        HAVING COUNT(*) >= ?
+         ORDER BY overall_pct DESC
+        """,
+        [fiscal_year, scope, worker_type, min_companies],
+    ).fetchdf()
+
+
+@st.cache_data(ttl=300)
+def query_size_completeness(
+    _conn: duckdb.DuckDBPyConnection,
+    fiscal_year: int,
+    scope: str = DEFAULT_SCOPE,
+    worker_type: str = DEFAULT_WORKER_TYPE,
+) -> pd.DataFrame:
+    """売上階層別の充足率を返す（大企業ほど開示が進んでいるかを診断）.
+
+    人的資本 3 指標に絞った hc_overall_pct と、財務 4 指標の充足率を返す。
+    """
+    return _conn.execute(
+        f"""
+        SELECT {sales_tier_case_sql('sales')} AS tier,
+               COUNT(*) AS n_companies,
+               COUNT(female_manager_ratio) * 100.0 / COUNT(*) AS female_manager_ratio_pct,
+               COUNT(male_childcare_leave_ratio) * 100.0 / COUNT(*)
+                   AS male_childcare_leave_ratio_pct,
+               COUNT(gender_wage_gap) * 100.0 / COUNT(*) AS gender_wage_gap_pct,
+               (COUNT(female_manager_ratio) + COUNT(male_childcare_leave_ratio)
+                + COUNT(gender_wage_gap)) * 100.0 / (COUNT(*) * 3) AS hc_overall_pct,
+               COUNT(operating_profit) * 100.0 / COUNT(*) AS operating_profit_pct,
+               COUNT(employee_count) * 100.0 / COUNT(*) AS employee_count_pct
+          FROM {_T}
+         WHERE fiscal_year = ?
+           AND scope = ? AND worker_type = ?
+           AND sales IS NOT NULL
+         GROUP BY tier
+        """,
+        [fiscal_year, scope, worker_type],
+    ).fetchdf()
+
+
+@st.cache_data(ttl=300)
+def query_unreported_top_companies(
+    _conn: duckdb.DuckDBPyConnection,
+    fiscal_year: int,
+    top_n: int = 20,
+    scope: str = DEFAULT_SCOPE,
+    worker_type: str = DEFAULT_WORKER_TYPE,
+) -> pd.DataFrame:
+    """売上 TOP のうち人的資本 3 指標のいずれかを未提出の企業を返す.
+
+    「大企業なのに開示が進んでいない」という驚きを引き出すための一覧。
+    missing_hc_count は HC 3 指標のうちいくつ未提出か（1〜3）。
+    """
+    return _conn.execute(
+        f"""
+        SELECT edinet_code, company_name, industry, sales,
+               female_manager_ratio,
+               male_childcare_leave_ratio,
+               gender_wage_gap,
+               (CASE WHEN female_manager_ratio IS NULL THEN 1 ELSE 0 END
+              + CASE WHEN male_childcare_leave_ratio IS NULL THEN 1 ELSE 0 END
+              + CASE WHEN gender_wage_gap IS NULL THEN 1 ELSE 0 END) AS missing_hc_count
+          FROM {_T}
+         WHERE fiscal_year = ?
+           AND scope = ? AND worker_type = ?
+           AND sales IS NOT NULL
+           AND (female_manager_ratio IS NULL
+                OR male_childcare_leave_ratio IS NULL
+                OR gender_wage_gap IS NULL)
+         ORDER BY sales DESC
+         LIMIT ?
+        """,
+        [fiscal_year, scope, worker_type, top_n],
+    ).fetchdf()
+
+
+@st.cache_data(ttl=300)
+def query_company_completeness(
+    _conn: duckdb.DuckDBPyConnection,
+    fiscal_year: int,
+    industry_filter: tuple[str, ...] = (),
+    scope: str = DEFAULT_SCOPE,
+    worker_type: str = DEFAULT_WORKER_TYPE,
+) -> pd.DataFrame:
+    """企業別の充足率テーブル.
+
+    industry_filter は @st.cache_data がハッシュできるよう tuple で受け取る
+    （空 tuple なら全業種）。reported_count は 7 指標中報告した数。
+    """
+    base_sql = f"""
+        SELECT edinet_code, company_name, industry, sales,
+               (CASE WHEN sales IS NOT NULL THEN 1 ELSE 0 END
+              + CASE WHEN operating_profit IS NOT NULL THEN 1 ELSE 0 END
+              + CASE WHEN net_profit IS NOT NULL THEN 1 ELSE 0 END
+              + CASE WHEN employee_count IS NOT NULL THEN 1 ELSE 0 END
+              + CASE WHEN female_manager_ratio IS NOT NULL THEN 1 ELSE 0 END
+              + CASE WHEN male_childcare_leave_ratio IS NOT NULL THEN 1 ELSE 0 END
+              + CASE WHEN gender_wage_gap IS NOT NULL THEN 1 ELSE 0 END) AS reported_count
+          FROM {_T}
+         WHERE fiscal_year = ?
+           AND scope = ? AND worker_type = ?
+    """
+    params: list[object] = [fiscal_year, scope, worker_type]
+    if industry_filter:
+        placeholders = ", ".join(["?"] * len(industry_filter))
+        base_sql += f"           AND industry IN ({placeholders})\n"
+        params.extend(industry_filter)
+    base_sql += " ORDER BY reported_count DESC, sales DESC NULLS LAST"
+    df = _conn.execute(base_sql, params).fetchdf()
+    df["completeness_pct"] = df["reported_count"] * 100.0 / 7
+    return df
+
+
+@st.cache_data(ttl=300)
+def query_default_companies_by_industry(
+    _conn: duckdb.DuckDBPyConnection,
+    fiscal_year: int,
+    top_n_industries: int = 5,
+    per_industry: int = 1,
+) -> list[str]:
+    """業種代表企業の edinet_code リストを返す（売上規模上位の業種から、各業種の売上 TOP1）.
+
+    財務指標ページのデフォルト企業選択で使う。業種ごとに 1 社ずつ売上TOP1を取り、
+    業種は売上総額の大きい順に並べた上から `top_n_industries` 業種から選ぶ。
+    """
+    df = _conn.execute(
+        f"""
+        WITH ranked AS (
+            SELECT edinet_code, company_name, industry, sales,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY industry ORDER BY sales DESC NULLS LAST
+                   ) AS rn
+              FROM {_T}
+             WHERE fiscal_year = ?
+               AND scope = ? AND worker_type = ?
+               AND sales IS NOT NULL
+               AND industry IS NOT NULL
+        ),
+        top_industries AS (
+            SELECT industry, SUM(sales) AS industry_total
+              FROM {_T}
+             WHERE fiscal_year = ?
+               AND scope = ? AND worker_type = ?
+               AND sales IS NOT NULL
+               AND industry IS NOT NULL
+             GROUP BY industry
+             ORDER BY industry_total DESC
+             LIMIT ?
+        )
+        SELECT r.edinet_code
+          FROM ranked r
+          JOIN top_industries t USING (industry)
+         WHERE r.rn <= ?
+         ORDER BY t.industry_total DESC, r.rn
+        """,
+        [
+            fiscal_year, DEFAULT_SCOPE, DEFAULT_WORKER_TYPE,
+            fiscal_year, DEFAULT_SCOPE, DEFAULT_WORKER_TYPE,
+            top_n_industries, per_industry,
+        ],
+    ).fetchdf()
+    return df["edinet_code"].tolist()
+
+
+@st.cache_data(ttl=300)
+def query_companies_by_preset(
+    _conn: duckdb.DuckDBPyConnection,
+    preset: str,
+    fiscal_year: int,
+    top_n: int = 10,
+    scope: str = DEFAULT_SCOPE,
+    worker_type: str = DEFAULT_WORKER_TYPE,
+) -> list[str]:
+    """プリセット別の企業 edinet_code リストを返す.
+
+    preset:
+      - "industry_rep": 業種代表（業種別売上TOP1を top_n 業種ぶん）
+      - "sales_top10": 売上 TOP top_n
+      - "operating_margin_top10": 営業利益率 TOP top_n
+      - "growth_top10": 売上成長率 TOP top_n（前年比）
+    """
+    if preset == "industry_rep":
+        return query_default_companies_by_industry(
+            _conn, fiscal_year, top_n_industries=top_n, per_industry=1
+        )
+    if preset == "sales_top10":
+        df = _conn.execute(
+            f"""
+            SELECT edinet_code
+              FROM {_T}
+             WHERE fiscal_year = ?
+               AND scope = ? AND worker_type = ?
+               AND sales IS NOT NULL
+             ORDER BY sales DESC NULLS LAST
+             LIMIT ?
+            """,
+            [fiscal_year, scope, worker_type, top_n],
+        ).fetchdf()
+        return df["edinet_code"].tolist()
+    if preset == "operating_margin_top10":
+        df = _conn.execute(
+            f"""
+            SELECT edinet_code
+              FROM {_T}
+             WHERE fiscal_year = ?
+               AND scope = ? AND worker_type = ?
+               AND sales IS NOT NULL AND sales > 0
+               AND operating_profit IS NOT NULL
+             ORDER BY (operating_profit * 1.0 / sales) DESC NULLS LAST
+             LIMIT ?
+            """,
+            [fiscal_year, scope, worker_type, top_n],
+        ).fetchdf()
+        return df["edinet_code"].tolist()
+    if preset == "growth_top10":
+        df = _conn.execute(
+            f"""
+            WITH curr AS (
+                SELECT edinet_code, sales AS sales_to
+                  FROM {_T}
+                 WHERE fiscal_year = ?
+                   AND scope = ? AND worker_type = ?
+                   AND sales IS NOT NULL AND sales > 0
+            ),
+            prev AS (
+                SELECT edinet_code, sales AS sales_from
+                  FROM {_T}
+                 WHERE fiscal_year = ? - 1
+                   AND scope = ? AND worker_type = ?
+                   AND sales IS NOT NULL AND sales > 0
+            )
+            SELECT c.edinet_code,
+                   (c.sales_to - p.sales_from) * 1.0 / p.sales_from AS growth_rate
+              FROM curr c
+              JOIN prev p USING (edinet_code)
+             ORDER BY growth_rate DESC NULLS LAST
+             LIMIT ?
+            """,
+            [fiscal_year, scope, worker_type, fiscal_year, scope, worker_type, top_n],
+        ).fetchdf()
+        return df["edinet_code"].tolist()
+    return []
+
+
+@st.cache_data(ttl=300)
+def query_financial_summary_extended(
+    _conn: duckdb.DuckDBPyConnection,
+    year_min: int,
+    year_max: int,
+    industry_filter: tuple[str, ...] = (),
+) -> pd.DataFrame:
+    """年度別の財務指標集計統計を Q1/Q3 拡張版で返す.
+
+    既存の query_financial_summary_stats と並行運用し、ダッシュボード側で
+    箱ひげ図的な比較ができるよう四分位 (Q1, Q3) を追加。
+    """
+    base_sql = f"""
+        SELECT fiscal_year,
+               COUNT(*)                          AS count,
+               AVG(sales)                        AS avg_sales,
+               MEDIAN(sales)                     AS med_sales,
+               quantile_cont(sales, 0.25)        AS q1_sales,
+               quantile_cont(sales, 0.75)        AS q3_sales,
+               AVG(operating_profit)             AS avg_operating_profit,
+               MEDIAN(operating_profit)          AS med_operating_profit,
+               quantile_cont(operating_profit, 0.25) AS q1_operating_profit,
+               quantile_cont(operating_profit, 0.75) AS q3_operating_profit,
+               AVG(net_profit)                   AS avg_net_profit,
+               MEDIAN(net_profit)                AS med_net_profit,
+               AVG(employee_count)               AS avg_employee_count,
+               MEDIAN(employee_count)            AS med_employee_count
+          FROM {_T}
+         WHERE fiscal_year BETWEEN ? AND ?
+           AND scope = ? AND worker_type = ?
+    """
+    params: list[object] = [year_min, year_max, DEFAULT_SCOPE, DEFAULT_WORKER_TYPE]
+    if industry_filter:
+        placeholders = ", ".join(["?"] * len(industry_filter))
+        base_sql += f"           AND industry IN ({placeholders})\n"
+        params.extend(industry_filter)
+    base_sql += " GROUP BY fiscal_year ORDER BY fiscal_year"
+    return _conn.execute(base_sql, params).fetchdf()
+
+
+@st.cache_data(ttl=300)
+def query_company_industry_rank(
+    _conn: duckdb.DuckDBPyConnection,
+    edinet_code: str,
+    fiscal_year: int,
+    scope: str = DEFAULT_SCOPE,
+    worker_type: str = DEFAULT_WORKER_TYPE,
+) -> dict:
+    """選択企業の業種内ランクを返す（売上・営業利益・女性管理職比率）.
+
+    SQL でランクを直接計算するより、業種の peer をすべて取得して pandas 側で
+    順位付けする方がコードが読みやすく、NULL 処理も柔軟。peer 数は通常数百件
+    程度なので性能も問題ない。
+    """
+    target_row = _conn.execute(
+        f"""
+        SELECT industry, sales, operating_profit, female_manager_ratio
+          FROM {_T}
+         WHERE edinet_code = ?
+           AND fiscal_year = ?
+           AND scope = ? AND worker_type = ?
+         LIMIT 1
+        """,
+        [edinet_code, fiscal_year, scope, worker_type],
+    ).fetchone()
+    if not target_row:
+        return {}
+    industry, target_sales, target_op, target_fmr = target_row
+    if not industry:
+        return {"industry": None}
+
+    peers_df = _conn.execute(
+        f"""
+        SELECT edinet_code, sales, operating_profit, female_manager_ratio
+          FROM {_T}
+         WHERE industry = ?
+           AND fiscal_year = ?
+           AND scope = ? AND worker_type = ?
+        """,
+        [industry, fiscal_year, scope, worker_type],
+    ).fetchdf()
+
+    def _rank(col: str, target_val: float | None) -> int | None:
+        if target_val is None or pd.isna(target_val):
+            return None
+        valid = peers_df[peers_df[col].notna()][col]
+        if len(valid) == 0:
+            return None
+        return int((valid > target_val).sum()) + 1
+
+    return {
+        "industry": industry,
+        "industry_total": len(peers_df),
+        "industry_with_sales": int(peers_df["sales"].notna().sum()),
+        "industry_with_fmr": int(peers_df["female_manager_ratio"].notna().sum()),
+        "sales_rank": _rank("sales", target_sales),
+        "operating_profit_rank": _rank("operating_profit", target_op),
+        "female_manager_ratio_rank": _rank("female_manager_ratio", target_fmr),
+    }

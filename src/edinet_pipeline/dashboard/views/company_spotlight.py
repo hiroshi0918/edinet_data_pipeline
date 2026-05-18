@@ -16,6 +16,7 @@ from edinet_pipeline.dashboard.constants import (
 )
 from edinet_pipeline.dashboard.data import (
     detect_evaluation_scope,
+    query_company_industry_rank,
     query_company_profile,
     query_ideal_cluster,
     query_industry_peers,
@@ -48,6 +49,7 @@ def render(conn: duckdb.DuckDBPyConnection) -> None:
     fiscal_year, scope, worker_type = _render_dimension_selector(conn, edinet_code, profile_df)
 
     _render_company_summary(profile_df, edinet_code, fiscal_year, scope, worker_type)
+    _render_industry_rank(conn, edinet_code, fiscal_year, scope, worker_type)
     target_row = _get_target_row(profile_df, fiscal_year, scope, worker_type)
     if target_row is None:
         st.warning(
@@ -170,6 +172,43 @@ def _render_company_summary(
         list(_HC_COLS) + ["sales", "operating_profit", "employee_count"]
     ]
     st.dataframe(pivot, use_container_width=True)
+
+
+def _render_industry_rank(
+    conn: duckdb.DuckDBPyConnection,
+    edinet_code: str,
+    fiscal_year: int,
+    scope: str,
+    worker_type: str,
+) -> None:
+    """選択企業の業種内ランクを 3 指標で表示する."""
+    rank = query_company_industry_rank(conn, edinet_code, fiscal_year, scope, worker_type)
+    if not rank or not rank.get("industry"):
+        return
+    st.subheader(f"業種内ランク（{rank['industry']}・{fiscal_year}年度）")
+    st.caption(f"同業種 {rank['industry_total']} 社の中でこの企業がどの位置にいるか")
+    col1, col2, col3 = st.columns(3)
+    col1.metric(
+        "売上高 ランク",
+        f"{rank['sales_rank']} 位" if rank.get("sales_rank") else "—",
+        delta=f"/ {rank['industry_with_sales']} 社中" if rank.get("sales_rank") else None,
+        delta_color="off",
+    )
+    col2.metric(
+        "営業利益 ランク",
+        f"{rank['operating_profit_rank']} 位" if rank.get("operating_profit_rank") else "—",
+        delta=f"/ {rank['industry_total']} 社中" if rank.get("operating_profit_rank") else None,
+        delta_color="off",
+    )
+    col3.metric(
+        "女性管理職比率 ランク",
+        f"{rank['female_manager_ratio_rank']} 位" if rank.get("female_manager_ratio_rank") else "—",
+        delta=(
+            f"/ {rank['industry_with_fmr']} 社中"
+            if rank.get("female_manager_ratio_rank") else None
+        ),
+        delta_color="off",
+    )
 
 
 def _get_target_row(
