@@ -2,6 +2,10 @@
 
 EDINET API v2 から有価証券報告書を取得し、財務指標と人的資本指標を PostgreSQL に蓄積するデータパイプラインです。運用系の正本は PostgreSQL に置き、分析用には Parquet と DuckDB を派生出力します。CLI を入口に `fetch -> process -> backfill -> export-analytics` を統一し、ローカル/Docker で再現できる構成にしています。
 
+> **データの出典について**
+>
+> 本リポジトリに同梱されている `artifacts/analytics/edinet_analytics.duckdb` は、EDINET（金融庁）が公開する有価証券報告書を本パイプラインで加工・集計したものです。元データの出典は金融庁 EDINET (<https://disclosure2.edinet-fsa.go.jp/>) であり、本リポジトリの分析結果は金融庁の公式見解ではありません。
+
 > **初めてこのリポジトリを読む方へ**
 >
 > 本 README は CLI とセットアップを網羅したリファレンスです。「コードを読んで動きを理解したい」場合は、まず以下を順に読むのが最短ルートです。
