@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 
 import duckdb
 import streamlit as st
 
-from edinet_pipeline.config import DEFAULT_DUCKDB_PATH
 from edinet_pipeline.dashboard.data import get_connection
+from edinet_pipeline.dashboard.datasource import DuckdbDownloadError, ensure_duckdb_file
 from edinet_pipeline.dashboard.views import (
     company_spotlight,
     data_quality,
@@ -28,11 +28,6 @@ _PAGES: dict[str, Callable[[duckdb.DuckDBPyConnection], None]] = {
 }
 
 
-def _get_duckdb_path() -> Path:
-    """環境変数またはデフォルトパスから DuckDB ファイルパスを取得する."""
-    return Path(os.environ.get("EDINET_DUCKDB_PATH", DEFAULT_DUCKDB_PATH))
-
-
 def main() -> None:
     """ダッシュボードアプリケーションのメイン関数."""
     st.set_page_config(
@@ -42,15 +37,27 @@ def main() -> None:
     )
     st.title("EDINET 分析ダッシュボード")
 
-    duckdb_path = _get_duckdb_path()
     try:
+        duckdb_path = ensure_duckdb_file()
         conn = get_connection(str(duckdb_path))
-    except duckdb.IOException:
+    except (duckdb.IOException, DuckdbDownloadError) as exc:
+        # ローカル開発と公開環境の双方に効くメッセージ (どちらの導線も案内)
         st.error(
-            f"DuckDB ファイルが見つかりません: {duckdb_path}\n\n"
-            "`edinet export-analytics --format duckdb` を実行してデータをエクスポートしてください。"
+            "DuckDB データを読み込めませんでした。\n\n"
+            f"詳細: {exc}\n\n"
+            "- ローカル開発: `edinet export-analytics --format duckdb` を実行して "
+            "`artifacts/analytics/edinet_analytics.duckdb` を生成してください。\n"
+            "- 公開環境: GitHub Releases の `data-latest` タグに "
+            "`edinet_analytics.duckdb` が添付されているか確認してください。"
         )
         return
+
+    # サイドバーにデータ更新日 (DuckDB ファイルの mtime) を表示
+    try:
+        updated_at = datetime.fromtimestamp(Path(duckdb_path).stat().st_mtime)
+        st.sidebar.caption(f"データ更新日: {updated_at:%Y-%m-%d %H:%M}")
+    except OSError:
+        pass
 
     page_name = st.sidebar.radio("ページ選択", options=list(_PAGES.keys()), index=0)
     _PAGES[page_name](conn)

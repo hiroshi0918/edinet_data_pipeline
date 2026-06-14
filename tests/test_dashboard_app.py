@@ -1,22 +1,17 @@
-"""dashboard/app.py のテスト — DuckDB パス解決ロジック."""
+"""dashboard/app.py のスモークテスト.
+
+DuckDB パス解決ロジックは datasource.py へ移設したため、その検証は
+test_dashboard_datasource.py (TestLocalDuckdbPath) に移っている。ここでは
+app.py が副作用なく import でき、ページレジストリが健全であることを確認する。
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
+from edinet_pipeline.dashboard import app
 
-from edinet_pipeline.config import DEFAULT_DUCKDB_PATH
-from edinet_pipeline.dashboard.app import _get_duckdb_path
+_EXPECTED_PAGES = {"概要", "財務指標", "人的資本指標", "企業スポットライト", "データ品質"}
 
 
-class TestGetDuckdbPath:
-    """_get_duckdb_path のテスト."""
-
-    def test_default_path(self, monkeypatch):
-        monkeypatch.delenv("EDINET_DUCKDB_PATH", raising=False)
-        result = _get_duckdb_path()
-        assert result == Path(DEFAULT_DUCKDB_PATH)
-
-    def test_custom_path_from_env(self, monkeypatch):
-        monkeypatch.setenv("EDINET_DUCKDB_PATH", "/custom/path/analytics.duckdb")
-        result = _get_duckdb_path()
-        assert result == Path("/custom/path/analytics.duckdb")
+def test_pages_registry_has_expected_views() -> None:
+    assert set(app._PAGES) == _EXPECTED_PAGES
+    assert all(callable(render) for render in app._PAGES.values())

@@ -13,12 +13,4 @@ dist/
 artifacts/
 docs/samples/
 GEMINI.md
-
-# Streamlit Community Cloud 公開用: ダッシュボード起動に必須の DuckDB だけ追跡対象にする
-# Git の仕様上、親ディレクトリを除外したままだと子ファイルの ! 指定が効かないため、
-# 階層的に「親を許可 → 中身を除外」を繰り返してから DuckDB だけを ! で許可する
-!artifacts/
-artifacts/*
-!artifacts/analytics/
-artifacts/analytics/*
-!artifacts/analytics/edinet_analytics.duckdb
+logs/
