@@ -113,7 +113,10 @@ def _render_industry_heatmap(
     customdata = pivot_n.values
     fig.update_traces(
         customdata=customdata,
-        hovertemplate="業種: %{y}<br>指標: %{x}<br>中央値: %{z:.1f}%<br>件数: %{customdata}<extra></extra>",
+        hovertemplate=(
+            "業種: %{y}<br>指標: %{x}<br>"
+            "中央値: %{z:.1f}%<br>件数: %{customdata}<extra></extra>"
+        ),
     )
     fig.update_layout(height=500, margin=dict(l=0, r=0, t=40, b=0))
     st.plotly_chart(fig, use_container_width=True)

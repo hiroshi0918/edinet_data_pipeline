@@ -8,8 +8,6 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from edinet_pipeline.config import Settings
 from edinet_pipeline.llm_extractor import (
     _coerce_percentage,

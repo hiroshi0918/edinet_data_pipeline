@@ -7,7 +7,6 @@ v0.4 改修: 旧版の 4000 社×7指標の二値ヒートマップ（高さ約 
 from __future__ import annotations
 
 import duckdb
-import pandas as pd
 import plotly.express as px
 import streamlit as st
 
@@ -35,7 +34,8 @@ def render(conn: duckdb.DuckDBPyConnection) -> None:
     st.header("データ品質")
     st.info(
         "**このページは何のため？**\n\n"
-        "EDINET から取得した企業データのうち、**どの企業の・どの指標が・どれだけ揃っているか**を診断します。"
+        "EDINET から取得した企業データのうち、"
+        "**どの企業の・どの指標が・どれだけ揃っているか**を診断します。"
         "業種・規模ごとの開示傾向を把握することで、人的資本情報の開示が進んでいる業種・遅れている業種が分かります。\n\n"
         "**充足率の定義**: 各企業は財務 4 指標（売上・営業利益・純利益・従業員数）と人的資本 3 指標"
         "（女性管理職比率・男性育休取得率・男女賃金格差）の計 **7 指標**を報告します。"
@@ -207,7 +207,8 @@ def _render_company_completeness_table(
     """企業別の充足率テーブル."""
     st.subheader("企業別の充足率（業種フィルタ連動）")
     st.caption(
-        "各企業の充足率（7 指標中いくつ報告したか）。サイドバーで業種を絞り込むとここに反映されます。"
+        "各企業の充足率（7 指標中いくつ報告したか）。"
+        "サイドバーで業種を絞り込むとここに反映されます。"
         "テーブルの列ヘッダクリックでソート、フィルタ機能でさらに絞り込めます。"
     )
     df = query_company_completeness(conn, year, industry_filter=industry_filter)

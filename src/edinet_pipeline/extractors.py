@@ -541,7 +541,7 @@ def parse_document_zip(
 
 
 def _try_apply_element_id_match(
-    hm_builder: "HumanMetricsBuilder",
+    hm_builder: HumanMetricsBuilder,
     parsed: ParsedDocument,
     classification: tuple[str, str, str],
     *,
@@ -583,7 +583,7 @@ def _try_apply_element_id_match(
 
 
 def _apply_text_fallback(
-    hm_builder: "HumanMetricsBuilder",
+    hm_builder: HumanMetricsBuilder,
     parsed: ParsedDocument,
     *,
     text: str,

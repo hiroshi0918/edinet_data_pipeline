@@ -43,6 +43,7 @@ def _create_analytics_schema(connection: duckdb.DuckDBPyConnection) -> None:
         CREATE TABLE analytics.company_year_metrics (
             edinet_code VARCHAR,
             company_name VARCHAR,
+            industry VARCHAR,
             fiscal_year BIGINT,
             doc_id VARCHAR,
             submitted_date DATE,
@@ -91,19 +92,19 @@ def conn():
     connection.execute(
         """
         INSERT INTO analytics.company_year_metrics VALUES
-            ('E00001', 'Company A', 2023, 'D001', '2024-03-15', 'processed',
+            ('E00001', 'Company A', '電気機器', 2023, 'D001', '2024-03-15', 'processed',
              1000000, 100000, 50000, 500, 'reporting_company', 'all',
              15.5, 30.0, 75.0, 'EDINET_CSV'),
-            ('E00001', 'Company A', 2024, 'D002', '2025-03-15', 'processed',
+            ('E00001', 'Company A', '電気機器', 2024, 'D002', '2025-03-15', 'processed',
              1200000, 120000, 60000, 520, 'reporting_company', 'all',
              18.0, 35.0, 78.0, 'EDINET_CSV'),
-            ('E00002', 'Company B', 2023, 'D003', '2024-03-20', 'processed',
+            ('E00002', 'Company B', '情報・通信業', 2023, 'D003', '2024-03-20', 'processed',
              500000, 50000, 25000, 200, 'reporting_company', 'all',
              NULL, NULL, NULL, 'EDINET_CSV'),
-            ('E00002', 'Company B', 2024, 'D004', '2025-03-20', 'failed',
+            ('E00002', 'Company B', '情報・通信業', 2024, 'D004', '2025-03-20', 'failed',
              NULL, NULL, NULL, NULL, 'reporting_company', 'all',
              NULL, NULL, NULL, 'EDINET_CSV'),
-            ('E00003', 'Company C', 2023, 'D005', '2024-03-25', 'skipped',
+            ('E00003', 'Company C', 'サービス業', 2023, 'D005', '2024-03-25', 'skipped',
              NULL, NULL, NULL, NULL, 'reporting_company', 'all',
              NULL, NULL, NULL, 'EDINET_CSV')
         """

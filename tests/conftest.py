@@ -10,7 +10,6 @@ import pytest
 from alembic import command
 from alembic.config import Config
 
-
 # 本番 DB 誤破壊防止: TEST_DATABASE_URL を専用に見て、DATABASE_URL とは独立させる。
 # 過去に DATABASE_URL を共用していた際、pytest 実行で本番テーブルが TRUNCATE される
 # 事故が発生したため、専用環境変数 + DB 名チェックの二重ガードを採用している。

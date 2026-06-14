@@ -163,6 +163,7 @@ def test_export_analytics_writes_both_outputs(
     assert company_year_columns == [
         "edinet_code",
         "company_name",
+        "industry",
         "fiscal_year",
         "doc_id",
         "submitted_date",

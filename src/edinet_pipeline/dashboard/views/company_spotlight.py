@@ -33,7 +33,8 @@ def render(conn: duckdb.DuckDBPyConnection) -> None:
     st.header("企業スポットライト")
     st.caption(
         "単一の企業について、人的資本指標 3 つ（女性管理職比率・男性育休取得率・男女賃金格差）を "
-        "**業界 peer** と **規模類似 peer** の両方の分布に並べて、「**理想値**」との差分を確認します。"
+        "**業界 peer** と **規模類似 peer** の両方の分布に並べて、"
+        "「**理想値**」との差分を確認します。"
     )
 
     edinet_code, company_label = _render_company_selector(conn)
@@ -53,7 +54,8 @@ def render(conn: duckdb.DuckDBPyConnection) -> None:
     target_row = _get_target_row(profile_df, fiscal_year, scope, worker_type)
     if target_row is None:
         st.warning(
-            f"選択次元 ({SCOPE_LABELS.get(scope, scope)}) × {worker_type} に該当する行がありません。"
+            f"選択次元 ({SCOPE_LABELS.get(scope, scope)}) × {worker_type} "
+            "に該当する行がありません。"
         )
         return
 
@@ -239,7 +241,7 @@ def _render_peer_violin(
     st.caption(f"{group_label}: {_peer_size_note(n)}")
 
     cols = st.columns(3)
-    for ax, metric in zip(cols, _HC_COLS):
+    for ax, metric in zip(cols, _HC_COLS, strict=True):
         values = peer_df[metric].dropna().astype(float)
         target_value = target_row.get(metric)
         with ax:
@@ -282,7 +284,8 @@ def _render_ideal_table(
     """「4 種の理想値」と当該企業の差分テーブル."""
     st.subheader("4 種の「理想値」と現在値の差分")
     st.caption(
-        "**業界 P75** / **規模 peer P75** / **理想クラスタ平均** (3 指標すべて P75 以上 AND 営業利益率 P50 以上) / "
+        "**業界 P75** / **規模 peer P75** / "
+        "**理想クラスタ平均** (3 指標すべて P75 以上 AND 営業利益率 P50 以上) / "
         "**業界トップ10 平均** を並べて、ロールモデル像を多角的に提示します。"
     )
 
