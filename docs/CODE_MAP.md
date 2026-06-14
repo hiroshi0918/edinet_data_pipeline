@@ -87,7 +87,8 @@
 | ファイル | 責務 |
 | --- | --- |
 | `dashboard/__init__.py` | Streamlit アプリを subprocess で起動するラッパー |
-| `dashboard/app.py` | Streamlit のマルチページアプリのエントリポイント |
+| `dashboard/app.py` | Streamlit のマルチページアプリのエントリポイント。データソースは `datasource.ensure_duckdb_file()` で解決 |
+| `dashboard/datasource.py` | DuckDB の取得元解決。ローカル優先、無ければ GitHub Releases (`data-latest`) から ETag をバージョンに埋めて DL・キャッシュ。パスが版ごとに変わることで `data.get_connection` の `@st.cache_resource` キーが自然に切り替わる |
 | `dashboard/data.py` | DuckDB へのクエリ関数群（read-only）。許可リスト検証は `models.ALLOWED_SCOPES`/`ALLOWED_WORKER_TYPES` を再利用 |
 | `dashboard/constants.py` | テーブル名・指標ラベル・色などの共通定数。男性育休の表示クリップ範囲 `RATIO_DISPLAY_MIN/MAX`、理想クラスタ閾値 `IDEAL_CLUSTER_THRESHOLDS` も集約 |
 | `dashboard/components/filters.py` | フィルター UI（年度選択など）の共通コンポーネント |
@@ -220,11 +221,6 @@ processed   failed   skipped
   既存ディレクトリを `rmtree` してから tmp を `replace` するため、
   その瞬間だけ読み手から「ファイルが消えた」状態が見えます。完全なアトミック性が
   必要なら `parquet/` 自体に versioned suffix を付けて切り替える方式が候補です。
-- **`processing` 状態の stale reset**: プロセスが kill / OOM などで突然落ちた場合、
-  `processing` のまま残ります。`processing_started_at` を持って一定時間経過で
-  pending に戻すバッチを足すと、運用が楽になります。応急処置としては、
-  `UPDATE financial_reports SET status='pending' WHERE status='processing'` を
-  手動で叩けば停滞分はキューに戻せます。
 - **`reset_to_pending` と SIGINT 経路のテスト追加**: 中断系のテストが現状無いため、
   リファクタ耐性が低いです。`signal` を使った中断シミュレーションテストを足すと安心です。
 - **Dashboard ページの共通チャートユーティリティ**: `financial.py` /

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  EDINET 週次更新 LaunchAgent テンプレート (macOS)
+
+  このファイルはテンプレートです。__REPO_ROOT__ をリポジトリの絶対パスに置換してから
+  ~/Library/LaunchAgents/ に配置してください。README の「無人運用」節を参照。
+
+  インストール例 (リポジトリ直下で実行):
+    sed "s|__REPO_ROOT__|$(pwd)|g" scripts/com.hiroshi0918.edinet-update.plist \
+      > ~/Library/LaunchAgents/com.hiroshi0918.edinet-update.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hiroshi0918.edinet-update.plist
+
+  手動試走 / 解除:
+    launchctl kickstart -k gui/$(id -u)/com.hiroshi0918.edinet-update
+    launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.hiroshi0918.edinet-update.plist
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.hiroshi0918.edinet-update</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>__REPO_ROOT__/scripts/update_data.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__REPO_ROOT__</string>
+
+    <!-- 毎週月曜 09:00 に起動 (Weekday: 0=日, 1=月 … 6=土) -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>1</integer>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- launchd 自身の起動ログ。スクリプト内の詳細ログは logs/update_data_*.log -->
+    <key>StandardOutPath</key>
+    <string>__REPO_ROOT__/logs/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>__REPO_ROOT__/logs/launchd.err.log</string>
+
+    <!-- ロード時には実行しない (予定時刻のみ。手動試走は launchctl kickstart) -->
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

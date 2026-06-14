@@ -225,6 +225,10 @@ cp .env.example .env
 | `PROCESS_SLEEP_SECONDS` | No | 書類ごとの待機秒 | `1` |
 | `LOG_LEVEL` | No | ログレベル | `INFO` |
 | `ANALYTICS_OUTPUT_DIR` | No | Parquet / DuckDB の出力先 | `artifacts/analytics` |
+| `STALE_PROCESSING_MINUTES` | No | `processing` のまま停滞した行を `pending` へ自動回収する経過分の閾値 | `60` |
+| `EDINET_DUCKDB_URL` | No | ダッシュボードが取得する DuckDB の GitHub Releases アセット URL | `data-latest` の `edinet_analytics.duckdb` |
+| `EDINET_DUCKDB_CACHE_DIR` | No | リモート DuckDB のダウンロードキャッシュ先 | OS 一時ディレクトリ配下 `edinet_dashboard/` |
+| `EDINET_CODE_LIST_URL` | No | 週次更新スクリプトの `update-industries` が使う Edinetcode.zip の URL | 金融庁の公式集約一覧 URL |
 | `LLM_FALLBACK_ENABLED` | No | LLM フォールバック層を有効化 (`true` / `false`) | `false` |
 | `LLM_ENDPOINT` | No | Ollama API エンドポイント | `http://localhost:11434/api/generate` |
 | `LLM_MODEL` | No | 使用する Ollama モデル名 | `qwen3.5:9b` |
@@ -331,6 +335,52 @@ docker compose exec app edinet process --limit 20 --retry-failed
 docker compose exec app edinet export-analytics --format both
 ```
 
+## 無人運用（週次自動更新）
+
+「Mac が週 1 回起きていれば、公開中のダッシュボードが自動で最新化される」状態を作るための仕組みです。`scripts/update_data.sh` が Docker 起動 → 取得 → 処理 → エクスポート → GitHub Releases へのアップロードまでを一気通貫で実行し、macOS の launchd（LaunchAgent）が毎週月曜 09:00 にそれを起動します。
+
+**前提:**
+
+- macOS（`scripts/update_data.sh` は `date -v` など BSD/macOS 専用構文を使用）
+- Docker Desktop インストール済み（スクリプトが未起動なら自動で起動を待ちます）
+- `gh auth login` 済み（DuckDB を Releases にアップロードするため）
+
+**スクリプトの動作:**
+
+1. Docker Desktop の起動を待つ（最大 180 秒）→ `db` コンテナを healthcheck が通るまで起動
+2. `alembic upgrade head`
+3. 直近 **14 日**の `backfill`（欠損週の自己回復。`fetch` は upsert で冪等）
+4. `process --retry-failed`（失敗分の週次リトライ）
+5. `update-industries`（軽量・**非致命**: 失敗しても WARN で続行）
+6. `export-analytics --format both`
+7. `gh release upload data-latest ... --clobber`（DuckDB を Releases に上書き）
+
+ログは `logs/update_data_YYYYmmdd_HHMMSS.log`（90 日より古いものは自動削除）、成功・失敗は macOS 通知で知らせます。
+
+**launchd へのインストール:**
+
+```bash
+# リポジトリ直下で実行。__REPO_ROOT__ を実パスに置換して LaunchAgents へ配置
+sed "s|__REPO_ROOT__|$(pwd)|g" scripts/com.hiroshi0918.edinet-update.plist \
+  > ~/Library/LaunchAgents/com.hiroshi0918.edinet-update.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hiroshi0918.edinet-update.plist
+
+# 手動試走（予定を待たず即実行）
+launchctl kickstart -k gui/$(id -u)/com.hiroshi0918.edinet-update
+
+# 登録確認 / 解除
+launchctl list | grep edinet
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.hiroshi0918.edinet-update.plist
+```
+
+**注意点:**
+
+- **スリープ・電源オフ時の予定**: Mac がスリープ中なら次のウェイク時にまとめて実行されます。電源オフだとその回はスキップされますが、`backfill` の 14 日 trailing window により翌週の実行で自己回復します。
+- **6 月のピーク**: 提出が集中する時期は週次で数千件になり、`PROCESS_SLEEP_SECONDS=1` のレート制御込みで実行に数時間かかることがあります（取りこぼしはありません）。
+- **`process` の同時実行は避ける**: stale 復旧は claim 直前に走るため**同一プロセス内**の in-flight 行は誤回収しませんが、別プロセスが並行実行されると一方の処理中の行をもう一方が回収して二重処理しうる（書き込みは冪等なのでデータ破損はなく、API 時間の浪費のみ）。既定（週 1 回・`STALE_PROCESSING_MINUTES=60`）では起きません。週次スクリプトと手動 `process`／`backfill` を併走させない、`STALE_PROCESSING_MINUTES` は 1 バッチの最大処理時間より十分大きく保つ、を守ってください。
+- **初回の Release**: 週次スクリプトは `data-latest` が無ければ自動で `gh release create` してから upload するため、原則として事前作成は不要です。手動で先に作る場合は `gh release create data-latest --latest=false` を使ってください。
+- **gh 認証が launchd から通らない場合**: GUI セッションの LaunchAgent なら通常 keychain にアクセスできますが、失敗するなら plist の `EnvironmentVariables` に `GH_TOKEN` を渡す方法があります（トークンを含むため公開リポジトリのテンプレートには記載していません）。
+
 ## CLI リファレンス
 
 ### `edinet fetch`
@@ -416,6 +466,21 @@ docker compose run --rm app edinet update-industries --source-url https://...
 - 取り込み後は `edinet export-analytics --format duckdb` を実行して DuckDB の `industry` 列も更新してください（`vw_company_year_metrics` 経由で反映されます）。
 - 公式ダウンロード URL は JavaScript で動的生成されるため、ブラウザでダウンロードして `--source-file` で渡す運用が確実です。
 
+### `edinet reset-stale`
+
+プロセスが kill / OOM / 電源断などで突然落ちると、書類が `processing` ステータスのまま取り残され、二度と再処理されずキューが滞留します。このコマンドは閾値より古い `processing` 行（および `processing_started_at` が NULL の旧データ）を `pending` へ戻します。
+
+```bash
+# 既定の閾値 (STALE_PROCESSING_MINUTES 環境変数、未設定なら 60 分) で復旧
+docker compose run --rm app edinet reset-stale
+
+# 閾値を分単位で明示指定
+docker compose run --rm app edinet reset-stale --minutes 30
+```
+
+- 復旧した件数は `stale_processing_reset: count=N` として標準出力に表示されます。
+- `edinet process` / `edinet backfill` は実行のたび claim の直前に同じ回収処理を自動で走らせるため、無人運用では通常このコマンドを手で叩く必要はありません（手動復旧・観測用）。
+
 ### `edinet dashboard`
 
 DuckDB をデータソースとしたインタラクティブな分析ダッシュボードを起動します。
@@ -455,6 +520,14 @@ pip install -e '.[viz]'
 - ダッシュボードは DuckDB ファイルのみ参照します。PostgreSQL や EDINET API キーは不要です。
 - データを最新化するには先に `edinet export-analytics --format duckdb` を実行してください。
 - Docker から起動する場合は `--host 0.0.0.0` の指定が必須です（既定の `localhost` だとコンテナ内 loopback のみで待ち受けるため、ホスト側ブラウザからアクセスできません）。例: `docker compose run --rm -p 8501:8501 app edinet dashboard --host 0.0.0.0`
+
+**DuckDB の配布方式（公開環境）:**
+
+ローカルに `artifacts/analytics/edinet_analytics.duckdb` があればそれを直接読みます。無い場合（Streamlit Community Cloud など）は GitHub Releases の固定タグ `data-latest` に添付された `edinet_analytics.duckdb` を実行時にダウンロードして使います。
+
+- リモートの ETag をバージョンとしてキャッシュファイル名に埋め込み、HEAD チェックを 1 時間キャッシュするため、最悪でも更新の約 65 分後には最新データが反映されます。
+- ダウンロード先 URL は `EDINET_DUCKDB_URL`、キャッシュ先は `EDINET_DUCKDB_CACHE_DIR` で上書きできます。
+- DuckDB は git に同梱しません（履歴肥大を避けるため）。最新化は週次更新スクリプトが `gh release upload data-latest ... --clobber` で Releases を上書きする運用です（[無人運用](#無人運用週次自動更新) を参照）。
 
 ## 状態管理
 
