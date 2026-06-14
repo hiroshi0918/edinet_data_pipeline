@@ -280,12 +280,26 @@ def process_documents(
     try:
         with pool.connection() as connection:
             repository = PipelineRepository(connection)
+            # claim の直前・同一トランザクションで stale な processing 行を回収する。
+            # claim 前に走らせることで、これから自プロセスが掴む行を誤って戻さない。
+            recovered = repository.reset_stale_processing(
+                stale_after_minutes=settings.stale_processing_minutes,
+            )
             claimed_documents = repository.claim_documents_for_processing(
                 limit=limit,
                 retry_failed=retry_failed,
                 submitted_date=submitted_date,
             )
             connection.commit()
+
+        if recovered > 0:
+            log_event(
+                logger,
+                "warning",
+                "stale_processing_recovered",
+                count=recovered,
+                threshold_minutes=settings.stale_processing_minutes,
+            )
 
         if not claimed_documents:
             log_event(

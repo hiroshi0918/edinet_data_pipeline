@@ -8,6 +8,7 @@ from datetime import datetime
 
 from edinet_pipeline.analytics import export_analytics
 from edinet_pipeline.config import Settings
+from edinet_pipeline.db import PipelineRepository, db_connection
 from edinet_pipeline.industry_master import update_industries
 from edinet_pipeline.jobs import backfill_documents, fetch_documents_for_date, process_documents
 from edinet_pipeline.logging_utils import configure_logging
@@ -99,6 +100,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to a pre-downloaded Edinetcode ZIP",
     )
 
+    # --- reset-stale: 停滞した processing 行を手動で pending へ復旧 ---
+    reset_stale_parser = subparsers.add_parser(
+        "reset-stale",
+        help="Reset stale 'processing' rows back to 'pending' (manual recovery)",
+    )
+    reset_stale_parser.add_argument(
+        "--minutes",
+        type=int,
+        default=None,
+        help=(
+            "Stale threshold in minutes "
+            "(default: STALE_PROCESSING_MINUTES env, or 60)"
+        ),
+    )
+
     # --- dashboard: 分析ダッシュボードの起動 ---
     dashboard_parser = subparsers.add_parser(
         "dashboard",
@@ -164,6 +180,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "export-analytics":
         export_analytics(settings, args.format)
+        return 0
+
+    if args.command == "reset-stale":
+        # --minutes 未指定なら Settings (STALE_PROCESSING_MINUTES 環境変数) に従う
+        minutes = (
+            args.minutes if args.minutes is not None else settings.stale_processing_minutes
+        )
+        with db_connection(settings.database_url) as connection:
+            repository = PipelineRepository(connection)
+            count = repository.reset_stale_processing(stale_after_minutes=minutes)
+            connection.commit()
+        print(f"stale_processing_reset: count={count}")
         return 0
 
     if args.command == "update-industries":

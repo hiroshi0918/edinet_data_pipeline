@@ -239,7 +239,8 @@ class PipelineRepository:
                 )
                 UPDATE financial_reports AS fr
                 SET status = 'processing',
-                    last_error = NULL
+                    last_error = NULL,
+                    processing_started_at = CURRENT_TIMESTAMP
                 FROM next_docs
                 WHERE fr.doc_id = next_docs.doc_id
                 RETURNING
@@ -265,7 +266,8 @@ class PipelineRepository:
                     employee_count = %s,
                     status = 'processed',
                     last_error = NULL,
-                    processed_at = CURRENT_TIMESTAMP
+                    processed_at = CURRENT_TIMESTAMP,
+                    processing_started_at = NULL
                 WHERE doc_id = %s
                 """,
                 (
@@ -286,7 +288,8 @@ class PipelineRepository:
                 SET status = 'failed',
                     retry_count = retry_count + 1,
                     last_error = LEFT(%s, 1000),
-                    processed_at = NULL
+                    processed_at = NULL,
+                    processing_started_at = NULL
                 WHERE doc_id = %s
                 """,
                 (reason, doc_id),
@@ -299,11 +302,49 @@ class PipelineRepository:
                 """
                 UPDATE financial_reports
                 SET status = 'pending',
-                    last_error = LEFT(%s, 1000)
+                    last_error = LEFT(%s, 1000),
+                    processing_started_at = NULL
                 WHERE doc_id = %s
                 """,
                 (reason, doc_id),
             )
+
+    def reset_stale_processing(self, *, stale_after_minutes: int) -> int:
+        """中断された stale な 'processing' 行を 'pending' に戻す (無人運用の自己回復).
+
+        プロセスが kill / OOM / 電源断で突然落ちると status='processing' のまま行が
+        残り、二度と再処理されずキューが永久に滞留する。本メソッドは次の 2 種を回収する:
+          - processing_started_at が閾値より古い行 (死んだプロセスの残骸)
+          - processing_started_at が NULL の行 (本列を追加する 0005 以前からの残骸)
+
+        誤検知防止: 呼び出し側は claim の直前・同一トランザクションで実行すること。
+        claim 前に走れば、これから自プロセスが掴む行 (started_at が未来/直近) を
+        誤って戻すことはない。commit は呼び出し側の責務 (本クラス共通方針)。
+
+        Returns:
+            pending に戻した行数 (cursor.rowcount)
+        """
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE financial_reports
+                SET status = 'pending',
+                    processing_started_at = NULL,
+                    last_error = LEFT(
+                        'Auto-recovered from stale processing (started_at='
+                        || COALESCE(processing_started_at::text, 'unknown') || ')',
+                        1000
+                    )
+                WHERE status = 'processing'
+                  AND (
+                      processing_started_at IS NULL
+                      OR processing_started_at
+                         < CURRENT_TIMESTAMP - make_interval(mins => %s)
+                  )
+                """,
+                (stale_after_minutes,),
+            )
+            return cursor.rowcount
 
     def mark_skipped(self, doc_id: str, reason: str) -> None:
         """処理スキップ — CSV が存在しない書類などに使用."""
@@ -313,7 +354,8 @@ class PipelineRepository:
                 UPDATE financial_reports
                 SET status = 'skipped',
                     last_error = LEFT(%s, 1000),
-                    processed_at = CURRENT_TIMESTAMP
+                    processed_at = CURRENT_TIMESTAMP,
+                    processing_started_at = NULL
                 WHERE doc_id = %s
                 """,
                 (reason, doc_id),

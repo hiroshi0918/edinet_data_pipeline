@@ -45,6 +45,7 @@ class Settings:
         human_metric_max_ratio:  人的資本指標として受け入れる最大値 (%)
         db_pool_min_size:        DB 接続プールの最小接続数
         db_pool_max_size:        DB 接続プールの最大接続数
+        stale_processing_minutes: processing のまま放置された行を pending へ戻す閾値 (分)
     """
 
     edinet_api_key: str
@@ -59,6 +60,9 @@ class Settings:
     human_metric_max_ratio: float = DEFAULT_HUMAN_METRIC_MAX_RATIO
     db_pool_min_size: int = 1
     db_pool_max_size: int = 5
+    # processing のまま停滞した行を pending へ自動回収する経過時間の閾値 (分)。
+    # kill / OOM / 電源断などで死んだプロセスの残骸を無人運用でも自己回復させる。
+    stale_processing_minutes: int = 60
     # --- LLM フォールバック (Ollama) ---
     llm_enabled: bool = False
     llm_endpoint: str = "http://localhost:11434/api/generate"
@@ -84,6 +88,9 @@ class Settings:
             ),
             db_pool_min_size=int(_get_env("DB_POOL_MIN_SIZE", default="1")),
             db_pool_max_size=int(_get_env("DB_POOL_MAX_SIZE", default="5")),
+            stale_processing_minutes=int(
+                _get_env("STALE_PROCESSING_MINUTES", default="60")
+            ),
             llm_enabled=_get_env("LLM_FALLBACK_ENABLED", default="false").lower() == "true",
             llm_endpoint=_get_env(
                 "LLM_ENDPOINT", default="http://localhost:11434/api/generate"

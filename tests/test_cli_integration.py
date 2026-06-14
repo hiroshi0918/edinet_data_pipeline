@@ -233,6 +233,172 @@ def test_process_sets_processed_skipped_failed_and_upserts_human_metrics(
     ) == (4,)
 
 
+def _register_pending_doc(
+    monkeypatch: pytest.MonkeyPatch, *, doc_id: str, edinet_code: str, submit_date: str
+) -> None:
+    """fetch 経由で pending 行 (と企業マスタ) を 1 件作る共通ヘルパー.
+
+    financial_reports.edinet_code は companies への FK を持つため、直接 INSERT せず
+    fetch の upsert 経路を借りて整合的に行を用意する。
+    """
+    FakeClient.documents_by_date[submit_date] = [
+        build_document(doc_id=doc_id, edinet_code=edinet_code, submit_date=submit_date)
+    ]
+    monkeypatch.setattr("edinet_pipeline.jobs.EdinetClient", FakeClient)
+    assert main(["fetch", "--date", submit_date]) == 0
+
+
+@pytest.mark.integration
+def test_reset_stale_processing_recovers_old_rows(
+    db_connection: psycopg2.extensions.connection,
+    pipeline_env: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """閾値より古い processing 行だけが pending に戻り、直近の行は維持されること."""
+    submit_date = "2024-03-29"
+    FakeClient.documents_by_date[submit_date] = [
+        build_document(doc_id="S100OLD", edinet_code="E00001", submit_date=submit_date),
+        build_document(doc_id="S100NEW", edinet_code="E00002", submit_date=submit_date),
+    ]
+    monkeypatch.setattr("edinet_pipeline.jobs.EdinetClient", FakeClient)
+    assert main(["fetch", "--date", submit_date]) == 0
+
+    # 片方は 2 時間前 (stale)、片方は直近 (in-flight) の processing に仕立てる
+    with db_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE financial_reports
+            SET status = 'processing',
+                processing_started_at = CURRENT_TIMESTAMP - INTERVAL '2 hours'
+            WHERE doc_id = 'S100OLD'
+            """
+        )
+        cursor.execute(
+            """
+            UPDATE financial_reports
+            SET status = 'processing', processing_started_at = CURRENT_TIMESTAMP
+            WHERE doc_id = 'S100NEW'
+            """
+        )
+
+    # 既定閾値 (STALE_PROCESSING_MINUTES 未設定なら 60 分) で復旧
+    assert main(["reset-stale"]) == 0
+
+    old_status, old_started_at, old_error = fetch_one(
+        db_connection,
+        "SELECT status, processing_started_at, last_error "
+        "FROM financial_reports WHERE doc_id = %s",
+        ("S100OLD",),
+    )
+    assert old_status == "pending"
+    assert old_started_at is None
+    assert old_error.startswith("Auto-recovered from stale processing")
+
+    # 直近の in-flight 行は誤回収されない
+    assert (
+        fetch_one(
+            db_connection, "SELECT status FROM financial_reports WHERE doc_id = %s", ("S100NEW",)
+        )[0]
+        == "processing"
+    )
+
+
+@pytest.mark.integration
+def test_reset_stale_processing_recovers_null_started_at(
+    db_connection: psycopg2.extensions.connection,
+    pipeline_env: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """processing_started_at が NULL の行 (マイグレーション前の残骸) も回収されること."""
+    submit_date = "2024-03-29"
+    _register_pending_doc(
+        monkeypatch, doc_id="S100NULL", edinet_code="E00001", submit_date=submit_date
+    )
+    with db_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE financial_reports
+            SET status = 'processing', processing_started_at = NULL
+            WHERE doc_id = 'S100NULL'
+            """
+        )
+
+    assert main(["reset-stale", "--minutes", "60"]) == 0
+
+    assert fetch_one(
+        db_connection,
+        "SELECT status, processing_started_at FROM financial_reports WHERE doc_id = %s",
+        ("S100NULL",),
+    ) == ("pending", None)
+
+
+@pytest.mark.integration
+def test_claim_sets_processing_started_at(
+    db_connection: psycopg2.extensions.connection,
+    pipeline_env: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """claim_documents_for_processing が processing_started_at を記録すること."""
+    from edinet_pipeline.db import PipelineRepository
+
+    _register_pending_doc(
+        monkeypatch, doc_id="S100CLAIM", edinet_code="E00001", submit_date="2024-03-29"
+    )
+
+    # db_connection は autocommit のため claim の UPDATE は即時反映される
+    repository = PipelineRepository(db_connection)
+    claimed = repository.claim_documents_for_processing(limit=10, retry_failed=False)
+    assert [row["doc_id"] for row in claimed] == ["S100CLAIM"]
+
+    status, started_at = fetch_one(
+        db_connection,
+        "SELECT status, processing_started_at FROM financial_reports WHERE doc_id = %s",
+        ("S100CLAIM",),
+    )
+    assert status == "processing"
+    assert started_at is not None
+
+
+@pytest.mark.integration
+def test_process_auto_recovers_stale_rows(
+    db_connection: psycopg2.extensions.connection,
+    pipeline_env: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """process が claim 直前に stale 行を回収し、再 claim → 処理まで完遂すること."""
+    submit_date = "2024-03-29"
+    FakeClient.documents_by_date[submit_date] = [
+        build_document(doc_id="S100STALE", edinet_code="E00001", submit_date=submit_date)
+    ]
+    FakeClient.downloads = {
+        "S100STALE": build_csv_zip([{"項目名": "売上高", "値": "100", "相対年度": "当期"}]),
+    }
+    monkeypatch.setattr("edinet_pipeline.jobs.EdinetClient", FakeClient)
+    assert main(["fetch", "--date", submit_date]) == 0
+
+    # 2 時間前から processing のまま停滞している行を仕込む
+    with db_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE financial_reports
+            SET status = 'processing',
+                processing_started_at = CURRENT_TIMESTAMP - INTERVAL '2 hours'
+            WHERE doc_id = 'S100STALE'
+            """
+        )
+
+    assert main(["process", "--limit", "10"]) == 0
+
+    status, started_at = fetch_one(
+        db_connection,
+        "SELECT status, processing_started_at FROM financial_reports WHERE doc_id = %s",
+        ("S100STALE",),
+    )
+    # 復旧 → 再 claim → 処理成功。終端状態では started_at は NULL に戻る
+    assert status == "processed"
+    assert started_at is None
+
+
 @pytest.mark.integration
 def test_backfill_can_resume_after_interrupt(
     db_connection: psycopg2.extensions.connection,
