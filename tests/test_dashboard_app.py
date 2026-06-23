@@ -9,7 +9,13 @@ from __future__ import annotations
 
 from edinet_pipeline.dashboard import app
 
-_EXPECTED_PAGES = {"概要", "財務指標", "人的資本指標", "企業スポットライト", "データ品質"}
+_EXPECTED_PAGES = {
+    "企業を調べる",
+    "業種で比べる",
+    "人的資本トップ/ボトム企業",
+    "規模×人的資本",
+    "企業スポットライト",
+}
 
 
 def test_pages_registry_has_expected_views() -> None:

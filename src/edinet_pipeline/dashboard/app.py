@@ -12,19 +12,19 @@ import streamlit as st
 from edinet_pipeline.dashboard.data import get_connection
 from edinet_pipeline.dashboard.datasource import DuckdbDownloadError, ensure_duckdb_file
 from edinet_pipeline.dashboard.views import (
+    company_lookup,
     company_spotlight,
-    data_quality,
-    financial,
-    human_capital,
-    overview,
+    hc_ranking,
+    industry_boxplot,
+    size_vs_hc,
 )
 
 _PAGES: dict[str, Callable[[duckdb.DuckDBPyConnection], None]] = {
-    "概要": overview.render,
-    "財務指標": financial.render,
-    "人的資本指標": human_capital.render,
+    "企業を調べる": company_lookup.render,
+    "業種で比べる": industry_boxplot.render,
+    "人的資本トップ/ボトム企業": hc_ranking.render,
+    "規模×人的資本": size_vs_hc.render,
     "企業スポットライト": company_spotlight.render,
-    "データ品質": data_quality.render,
 }
 
 

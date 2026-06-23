@@ -39,6 +39,15 @@ ALL_METRIC_COLUMNS: list[str] = list(ALL_METRIC_LABELS.keys())
 # data.py のバリデーションに使う許可済み指標セット
 ALLOWED_ALL_METRICS: set[str] = set(ALL_METRIC_LABELS.keys())
 ALLOWED_HC_METRICS: set[str] = set(HC_METRIC_LABELS.keys())
+ALLOWED_FINANCIAL_METRICS: set[str] = set(FINANCIAL_METRIC_LABELS.keys())
+
+# 単一企業ランキング・財務軸併記で使う「意味のある」HC 2 指標。
+# 男性育休取得率は集計タイミングで >100% 等のノイズが出るため、単一企業の
+# ランキングや併記列からは外す (年度ごとの業種分布=箱ひげ図でのみ扱う)。
+RANKING_HC_METRICS: tuple[str, ...] = ("female_manager_ratio", "gender_wage_gap")
+
+# 規模×人的資本ページで使う財務軸 (純利益は規模指標として弱いため除く)
+SIZE_AXIS_METRICS: tuple[str, ...] = ("sales", "operating_profit", "employee_count")
 
 # ステータスカラーマップ
 STATUS_COLOR_MAP: dict[str, str] = {
