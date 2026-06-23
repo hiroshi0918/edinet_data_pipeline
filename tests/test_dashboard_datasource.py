@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -244,6 +245,36 @@ def test_truncated_download_raises_and_leaves_no_file(
     # 破損ファイルも .tmp 残骸も残っていないこと
     assert list(cache_dir.glob("*.duckdb")) == []
     assert list(cache_dir.glob("*.tmp")) == []
+
+
+def test_download_uses_unique_tmp_name(
+    monkeypatch: pytest.MonkeyPatch, cache_dir: Path
+) -> None:
+    """_download_to は決定的な {name}.tmp ではなくプロセス固有の一意な tmp を使うこと.
+
+    Streamlit Cloud の並行実行で同一 tmp を奪い合い replace が ENOENT になる回帰
+    (No such file or directory: ...tmp → ...duckdb) を防ぐためのガード。
+    """
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    dest = cache_dir / "edinet_analytics-v1.duckdb"
+    seen_tmp_names: list[str] = []
+
+    class _RecordingResponse(_FakeGetResponse):
+        def iter_content(self, chunk_size: int = 1) -> list[bytes]:
+            # 書き込み中に存在する .tmp の名前を記録する
+            seen_tmp_names.extend(p.name for p in cache_dir.glob("*.tmp"))
+            return [self._content]
+
+    monkeypatch.setattr(datasource.requests, "get", lambda *a, **k: _RecordingResponse())
+
+    datasource._download_to("http://example/edinet.duckdb", dest)
+
+    assert dest.read_bytes() == b"DUCKDB-CONTENT"
+    assert list(cache_dir.glob("*.tmp")) == []  # 残骸なし
+    # 決定的な {name}.tmp ではなく、pid を含む一意名であること
+    assert seen_tmp_names, "tmp ファイルが観測されなかった"
+    assert all(name != f"{dest.name}.tmp" for name in seen_tmp_names)
+    assert any(str(os.getpid()) in name for name in seen_tmp_names)
 
 
 def test_head_failure_without_cache_raises(

@@ -17,6 +17,7 @@ import logging
 import os
 import re
 import tempfile
+import uuid
 from pathlib import Path
 
 import requests
@@ -128,8 +129,15 @@ def _download_to(url: str, destination: Path) -> None:
 
     analytics.export_duckdb_snapshot と同じ tmp → replace パターン。失敗時は tmp を
     掃除し DuckdbDownloadError を送出する (中途半端なファイルを残さない)。
+
+    tmp ファイル名はプロセス横断で一意にする。Streamlit Cloud は再起動直後に同一スク
+    リプトを並行実行することがあり、決定的な `{name}.tmp` だと複数スレッドが同じ tmp を
+    奪い合い、先に replace した側が tmp を消費して後続が ENOENT で落ちる。各 DL 試行に
+    固有の tmp を割り当てれば、各自の replace が成功し最後の書き手の正しいファイルが残る。
     """
-    tmp_path = destination.parent / f"{destination.name}.tmp"
+    tmp_path = destination.parent / (
+        f"{destination.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
+    )
     try:
         with requests.get(url, stream=True, timeout=_DOWNLOAD_TIMEOUT_SECONDS) as response:
             if response.status_code != 200:
