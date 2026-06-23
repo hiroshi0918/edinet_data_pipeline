@@ -13,8 +13,10 @@ from edinet_pipeline.extractors import (
     convert_to_percentage,
     extract_human_capital_from_text,
     extract_numeric,
+    is_text_block_fact,
     merge_llm_records,
     parse_document_zip,
+    parse_from_raw_facts,
 )
 from edinet_pipeline.models import (
     SCOPE_CONSOLIDATED_SUBSIDIARY,
@@ -235,6 +237,125 @@ def test_parse_document_zip_skips_irrelevant_files_and_invalid_columns() -> None
     assert parsed.financial_metrics["sales"] == 1234
     assert parsed.financial_metrics["employee_count"] == 50
     assert [r.metric_name for r in parsed.evidence] == ["sales", "employee_count"]
+
+
+def test_is_text_block_fact_detects_element_suffix_and_item_marker() -> None:
+    """要素ID末尾 TextBlock / 項目名の『テキストブロック』を検出する."""
+    assert is_text_block_fact(
+        "jpcrp_cor:RevenuesFromExternalCustomersInformationForEachRegionTextBlock",
+        "売上高、地域ごとの情報 [テキストブロック]",
+    )
+    # element_id が欠損していても項目名で検出できる (保険)
+    assert is_text_block_fact(None, "売上高、地域ごとの情報 [テキストブロック]")
+    # 通常の数値ファクトは誤検出しない
+    assert not is_text_block_fact(
+        "jpcrp_cor:NetSalesSummaryOfBusinessResults", "売上高、経営指標等"
+    )
+
+
+def test_parse_document_zip_financial_skips_text_block_false_match() -> None:
+    """財務指標がテキストブロック行に誤マッチして注釈番号を拾わないこと.
+
+    銀行・保険の有報では「売上高、地域ごとの情報 [テキストブロック]」という
+    自由記述行が存在し、その本文が "(1) 経常収益…" で始まる。項目名に「売上高」
+    が部分一致するため、修正前は extract_numeric が "(1)" の 1 を sales として
+    採用していた (sales=1 のゴミ)。テキストブロックを除外すれば sales は None。
+    """
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp_bank.csv": [
+                {
+                    "要素ID": (
+                        "jpcrp_cor:RevenuesFromExternalCustomers"
+                        "InformationForEachRegionTextBlock"
+                    ),
+                    "項目名": "売上高、地域ごとの情報 [テキストブロック]",
+                    "相対年度": "当期",
+                    "値": (
+                        "(1) 経常収益本邦の外部顧客に対する経常収益に区分した金額が"
+                        "連結損益計算書の経常収益の90%を超えるため、記載を省略しております。"
+                    ),
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+    assert parsed.financial_metrics["sales"] is None
+    assert not any(e.metric_name == "sales" for e in parsed.evidence)
+
+
+def test_parse_document_zip_real_sales_wins_over_preceding_text_block() -> None:
+    """テキストブロック行が先頭にあっても、本物の数値行が first-wins で勝つこと.
+
+    修正前は first-wins により、先に来たテキストブロック由来の 1 が後続の本物の
+    売上高をロックアウトしていた。テキストブロックを財務マッチから外すことで、
+    後続の「売上高、経営指標等」の実数値が採用される。
+    """
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp_pharma.csv": [
+                {
+                    "要素ID": (
+                        "jpcrp_cor:RevenuesFromExternalCustomers"
+                        "InformationForEachRegionTextBlock"
+                    ),
+                    "項目名": "売上高、地域ごとの情報 [テキストブロック]",
+                    "相対年度": "当期",
+                    "値": "(1) 売上高 本邦の外部顧客への売上高が90%を超えるため省略。",
+                },
+                {
+                    "項目名": "売上高、経営指標等",
+                    "相対年度": "当期",
+                    "値": "43,971,000,000",
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+    assert parsed.financial_metrics["sales"] == 43_971_000_000
+
+
+def test_parse_from_raw_facts_reproduces_zip_extraction() -> None:
+    """保存済み raw_facts から再抽出すると ZIP 経由と同一の結果になること.
+
+    reprocess (CSV 再ダウンロードなしの再抽出) の忠実性を担保する。
+    raw_edinet_facts に積まれた生行だけで、財務・人的資本・evidence が
+    完全に再現できることを検証する。
+    """
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp_main.csv": [
+                {
+                    "要素ID": (
+                        "jpcrp_cor:RevenuesFromExternalCustomers"
+                        "InformationForEachRegionTextBlock"
+                    ),
+                    "項目名": "売上高、地域ごとの情報 [テキストブロック]",
+                    "相対年度": "当期",
+                    "値": "(1) 経常収益…記載を省略しております。",
+                },
+                {"項目名": "売上高、経営指標等", "相対年度": "当期", "値": "1,234"},
+                {"項目名": "従業員数", "相対年度": "提出者", "値": "50"},
+                {
+                    "項目名": "管理職に占める女性労働者の割合",
+                    "相対年度": "提出者",
+                    "値": "12.5",
+                },
+            ],
+        }
+    )
+    via_zip = parse_document_zip(zip_bytes)
+    # テキストブロックを飛ばし、後続の本物 1,234 を採用していること
+    assert via_zip.financial_metrics["sales"] == 1234
+
+    via_raw = parse_from_raw_facts(via_zip.raw_facts)
+    assert via_raw.financial_metrics == via_zip.financial_metrics
+    assert [
+        (e.metric_name, e.raw_value, e.scope, e.worker_type) for e in via_raw.evidence
+    ] == [
+        (e.metric_name, e.raw_value, e.scope, e.worker_type) for e in via_zip.evidence
+    ]
+    assert via_raw.human_metrics == via_zip.human_metrics
 
 
 def test_parse_document_zip_element_id_match_takes_priority() -> None:

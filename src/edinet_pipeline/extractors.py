@@ -59,6 +59,21 @@ CURRENT_PERIOD_MARKERS = ("当期", "当年", "当連結会計年度", "提出�
 # 「従業員の状況」テキストブロックの項目名 (Layer 3 のトリガー)
 EMPLOYEE_STATUS_BLOCK_LABEL = "従業員の状況"
 
+# テキストブロック (自由記述) の要素IDは末尾が "TextBlock"、項目名には
+# 「テキストブロック」が含まれる。財務指標の項目名部分一致 (例: 「売上高」)
+# が「売上高、地域ごとの情報 [テキストブロック]」のような自由記述行に誤マッチ
+# し、本文中の注釈番号 (例: "(1) 経常収益…") を数値として拾う事故を防ぐための
+# マーカー。銀行・保険・医薬品持株会社などで sales=1 等のゴミが発生していた。
+TEXT_BLOCK_ELEMENT_SUFFIX = "TextBlock"
+TEXT_BLOCK_ITEM_MARKER = "テキストブロック"
+
+
+def is_text_block_fact(element_id: str | None, item_name: str | None) -> bool:
+    """要素ID末尾が TextBlock、または項目名に「テキストブロック」を含むなら真."""
+    if element_id and element_id.endswith(TEXT_BLOCK_ELEMENT_SUFFIX):
+        return True
+    return bool(item_name and TEXT_BLOCK_ITEM_MARKER in item_name)
+
 
 # ------------------------------------------------------------------ #
 #  Layer 1: 要素ID 分類器
@@ -392,11 +407,18 @@ def parse_document_zip(
       Layer 3a: text_fallback (regex ベースのテキスト抽出)
     Layer 3b (LLM) は jobs.py 側で `text_block` を引数に呼び出される。
     """
-    parsed = empty_parsed_document()
-    hm_builder = HumanMetricsBuilder()
-    employee_status_text: str | None = None  # Layer 3 の入力候補を保持
-    employee_status_source: str | None = None  # 同上の出処 CSV ファイル名
+    raw_facts = _read_raw_facts_from_zip(zip_bytes)
+    return parse_from_raw_facts(raw_facts, max_ratio=max_ratio)
 
+
+def _read_raw_facts_from_zip(zip_bytes: bytes) -> list[RawFactRecord]:
+    """ZIP 内の候補 CSV を読み、元 CSV 1 行 = 1 RawFactRecord のリストを返す.
+
+    候補ファイル順 × 行順を保つことで、後段の抽出 (first-wins) の挙動を決定づける。
+    抽出可能列 (項目名/値) を持たないファイルの行も忠実に積むが、それらは item_name
+    が None になるため抽出ループ側で自然にスキップされる。
+    """
+    raw_facts: list[RawFactRecord] = []
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
         csv_files = [
             name
@@ -414,109 +436,133 @@ def parse_document_zip(
             with archive.open(csv_file) as handle:
                 frame = pd.read_csv(handle, encoding="utf-16le", sep="\t")
 
-            extractable = "項目名" in frame.columns and "値" in frame.columns
-
             for row_number, row_dict in enumerate(frame.to_dict("records"), start=1):
-                raw_fact = RawFactRecord(
-                    source_file=csv_file,
-                    row_number=row_number,
-                    element_id=stringify_raw(row_dict.get("要素ID")),
-                    item_name=stringify_raw(row_dict.get("項目名")),
-                    context_id=stringify_raw(row_dict.get("コンテキストID")),
-                    relative_year=stringify_raw(row_dict.get("相対年度")),
-                    consolidation_type=stringify_raw(row_dict.get("連結・個別")),
-                    period_type=stringify_raw(row_dict.get("期間・時点")),
-                    unit_id=stringify_raw(row_dict.get("ユニットID")),
-                    unit_label=stringify_raw(row_dict.get("単位")),
-                    raw_value=stringify_raw(row_dict.get("値")),
-                )
-                parsed.raw_facts.append(raw_fact)
-
-                if not extractable:
-                    continue
-
-                item_name = normalize_text(raw_fact.item_name)
-                raw_value = raw_fact.raw_value
-                raw_text = normalize_text(raw_value)
-                relative_year = normalize_text(raw_fact.relative_year)
-
-                # 「従業員の状況 [テキストブロック]」を Layer 3 のためにキャッシュ
-                if (
-                    EMPLOYEE_STATUS_BLOCK_LABEL in item_name
-                    and "テキストブロック" in item_name
-                    and raw_text
-                ):
-                    employee_status_text = raw_text
-                    employee_status_source = csv_file
-
-                if not item_name and not raw_text:
-                    continue
-
-                # ---- Layer 1: 要素IDマッチ (人的資本のみ) ---------------- #
-                classification = classify_element_id(raw_fact.element_id)
-                if classification is not None:
-                    _try_apply_element_id_match(
-                        hm_builder, parsed, classification,
-                        raw_fact=raw_fact, item_name=item_name,
-                        raw_text=raw_text, relative_year=relative_year,
-                        csv_file=csv_file, max_ratio=max_ratio,
+                raw_facts.append(
+                    RawFactRecord(
+                        source_file=csv_file,
+                        row_number=row_number,
+                        element_id=stringify_raw(row_dict.get("要素ID")),
+                        item_name=stringify_raw(row_dict.get("項目名")),
+                        context_id=stringify_raw(row_dict.get("コンテキストID")),
+                        relative_year=stringify_raw(row_dict.get("相対年度")),
+                        consolidation_type=stringify_raw(row_dict.get("連結・個別")),
+                        period_type=stringify_raw(row_dict.get("期間・時点")),
+                        unit_id=stringify_raw(row_dict.get("ユニットID")),
+                        unit_label=stringify_raw(row_dict.get("単位")),
+                        raw_value=stringify_raw(row_dict.get("値")),
                     )
-                    continue  # 要素IDで処理済みなので Layer 2 に降りない
+                )
+    return raw_facts
 
-                # ---- Layer 2: 項目名マッチ -------------------------------- #
-                for metric_name, patterns in EXPLICIT_PATTERNS.items():
-                    is_financial = metric_name in parsed.financial_metrics
-                    if is_financial and parsed.financial_metrics[metric_name] is not None:
-                        continue
-                    if (
-                        not is_financial
-                        and hm_builder.has_value(
-                            SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL, metric_name,
-                        )
+
+def parse_from_raw_facts(
+    raw_facts: list[RawFactRecord],
+    *,
+    max_ratio: float = DEFAULT_HUMAN_METRIC_MAX_RATIO,
+) -> ParsedDocument:
+    """保存済みの raw_facts から財務・人的資本指標を抽出する (再抽出経路と共用).
+
+    parse_document_zip は ZIP から raw_facts を構築してこの関数に委譲する。
+    raw_edinet_facts テーブルから (source_file, row_number) 順で読み戻した
+    raw_facts を渡せば、CSV ZIP の再ダウンロードなしで抽出ロジックの修正を
+    既存書類に反映できる (reprocess 経路)。
+    """
+    parsed = empty_parsed_document()
+    parsed.raw_facts = list(raw_facts)
+    hm_builder = HumanMetricsBuilder()
+    employee_status_text: str | None = None  # Layer 3 の入力候補を保持
+    employee_status_source: str | None = None  # 同上の出処 CSV ファイル名
+
+    for raw_fact in raw_facts:
+        item_name = normalize_text(raw_fact.item_name)
+        raw_value = raw_fact.raw_value
+        raw_text = normalize_text(raw_value)
+        relative_year = normalize_text(raw_fact.relative_year)
+        source_file = raw_fact.source_file
+
+        # 「従業員の状況 [テキストブロック]」を Layer 3 のためにキャッシュ
+        if (
+            EMPLOYEE_STATUS_BLOCK_LABEL in item_name
+            and "テキストブロック" in item_name
+            and raw_text
+        ):
+            employee_status_text = raw_text
+            employee_status_source = source_file
+
+        if not item_name and not raw_text:
+            continue
+
+        # ---- Layer 1: 要素IDマッチ (人的資本のみ) ---------------- #
+        classification = classify_element_id(raw_fact.element_id)
+        if classification is not None:
+            _try_apply_element_id_match(
+                hm_builder, parsed, classification,
+                raw_fact=raw_fact, item_name=item_name,
+                raw_text=raw_text, relative_year=relative_year,
+                csv_file=source_file, max_ratio=max_ratio,
+            )
+            continue  # 要素IDで処理済みなので Layer 2 に降りない
+
+        # ---- Layer 2: 項目名マッチ -------------------------------- #
+        # 財務指標はテキストブロック行に誤マッチさせない。地域情報等の
+        # 自由記述に「売上高」等が部分一致し、注釈番号を数値として拾う
+        # 事故を断つ。HC は Layer 1 (要素ID) / Layer 3 (text) で処理する。
+        financial_text_block = is_text_block_fact(raw_fact.element_id, item_name)
+        for metric_name, patterns in EXPLICIT_PATTERNS.items():
+            is_financial = metric_name in parsed.financial_metrics
+            if is_financial and parsed.financial_metrics[metric_name] is not None:
+                continue
+            if is_financial and financial_text_block:
+                continue
+            if (
+                not is_financial
+                and hm_builder.has_value(
+                    SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL, metric_name,
+                )
+            ):
+                continue
+            if not is_relevant_relative_year(relative_year):
+                continue
+            if not any(pattern in item_name for pattern in patterns):
+                continue
+
+            numeric_value = extract_numeric(raw_value)
+            if numeric_value is None:
+                continue
+
+            if is_financial:
+                parsed.financial_metrics[metric_name] = int(round(numeric_value))
+                parsed.evidence.append(
+                    MetricEvidenceRecord(
+                        metric_name=metric_name,
+                        item_name=item_name or metric_name,
+                        raw_value=raw_text,
+                        relative_year=relative_year,
+                        source_file=source_file,
+                        matched_by="item_name_match",
+                        element_id=raw_fact.element_id,
+                    )
+                )
+            else:
+                converted = convert_to_percentage(numeric_value, raw_fact.unit_id)
+                if 0.0 <= converted <= max_ratio:
+                    if hm_builder.set_value(
+                        SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL,
+                        metric_name, converted,
                     ):
-                        continue
-                    if not is_relevant_relative_year(relative_year):
-                        continue
-                    if not any(pattern in item_name for pattern in patterns):
-                        continue
-
-                    numeric_value = extract_numeric(raw_value)
-                    if numeric_value is None:
-                        continue
-
-                    if is_financial:
-                        parsed.financial_metrics[metric_name] = int(round(numeric_value))
                         parsed.evidence.append(
                             MetricEvidenceRecord(
                                 metric_name=metric_name,
                                 item_name=item_name or metric_name,
                                 raw_value=raw_text,
                                 relative_year=relative_year,
-                                source_file=csv_file,
+                                source_file=source_file,
                                 matched_by="item_name_match",
                                 element_id=raw_fact.element_id,
+                                scope=SCOPE_REPORTING_COMPANY,
+                                worker_type=WORKER_TYPE_ALL,
                             )
                         )
-                    else:
-                        converted = convert_to_percentage(numeric_value, raw_fact.unit_id)
-                        if 0.0 <= converted <= max_ratio:
-                            if hm_builder.set_value(
-                                SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL,
-                                metric_name, converted,
-                            ):
-                                parsed.evidence.append(
-                                    MetricEvidenceRecord(
-                                        metric_name=metric_name,
-                                        item_name=item_name or metric_name,
-                                        raw_value=raw_text,
-                                        relative_year=relative_year,
-                                        source_file=csv_file,
-                                        matched_by="item_name_match",
-                                        element_id=raw_fact.element_id,
-                                        scope=SCOPE_REPORTING_COMPANY,
-                                        worker_type=WORKER_TYPE_ALL,
-                                    )
-                                )
 
     # ---- Layer 3a: regex によるテキストフォールバック (1書類1回) ----- #
     # 旧実装は CSV 全行に対して fallback regex を走らせていたが、人的資本の
