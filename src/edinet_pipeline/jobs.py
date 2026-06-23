@@ -1,9 +1,10 @@
-"""ジョブ層 — fetch / process / backfill の 3 つのパイプラインジョブを定義.
+"""ジョブ層 — fetch / process / backfill / reprocess のパイプラインジョブを定義.
 
 実行フロー:
-  fetch  : EDINET API → 書類メタデータを DB 登録 (pending or skipped)
-  process: pending キューから書類を取得 → CSV ZIP ダウンロード → 指標抽出 → DB 更新
-  backfill: 日付範囲で fetch → process を繰り返す一括実行
+  fetch    : EDINET API → 書類メタデータを DB 登録 (pending or skipped)
+  process  : pending キューから書類を取得 → CSV ZIP ダウンロード → 指標抽出 → DB 更新
+  backfill : 日付範囲で fetch → process を繰り返す一括実行
+  reprocess: 保存済み raw_edinet_facts から再抽出 (再DLなし) → 指標・evidence を更新
 """
 
 from __future__ import annotations
@@ -17,7 +18,11 @@ from typing import Any
 from edinet_pipeline.client import CsvUnavailableError, EdinetClient
 from edinet_pipeline.config import Settings
 from edinet_pipeline.db import DatabasePool, PipelineRepository, db_connection
-from edinet_pipeline.extractors import merge_llm_records, parse_document_zip
+from edinet_pipeline.extractors import (
+    merge_llm_records,
+    parse_document_zip,
+    parse_from_raw_facts,
+)
 from edinet_pipeline.llm_extractor import extract_via_llm
 from edinet_pipeline.logging_utils import log_event
 from edinet_pipeline.models import DocumentRecord, ParsedDocument
@@ -425,3 +430,105 @@ def backfill_documents(
             if processed == 0:
                 break
         current_date += timedelta(days=1)
+
+
+# ------------------------------------------------------------------ #
+#  Job 4: reprocess — 保存済み生行から再抽出 (CSV 再ダウンロードなし)
+# ------------------------------------------------------------------ #
+
+def reprocess_documents(settings: Settings, *, limit: int | None = None) -> int:
+    """raw_edinet_facts の生行に抽出ロジックを再適用し、指標・evidence を更新する.
+
+    抽出ロジックを修正した後に、既存の処理済み書類へ反映するためのジョブ。
+    CSV ZIP の再ダウンロードは行わず、保存済みの生行 (raw_edinet_facts) を
+    (source_file, row_number) 順で読み戻して parse_from_raw_facts を再実行する。
+    人的資本を失わないよう LLM フォールバックも再適用する (SHA256 キャッシュ前提)。
+
+    例外時の挙動:
+      - 個別書類の Exception → ログして次の書類へ (status は触らない)
+      - BaseException (SIGINT 等) → そのまま再 raise して停止指示を尊重する
+
+    Returns:
+        再抽出した書類数
+    """
+    pool = DatabasePool(
+        settings.database_url,
+        min_size=settings.db_pool_min_size,
+        max_size=settings.db_pool_max_size,
+    )
+    try:
+        with pool.connection() as connection:
+            repository = PipelineRepository(connection)
+            targets = repository.fetch_reprocessable_documents(limit=limit)
+            connection.commit()
+
+        if not targets:
+            log_event(logger, "info", "reprocess_queue_empty")
+            return 0
+
+        count = 0
+        for document in targets:
+            doc_id = document["doc_id"]
+            edinet_code = document["edinet_code"]
+            fiscal_year = document["fiscal_year"]
+            started_at = time.time()
+            try:
+                with pool.connection() as connection:
+                    repository = PipelineRepository(connection)
+                    raw_facts = repository.fetch_raw_facts(doc_id)
+                if not raw_facts:
+                    continue
+
+                parsed = parse_from_raw_facts(
+                    raw_facts, max_ratio=settings.human_metric_max_ratio
+                )
+                _maybe_run_llm_fallback(parsed, settings=settings, pool=pool)
+
+                with pool.connection() as connection:
+                    repository = PipelineRepository(connection)
+                    repository.mark_processed(doc_id, parsed)
+                    repository.delete_human_metrics_for_doc(
+                        edinet_code=edinet_code, fiscal_year=fiscal_year,
+                    )
+                    repository.upsert_human_metrics(
+                        edinet_code=edinet_code,
+                        fiscal_year=fiscal_year,
+                        parsed=parsed,
+                    )
+                    repository.replace_metric_evidence(doc_id, parsed.evidence)
+                    connection.commit()
+                count += 1
+                elapsed_ms = int((time.time() - started_at) * 1000)
+                log_event(
+                    logger,
+                    "info",
+                    "document_reprocessed",
+                    doc_id=doc_id,
+                    elapsed_ms=elapsed_ms,
+                    evidence_count=len(parsed.evidence),
+                )
+            except Exception as exc:
+                # 個別書類の失敗はスキップして継続 (既存の processed 状態は維持)。
+                log_event(
+                    logger,
+                    "error",
+                    "document_reprocess_failed",
+                    doc_id=doc_id,
+                    reason=str(exc),
+                )
+                continue
+            except BaseException as exc:
+                # SIGINT / SystemExit → 停止指示を握りつぶさず再 raise する。
+                log_event(
+                    logger,
+                    "warning",
+                    "reprocess_interrupted",
+                    doc_id=doc_id,
+                    reason=str(exc),
+                )
+                raise
+
+        log_event(logger, "info", "reprocess_completed", reprocessed=count)
+        return count
+    finally:
+        pool.closeall()

@@ -515,6 +515,67 @@ class PipelineRepository:
         )
 
     # ------------------------------------------------------------------ #
+    #  再抽出 (reprocess) — 保存済み生行からの読み戻し
+    # ------------------------------------------------------------------ #
+
+    def fetch_raw_facts(self, doc_id: str) -> list[RawFactRecord]:
+        """raw_edinet_facts から指定書類の生行を (source_file, row_number) 順で返す.
+
+        抽出ロジック修正後、CSV ZIP を再ダウンロードせずに抽出を再実行するための
+        入力。並び順は first-wins の挙動を決めるため必ず保つ。
+        """
+        with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                SELECT source_file, row_number, element_id, item_name, context_id,
+                       relative_year, consolidation_type, period_type,
+                       unit_id, unit_label, raw_value
+                  FROM raw_edinet_facts
+                 WHERE doc_id = %s
+                 ORDER BY source_file, row_number
+                """,
+                (doc_id,),
+            )
+            return [
+                RawFactRecord(
+                    source_file=row["source_file"],
+                    row_number=row["row_number"],
+                    element_id=row["element_id"],
+                    item_name=row["item_name"],
+                    context_id=row["context_id"],
+                    relative_year=row["relative_year"],
+                    consolidation_type=row["consolidation_type"],
+                    period_type=row["period_type"],
+                    unit_id=row["unit_id"],
+                    unit_label=row["unit_label"],
+                    raw_value=row["raw_value"],
+                )
+                for row in cursor.fetchall()
+            ]
+
+    def fetch_reprocessable_documents(self, *, limit: int | None = None) -> list[dict]:
+        """生行 (raw_edinet_facts) が残っている書類を再抽出対象として返す.
+
+        各要素は doc_id / edinet_code / fiscal_year を持つ。生行が無い書類
+        (skipped 等) は対象外。年度・doc_id 順で安定に並べる。
+        """
+        sql = """
+            SELECT fr.doc_id, fr.edinet_code, fr.fiscal_year
+              FROM financial_reports fr
+             WHERE EXISTS (
+                 SELECT 1 FROM raw_edinet_facts ref WHERE ref.doc_id = fr.doc_id
+             )
+             ORDER BY fr.fiscal_year, fr.doc_id
+        """
+        params: tuple = ()
+        if limit is not None:
+            sql += " LIMIT %s"
+            params = (limit,)
+        with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(sql, params)
+            return list(cursor.fetchall())
+
+    # ------------------------------------------------------------------ #
     #  分析レイヤー用クエリ (Read-Only)
     # ------------------------------------------------------------------ #
 

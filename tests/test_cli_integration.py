@@ -233,6 +233,62 @@ def test_process_sets_processed_skipped_failed_and_upserts_human_metrics(
     ) == (4,)
 
 
+@pytest.mark.integration
+def test_reprocess_re_extracts_from_raw_facts_without_redownload(
+    db_connection: psycopg2.extensions.connection,
+    pipeline_env: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """reprocess が保存済み生行から再抽出し、再ダウンロードせず指標を直すこと.
+
+    抽出ロジック修正の反映を模す: 一度 process した後に DB の sales を誤った値
+    (1) に書き換え、reprocess で生行から正しい 1,234 に復元されることを確認する。
+    """
+    document_date = "2024-03-29"
+    FakeClient.documents_by_date[document_date] = [
+        build_document(doc_id="S100RE1", edinet_code="E00001", submit_date=document_date)
+    ]
+    FakeClient.downloads = {
+        "S100RE1": build_csv_zip(
+            [
+                {"項目名": "売上高", "値": "1,234", "相対年度": "当期"},
+                {"項目名": "従業員数", "値": "50", "相対年度": "提出者"},
+                {
+                    "項目名": "管理職に占める女性労働者の割合",
+                    "値": "12.5",
+                    "相対年度": "提出者",
+                },
+            ]
+        ),
+    }
+    monkeypatch.setattr("edinet_pipeline.jobs.EdinetClient", FakeClient)
+    assert main(["fetch", "--date", document_date]) == 0
+    assert main(["process", "--limit", "10"]) == 0
+
+    # 抽出結果を誤った値に破壊 (旧ロジックが入れていたゴミを模す)
+    with db_connection.cursor() as cursor:
+        cursor.execute(
+            "UPDATE financial_reports SET sales = 1 WHERE doc_id = %s", ("S100RE1",)
+        )
+    db_connection.commit()
+
+    # 再ダウンロードを禁止 (reprocess が client を一切呼ばないことの担保)
+    FakeClient.downloads = {}
+    assert main(["reprocess"]) == 0
+
+    assert fetch_one(
+        db_connection,
+        "SELECT sales FROM financial_reports WHERE doc_id = %s",
+        ("S100RE1",),
+    ) == (1234,)
+    # 人的資本も生行から再導出されていること
+    assert fetch_one(
+        db_connection,
+        "SELECT female_manager_ratio FROM human_capital_metrics WHERE edinet_code = %s",
+        ("E00001",),
+    ) == (Decimal("12.50"),)
+
+
 def _register_pending_doc(
     monkeypatch: pytest.MonkeyPatch, *, doc_id: str, edinet_code: str, submit_date: str
 ) -> None:

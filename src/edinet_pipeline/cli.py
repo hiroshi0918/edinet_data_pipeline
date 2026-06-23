@@ -10,7 +10,12 @@ from edinet_pipeline.analytics import export_analytics
 from edinet_pipeline.config import Settings
 from edinet_pipeline.db import PipelineRepository, db_connection
 from edinet_pipeline.industry_master import update_industries
-from edinet_pipeline.jobs import backfill_documents, fetch_documents_for_date, process_documents
+from edinet_pipeline.jobs import (
+    backfill_documents,
+    fetch_documents_for_date,
+    process_documents,
+    reprocess_documents,
+)
 from edinet_pipeline.logging_utils import configure_logging
 
 
@@ -26,6 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
         fetch            : 指定日の書類一覧を取得し DB 登録
         process          : キューに溜まった書類を順次ダウンロード・解析
         backfill         : 日付範囲で fetch → process をまとめて実行
+        reprocess        : 保存済み生行から再抽出 (再DLなし) し指標を更新
         export-analytics : PostgreSQL → Parquet / DuckDB へスナップショット出力
         dashboard        : 分析ダッシュボードを起動 (要 viz 依存)
     """
@@ -98,6 +104,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Path to a pre-downloaded Edinetcode ZIP",
+    )
+
+    # --- reprocess: 保存済み生行から再抽出 (抽出ロジック修正の反映) ---
+    reprocess_parser = subparsers.add_parser(
+        "reprocess",
+        help="Re-extract metrics from stored raw_edinet_facts (no re-download)",
+    )
+    reprocess_parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum documents to reprocess (default: all with raw facts)",
     )
 
     # --- reset-stale: 停滞した processing 行を手動で pending へ復旧 ---
@@ -176,6 +194,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             process_limit=args.process_limit,
             retry_failed=args.retry_failed,
         )
+        return 0
+
+    if args.command == "reprocess":
+        count = reprocess_documents(settings, limit=args.limit)
+        print(f"reprocessed: count={count}")
         return 0
 
     if args.command == "export-analytics":
