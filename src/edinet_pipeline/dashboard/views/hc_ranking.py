@@ -70,15 +70,12 @@ def render(conn: duckdb.DuckDBPyConnection) -> None:
         return
 
     label = HC_METRIC_LABELS[metric]
-    col_top, col_bottom = st.columns(2)
-    with col_top:
-        st.subheader(f"上位 {_TOP_N} 社")
-        st.caption(top_note)
-        _render_table(top_df, metric, label)
-    with col_bottom:
-        st.subheader(f"下位 {_TOP_N} 社")
-        st.caption(bottom_note)
-        _render_table(bottom_df, metric, label)
+    st.subheader(f"上位 {_TOP_N} 社")
+    st.caption(top_note)
+    _render_table(top_df, metric, label)
+    st.subheader(f"下位 {_TOP_N} 社")
+    st.caption(bottom_note)
+    _render_table(bottom_df, metric, label)
 
 
 def _render_table(df: pd.DataFrame, metric: str, label: str) -> None:

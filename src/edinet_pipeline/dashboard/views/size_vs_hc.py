@@ -77,14 +77,11 @@ def render(conn: duckdb.DuckDBPyConnection) -> None:
         )
         return
 
-    col_top, col_bottom = st.columns(2)
-    with col_top:
-        st.subheader(f"{FINANCIAL_METRIC_LABELS[metric]} 上位 {_TOP_N} 社")
-        _render_table(top_df, metric)
-    with col_bottom:
-        st.subheader(f"{FINANCIAL_METRIC_LABELS[metric]} 下位 {_TOP_N} 社")
-        st.caption(_BOTTOM_FLOOR_NOTE[metric])
-        _render_table(bottom_df, metric)
+    st.subheader(f"{FINANCIAL_METRIC_LABELS[metric]} 上位 {_TOP_N} 社")
+    _render_table(top_df, metric)
+    st.subheader(f"{FINANCIAL_METRIC_LABELS[metric]} 下位 {_TOP_N} 社")
+    st.caption(_BOTTOM_FLOOR_NOTE[metric])
+    _render_table(bottom_df, metric)
 
 
 def _render_table(df: pd.DataFrame, metric: str) -> None:
