@@ -80,6 +80,27 @@ def query_available_fiscal_years(_conn: duckdb.DuckDBPyConnection) -> list[int]:
     return df["fiscal_year"].tolist()
 
 
+@st.cache_data(ttl=300)
+def query_busiest_fiscal_year(_conn: duckdb.DuckDBPyConnection) -> int | None:
+    """企業数が最も多い年度を返す (年度フィルタの既定値用).
+
+    最新年度は提出が出揃っていない部分年度になりがちで、初期表示が薄くなる。
+    収録企業数が最大の年度を既定にすると、最初から濃い分布を見せられる。
+    """
+    df = _conn.execute(
+        f"""
+        SELECT fiscal_year, COUNT(DISTINCT edinet_code) AS n
+          FROM {_T}
+         WHERE scope = ? AND worker_type = ?
+         GROUP BY fiscal_year
+         ORDER BY n DESC, fiscal_year DESC
+         LIMIT 1
+        """,
+        [DEFAULT_SCOPE, DEFAULT_WORKER_TYPE],
+    ).fetchdf()
+    return int(df["fiscal_year"].iloc[0]) if not df.empty else None
+
+
 # ------------------------------------------------------------------ #
 #  サマリー (データ範囲 KPI)
 # ------------------------------------------------------------------ #

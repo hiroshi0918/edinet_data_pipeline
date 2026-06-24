@@ -23,6 +23,7 @@ from edinet_pipeline.dashboard.data import (
     query_size_peers,
     search_company_by_name,
 )
+from edinet_pipeline.dashboard.theme import ACCENT, page_header, style_plotly
 from edinet_pipeline.models import SCOPE_CONSOLIDATED_SUBSIDIARY
 
 _HC_COLS: tuple[str, ...] = tuple(HC_METRIC_LABELS.keys())
@@ -30,11 +31,11 @@ _HC_COLS: tuple[str, ...] = tuple(HC_METRIC_LABELS.keys())
 
 def render(conn: duckdb.DuckDBPyConnection) -> None:
     """企業スポットライトページを描画する."""
-    st.header("企業スポットライト")
-    st.caption(
+    page_header(
+        "SPOTLIGHT",
+        "企業スポットライト",
         "単一の企業について、人的資本指標 3 つ（女性管理職比率・男性育休取得率・男女賃金格差）を "
-        "**業界 peer** と **規模類似 peer** の両方の分布に並べて、"
-        "「**理想値**」との差分を確認します。"
+        "業界 peer と規模類似 peer の分布に並べ、「理想値」との差分を確認します。",
     )
 
     edinet_code, company_label = _render_company_selector(conn)
@@ -254,22 +255,21 @@ def _render_peer_violin(
                         box_visible=True,
                         meanline_visible=True,
                         points="all",
-                        marker=dict(opacity=0.4),
+                        line_color=ACCENT,
+                        fillcolor="rgba(46,91,218,0.12)",
+                        marker=dict(opacity=0.35, color=ACCENT, size=4),
                     )
                 )
             if target_value is not None and pd.notna(target_value):
                 fig.add_hline(
                     y=float(target_value),
-                    line_color="red",
+                    line_color="#C0483F",
                     line_width=2,
                     annotation_text=f"対象: {float(target_value):.1f}%",
                     annotation_position="top left",
                 )
-            fig.update_layout(
-                title=HC_METRIC_LABELS[metric],
-                height=350,
-                showlegend=False,
-            )
+            style_plotly(fig, height=350)
+            fig.update_layout(title=HC_METRIC_LABELS[metric], showlegend=False)
             if metric == "male_childcare_leave_ratio":
                 fig.update_yaxes(range=[RATIO_DISPLAY_MIN, RATIO_DISPLAY_MAX])
             st.plotly_chart(fig, use_container_width=True)

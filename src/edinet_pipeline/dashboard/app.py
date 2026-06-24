@@ -11,6 +11,7 @@ import streamlit as st
 
 from edinet_pipeline.dashboard.data import get_connection
 from edinet_pipeline.dashboard.datasource import DuckdbDownloadError, ensure_duckdb_file
+from edinet_pipeline.dashboard.theme import app_brand_header, inject_global_css
 from edinet_pipeline.dashboard.views import (
     company_lookup,
     company_spotlight,
@@ -35,7 +36,8 @@ def main() -> None:
         page_icon=":chart_with_upwards_trend:",
         layout="wide",
     )
-    st.title("EDINET 分析ダッシュボード")
+    inject_global_css()
+    app_brand_header()
 
     try:
         duckdb_path = ensure_duckdb_file()

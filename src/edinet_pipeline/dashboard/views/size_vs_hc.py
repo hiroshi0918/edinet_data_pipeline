@@ -17,6 +17,7 @@ from edinet_pipeline.dashboard.components.filters import (
 )
 from edinet_pipeline.dashboard.constants import FINANCIAL_METRIC_LABELS, SIZE_AXIS_METRICS
 from edinet_pipeline.dashboard.data import query_financial_ranking_with_hc
+from edinet_pipeline.dashboard.theme import page_header, ratio_table
 
 _TOP_N = 10
 
@@ -38,10 +39,11 @@ _YEN_METRICS = {"sales", "operating_profit"}
 
 def render(conn: duckdb.DuckDBPyConnection) -> None:
     """規模×人的資本ページを描画する."""
-    st.header("規模×人的資本")
-    st.caption(
+    page_header(
+        "SCALE × HUMAN CAPITAL",
+        "規模×人的資本",
         "財務規模の上位 10 社・下位 10 社に、女性管理職比率・男女賃金格差を併記します。"
-        "「大企業ほど開示が進んでいるか」「小規模企業はどうか」を読むためのページです。"
+        "「大企業ほど開示が進んでいるか」「小規模企業はどうか」を読むためのページです。",
     )
 
     fiscal_year = render_single_year_filter(conn, key_prefix="sizehc")
@@ -78,31 +80,32 @@ def render(conn: duckdb.DuckDBPyConnection) -> None:
     col_top, col_bottom = st.columns(2)
     with col_top:
         st.subheader(f"{FINANCIAL_METRIC_LABELS[metric]} 上位 {_TOP_N} 社")
-        st.dataframe(
-            _format_table(top_df, metric), use_container_width=True, hide_index=True
-        )
+        _render_table(top_df, metric)
     with col_bottom:
         st.subheader(f"{FINANCIAL_METRIC_LABELS[metric]} 下位 {_TOP_N} 社")
         st.caption(_BOTTOM_FLOOR_NOTE[metric])
-        st.dataframe(
-            _format_table(bottom_df, metric), use_container_width=True, hide_index=True
-        )
+        _render_table(bottom_df, metric)
 
 
-def _format_table(df: pd.DataFrame, metric: str) -> pd.DataFrame:
-    """ランキングを表示用 (順位・企業名・財務値・HC 2 指標) に整形する."""
+def _render_table(df: pd.DataFrame, metric: str) -> None:
+    """財務値(整形済み) + HC 2 列(グラデーション) の台帳表を描画する."""
     label = FINANCIAL_METRIC_LABELS[metric]
-    cols = ["順位", "企業名", label, "女性管理職比率", "男女賃金格差"]
     if df.empty:
-        return pd.DataFrame(columns=cols)
-    return pd.DataFrame(
+        st.info("該当する企業がありません。")
+        return
+    frame = pd.DataFrame(
         {
             "順位": range(1, len(df) + 1),
             "企業名": df["company_name"].to_numpy(),
             label: [_format_value(v, metric) for v in df["value"]],
-            "女性管理職比率": [_format_pct(v) for v in df["female_manager_ratio"]],
-            "男女賃金格差": [_format_pct(v) for v in df["gender_wage_gap"]],
+            "女性管理職比率": df["female_manager_ratio"].astype(float).to_numpy(),
+            "男女賃金格差": df["gender_wage_gap"].astype(float).to_numpy(),
         }
+    )
+    st.dataframe(
+        ratio_table(frame, ["女性管理職比率", "男女賃金格差"]),
+        use_container_width=True,
+        hide_index=True,
     )
 
 
@@ -112,9 +115,3 @@ def _format_value(value: object, metric: str) -> str:
     if metric in _YEN_METRICS:
         return f"{float(value) / 1e8:,.1f} 億円"
     return f"{int(value):,} 人"
-
-
-def _format_pct(value: object) -> str:
-    if value is None or pd.isna(value):
-        return "—"
-    return f"{float(value):.1f} %"

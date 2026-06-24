@@ -22,18 +22,20 @@ from edinet_pipeline.dashboard.data import (
     query_company_profile,
     query_kpi_summary,
 )
+from edinet_pipeline.dashboard.theme import page_header, ratio_bar_card_html
 
-# 表示順 (財務 4 → 人的資本 3) とラベル
-_METRIC_LABELS: dict[str, str] = {**FINANCIAL_METRIC_LABELS, **HC_METRIC_LABELS}
+# 表示順 (財務 4 → 人的資本 3)
 _FINANCIAL_COLS: tuple[str, ...] = tuple(FINANCIAL_METRIC_LABELS.keys())
+_HC_COLS: tuple[str, ...] = tuple(HC_METRIC_LABELS.keys())
 
 
 def render(conn: duckdb.DuckDBPyConnection) -> None:
     """企業を調べるページを描画する."""
-    st.header("企業を調べる")
-    st.caption(
-        "会社名・年度・開示範囲を選んで、その 1 社の有価証券報告書に記載された "
-        "財務指標と人的資本指標を確認します。"
+    page_header(
+        "COMPANY LOOKUP",
+        "企業を調べる",
+        "会社名・年度・開示範囲を選ぶと、その 1 社の有価証券報告書に記載された "
+        "財務指標と人的資本指標を一枚で確認できます。",
     )
 
     _render_data_range(conn)
@@ -152,21 +154,28 @@ def _render_identity(
 
 
 def _render_metric_table(row: pd.Series) -> None:
-    """7 指標を縦持ちの表で表示する (財務は桁区切り、HC は % 表記)."""
-    records = []
-    for col, label in _METRIC_LABELS.items():
+    """7 指標を財務メトリクスカードと人的資本のパリティバーで表示する."""
+    st.subheader("財務指標")
+    fin_cols = st.columns(len(_FINANCIAL_COLS))
+    for ax, col in zip(fin_cols, _FINANCIAL_COLS, strict=True):
+        ax.metric(FINANCIAL_METRIC_LABELS[col], _format_financial(row.get(col), col))
+
+    st.subheader("人的資本指標")
+    hc_cols = st.columns(len(_HC_COLS))
+    for ax, col in zip(hc_cols, _HC_COLS, strict=True):
         value = row.get(col)
-        if value is None or pd.isna(value):
-            display = "—"
-        elif col in _FINANCIAL_COLS:
-            display = f"{int(value):,}"
-        else:
-            display = f"{float(value):.1f} %"
-        records.append({"指標": label, "値": display})
-    table = pd.DataFrame(records)
-    st.subheader("有価証券報告書の値")
-    st.dataframe(table, use_container_width=True, hide_index=True)
+        v = float(value) if value is not None and pd.notna(value) else None
+        ax.markdown(ratio_bar_card_html(HC_METRIC_LABELS[col], v), unsafe_allow_html=True)
     st.caption(
-        "財務指標は円単位。人的資本指標は提出会社/連結子会社・労働者区分で値が異なる"
-        "ため、上の次元セレクタで切り替えてください。"
+        "バーは 0%(淡い赤) → 100%(淡い緑) のパリティ目盛り。人的資本指標は"
+        "提出会社/連結子会社・労働者区分で値が異なるため、上の次元セレクタで切り替えられます。"
     )
+
+
+def _format_financial(value: object, col: str) -> str:
+    """財務値を桁の大きい売上・利益は億円、従業員数は人で表示する."""
+    if value is None or pd.isna(value):
+        return "—"
+    if col == "employee_count":
+        return f"{int(value):,} 人"
+    return f"{float(value) / 1e8:,.1f} 億円"

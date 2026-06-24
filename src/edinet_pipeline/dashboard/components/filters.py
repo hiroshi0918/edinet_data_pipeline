@@ -11,7 +11,10 @@ from edinet_pipeline.dashboard.constants import (
     SCOPE_LABELS,
     WORKER_TYPE_LABELS,
 )
-from edinet_pipeline.dashboard.data import query_available_fiscal_years
+from edinet_pipeline.dashboard.data import (
+    query_available_fiscal_years,
+    query_busiest_fiscal_year,
+)
 
 
 def render_single_year_filter(
@@ -28,11 +31,14 @@ def render_single_year_filter(
         st.sidebar.warning("データがありません")
         return None
     years_desc = sorted(years, reverse=True)
+    # 既定は「企業数が最多の年度」。最新が部分年度でも初期表示が薄くならない。
+    busiest = query_busiest_fiscal_year(conn)
+    default_index = years_desc.index(busiest) if busiest in years_desc else 0
     return int(
         st.sidebar.selectbox(
             "年度",
             options=years_desc,
-            index=0,
+            index=default_index,
             key=f"{key_prefix}_single_year",
         )
     )

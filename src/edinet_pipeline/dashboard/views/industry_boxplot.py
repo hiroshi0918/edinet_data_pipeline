@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import duckdb
-import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 from edinet_pipeline.dashboard.components.filters import (
@@ -17,17 +17,19 @@ from edinet_pipeline.dashboard.components.filters import (
 )
 from edinet_pipeline.dashboard.constants import HC_METRIC_LABELS
 from edinet_pipeline.dashboard.data import query_hc_distribution_by_industry
+from edinet_pipeline.dashboard.theme import median_color, page_header, style_plotly
 
 _MIN_COMPANIES = 5
 
 
 def render(conn: duckdb.DuckDBPyConnection) -> None:
     """業種で比べるページ (箱ひげ図) を描画する."""
-    st.header("業種で比べる")
-    st.caption(
+    page_header(
+        "BY INDUSTRY",
+        "業種で比べる",
         "人的資本指標の業種別分布を箱ひげ図で表示します。箱は四分位、縦線は中央値、"
-        "外側の点は外れ値です。業種は中央値の高い順に並びます "
-        f"(開示 {_MIN_COMPANIES} 社未満の業種は除外)。"
+        f"外側の点は外れ値。中央値の高い業種ほど上・濃い緑になります "
+        f"(開示 {_MIN_COMPANIES} 社未満の業種は除外)。",
     )
 
     fiscal_year = render_single_year_filter(conn, key_prefix="boxplot")
@@ -54,21 +56,34 @@ def render(conn: duckdb.DuckDBPyConnection) -> None:
         )
         return
 
-    # 中央値の高い順に業種を並べる (横向き箱ひげで上ほど高い)
-    order = (
-        df.groupby("industry")["value"].median().sort_values().index.tolist()
-    )
-    fig = px.box(
-        df,
-        x="value",
-        y="industry",
-        orientation="h",
-        points="outliers",
-        category_orders={"industry": order},
-        labels={"value": HC_METRIC_LABELS[metric], "industry": "業種"},
-    )
-    # 業種数に応じて高さを伸ばし、全業種のラベルが潰れないようにする
-    fig.update_layout(height=max(400, 26 * len(order)), margin=dict(l=10, r=10))
+    # 中央値の昇順に業種を並べ (横向きで上ほど高い)、中央値ランクで淡藍→濃tealに着色
+    medians = df.groupby("industry")["value"].median().sort_values()
+    industries = medians.index.tolist()
+    n = len(industries)
+    fig = go.Figure()
+    for i, industry in enumerate(industries):
+        t = i / max(1, n - 1)  # 0 = 中央値最小, 1 = 最大
+        color = median_color(t)
+        values = df.loc[df["industry"] == industry, "value"]
+        fig.add_trace(
+            go.Box(
+                x=values,
+                name=industry,
+                orientation="h",
+                boxpoints="outliers",
+                marker=dict(color=color, size=4, opacity=0.5),
+                line=dict(color=color, width=1.4),
+                fillcolor=color,
+                opacity=0.9,
+                hovertemplate=(
+                    f"{industry}<br>{HC_METRIC_LABELS[metric]}: "
+                    "%{x:.1f}%<extra></extra>"
+                ),
+            )
+        )
+    style_plotly(fig, height=max(420, 26 * n))
+    fig.update_layout(showlegend=False)
+    fig.update_xaxes(title=HC_METRIC_LABELS[metric], ticksuffix="%")
     st.plotly_chart(fig, use_container_width=True)
 
     if metric == "male_childcare_leave_ratio":

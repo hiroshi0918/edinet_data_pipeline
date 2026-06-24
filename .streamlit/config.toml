@@ -1,0 +1,13 @@
+# ダッシュボードのカラーテーマ — コンセプト「開示台帳 (Disclosure Ledger)」。
+# 有価証券報告書の公式文書感を、冷たい紙色 + 藍 (indigo) で表現する。
+# フォントとコンポーネント装飾は theme.inject_global_css() 側で注入する
+# (Streamlit のバージョン差に左右されにくいよう、色だけ config に置く)。
+[theme]
+base = "light"
+primaryColor = "#2E5BDA"
+backgroundColor = "#F4F6F9"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1B2330"
+linkColor = "#2E5BDA"
+borderColor = "#E3E7EE"
+baseRadius = "0.5rem"
