@@ -88,7 +88,11 @@ def _render_data_range(conn: duckdb.DuckDBPyConnection) -> None:
 def _render_company_selector(
     conn: duckdb.DuckDBPyConnection,
 ) -> tuple[str | None, str | None]:
-    """全企業を 1 つの検索付き selectbox で選ばせ、edinet_code を返す."""
+    """全企業を 1 つの検索付き selectbox で選ばせ、edinet_code を返す.
+
+    URL の ?company=<edinet_code> を初期選択に反映し、選択結果を URL に
+    書き戻すことで、特定企業へのリンクを共有できるようにする。
+    """
     companies = query_available_companies(conn)
     if companies.empty:
         st.warning("企業データがありません")
@@ -98,14 +102,18 @@ def _render_company_selector(
         f"{r['company_name']} ({r['edinet_code']})": r["edinet_code"]
         for _, r in companies.iterrows()
     }
+    codes = list(options.values())
+    requested_code = st.query_params.get("company", "")
+    initial_index = codes.index(requested_code) if requested_code in codes else 0
     chosen = st.selectbox(
         "会社名で検索・選択",
         options=list(options.keys()),
-        index=0,
+        index=initial_index,
         help="入力すると部分一致で絞り込めます。",
     )
     edinet_code = options[chosen]
     company_name = chosen.rsplit(" (", 1)[0]
+    st.query_params["company"] = edinet_code
     return edinet_code, company_name
 
 

@@ -16,6 +16,7 @@ from edinet_pipeline.dashboard.constants import (
 )
 from edinet_pipeline.dashboard.data import (
     detect_evaluation_scope,
+    query_available_companies,
     query_company_industry_rank,
     query_company_profile,
     query_ideal_cluster,
@@ -88,8 +89,17 @@ def render(conn: duckdb.DuckDBPyConnection) -> None:
 def _render_company_selector(
     conn: duckdb.DuckDBPyConnection,
 ) -> tuple[str | None, str | None]:
-    """会社名検索 + 候補ドロップダウンで edinet_code を返す."""
-    default_query = st.session_state.get("spotlight_query", "セプテーニ")
+    """会社名検索 + 候補ドロップダウンで edinet_code を返す.
+
+    URL の ?company=<edinet_code> があれば初回表示時に検索欄へその企業名を
+    設定して候補に出し、選択結果を URL に書き戻す (企業を調べるページと共通)。
+    """
+    requested_code = st.query_params.get("company", "")
+    requested_name = _lookup_company_name(conn, requested_code)
+    if "spotlight_query" not in st.session_state and requested_name:
+        default_query = requested_name
+    else:
+        default_query = st.session_state.get("spotlight_query", "セプテーニ")
     query = st.text_input(
         "企業名で検索（部分一致）",
         value=default_query,
@@ -103,9 +113,25 @@ def _render_company_selector(
         for _, row in candidates.iterrows()
     ]
     labels = [label for _, label in options]
-    chosen = st.selectbox("企業を選択", options=labels, key="spotlight_chosen")
+    codes = [code for code, _ in options]
+    initial_index = codes.index(requested_code) if requested_code in codes else 0
+    chosen = st.selectbox(
+        "企業を選択", options=labels, index=initial_index, key="spotlight_chosen"
+    )
     edinet_code = next(code for code, label in options if label == chosen)
+    st.query_params["company"] = edinet_code
     return edinet_code, chosen
+
+
+def _lookup_company_name(
+    conn: duckdb.DuckDBPyConnection, edinet_code: str
+) -> str | None:
+    """edinet_code から会社名を逆引きする (URL パラメータの解決用)."""
+    if not edinet_code:
+        return None
+    companies = query_available_companies(conn)
+    match = companies[companies["edinet_code"] == edinet_code]
+    return None if match.empty else str(match.iloc[0]["company_name"])
 
 
 def _render_dimension_selector(

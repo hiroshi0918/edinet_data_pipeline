@@ -28,6 +28,17 @@ _PAGES: dict[str, Callable[[duckdb.DuckDBPyConnection], None]] = {
     "企業スポットライト": company_spotlight.render,
 }
 
+# URL 共有用のページスラッグ (?page=lookup 等)。日本語ラベルを URL に
+# 露出させないための安定 ID。ラベル変更時もスラッグは変えないこと。
+_PAGE_SLUGS: dict[str, str] = {
+    "企業を調べる": "lookup",
+    "業種で比べる": "industry",
+    "人的資本トップ/ボトム企業": "hc-ranking",
+    "規模×人的資本": "size-hc",
+    "企業スポットライト": "spotlight",
+}
+_SLUG_TO_PAGE: dict[str, str] = {slug: page for page, slug in _PAGE_SLUGS.items()}
+
 
 def main() -> None:
     """ダッシュボードアプリケーションのメイン関数."""
@@ -61,7 +72,16 @@ def main() -> None:
     except OSError:
         pass
 
-    page_name = st.sidebar.radio("ページ選択", options=list(_PAGES.keys()), index=0)
+    # URL の ?page= スラッグを初期選択に反映し、選択結果を URL に書き戻す。
+    # これによりページ状態を含む URL を共有できる (企業選択は各ビュー側で同期)。
+    requested_page = _SLUG_TO_PAGE.get(st.query_params.get("page", ""))
+    initial_index = (
+        list(_PAGES.keys()).index(requested_page) if requested_page is not None else 0
+    )
+    page_name = st.sidebar.radio(
+        "ページ選択", options=list(_PAGES.keys()), index=initial_index
+    )
+    st.query_params["page"] = _PAGE_SLUGS[page_name]
     _PAGES[page_name](conn)
 
 

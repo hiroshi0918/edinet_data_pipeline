@@ -21,3 +21,12 @@ _EXPECTED_PAGES = {
 def test_pages_registry_has_expected_views() -> None:
     assert set(app._PAGES) == _EXPECTED_PAGES
     assert all(callable(render) for render in app._PAGES.values())
+
+
+def test_page_slugs_cover_all_pages_and_are_unique() -> None:
+    """URL 共有用スラッグが全ページを網羅し、重複しないこと."""
+    assert set(app._PAGE_SLUGS) == set(app._PAGES)
+    slugs = list(app._PAGE_SLUGS.values())
+    assert len(slugs) == len(set(slugs))
+    # 逆引きテーブルが順引きと整合していること
+    assert all(app._SLUG_TO_PAGE[slug] == page for page, slug in app._PAGE_SLUGS.items())
