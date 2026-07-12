@@ -587,3 +587,259 @@ def test_merge_llm_records_returns_zero_for_empty_input() -> None:
     )
     parsed = parse_document_zip(zip_bytes)
     assert merge_llm_records(parsed, []) == 0
+
+
+# ------------------------------------------------------------------ #
+#  従業員情報 (平均年間給与・平均勤続年数・平均年齢) の要素IDマッチ
+# ------------------------------------------------------------------ #
+
+
+def test_parse_document_zip_extracts_employee_info_metrics() -> None:
+    """従業員情報3指標が要素ID完全一致で抽出され、pure でも %換算されないこと."""
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp_employee.csv": [
+                {
+                    "要素ID": (
+                        "jpcrp_cor:AverageAnnualSalaryInformationAbout"
+                        "ReportingCompanyInformationAboutEmployees"
+                    ),
+                    "項目名": "平均年間給与、提出会社の状況、従業員の状況",
+                    "相対年度": "当期末",
+                    "ユニットID": "JPY",
+                    "値": "4660000",
+                },
+                {
+                    "要素ID": (
+                        "jpcrp_cor:AverageLengthOfServiceYearsInformationAbout"
+                        "ReportingCompanyInformationAboutEmployees"
+                    ),
+                    "項目名": "平均勤続年数（年）、提出会社の状況、従業員の状況",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "4.2",
+                },
+                {
+                    "要素ID": (
+                        "jpcrp_cor:AverageAgeYearsInformationAbout"
+                        "ReportingCompanyInformationAboutEmployees"
+                    ),
+                    "項目名": "平均年齢（年）、提出会社の状況、従業員の状況",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "36.5",
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+
+    record = _find_record(parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL)
+    assert record is not None
+    assert record.average_annual_salary == pytest.approx(4660000.0)
+    # pure ユニットでも ×100 されない (割合指標とは別経路であること)
+    assert record.average_years_of_service == pytest.approx(4.2)
+    assert record.average_age == pytest.approx(36.5)
+    employee_evidence = [
+        e for e in parsed.evidence if e.metric_name == "average_annual_salary"
+    ]
+    assert len(employee_evidence) == 1
+    assert employee_evidence[0].matched_by == "element_id_match"
+    assert employee_evidence[0].scope == SCOPE_REPORTING_COMPANY
+    assert employee_evidence[0].worker_type == WORKER_TYPE_ALL
+
+
+def test_parse_document_zip_combines_service_years_and_months() -> None:
+    """「N年Mヶ月」形式 (年と月が別要素ID) が 年 + 月/12 に合成されること."""
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp_employee.csv": [
+                {
+                    "要素ID": (
+                        "jpcrp_cor:AverageLengthOfServiceYearsInformationAbout"
+                        "ReportingCompanyInformationAboutEmployees"
+                    ),
+                    "項目名": "平均勤続年数（年）、提出会社の状況、従業員の状況",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "12",
+                },
+                {
+                    "要素ID": (
+                        "jpcrp_cor:AverageLengthOfServiceMonthsInformationAbout"
+                        "ReportingCompanyInformationAboutEmployees"
+                    ),
+                    "項目名": "平均勤続年数（月）、提出会社の状況、従業員の状況",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "3",
+                },
+                {
+                    "要素ID": (
+                        "jpcrp_cor:AverageAgeYearsInformationAbout"
+                        "ReportingCompanyInformationAboutEmployees"
+                    ),
+                    "項目名": "平均年齢（年）、提出会社の状況、従業員の状況",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "41",
+                },
+                {
+                    "要素ID": (
+                        "jpcrp_cor:AverageAgeMonthsInformationAbout"
+                        "ReportingCompanyInformationAboutEmployees"
+                    ),
+                    "項目名": "平均年齢（月）、提出会社の状況、従業員の状況",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "6",
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+
+    record = _find_record(parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL)
+    assert record is not None
+    assert record.average_years_of_service == pytest.approx(12.25)  # 12年3ヶ月
+    assert record.average_age == pytest.approx(41.5)  # 41歳6ヶ月
+
+
+def test_parse_document_zip_rejects_unit_error_salary() -> None:
+    """×100 単位ミスの給与 (例: 6.69億円) が上限レンジで弾かれること."""
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp_employee.csv": [
+                {
+                    "要素ID": (
+                        "jpcrp_cor:AverageAnnualSalaryInformationAbout"
+                        "ReportingCompanyInformationAboutEmployees"
+                    ),
+                    "項目名": "平均年間給与、提出会社の状況、従業員の状況",
+                    "相対年度": "当期末",
+                    "ユニットID": "JPY",
+                    "値": "669000000",  # 実データに存在した誤開示 (実際は約669万円)
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+
+    record = _find_record(parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL)
+    assert record is None or record.average_annual_salary is None
+
+
+def test_parse_document_zip_rejects_out_of_range_employee_info() -> None:
+    """妥当レンジ外 (年齢 250 歳・給与 5 万円) は採用されないこと."""
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp_employee.csv": [
+                {
+                    "要素ID": (
+                        "jpcrp_cor:AverageAgeYearsInformationAbout"
+                        "ReportingCompanyInformationAboutEmployees"
+                    ),
+                    "項目名": "平均年齢（年）、提出会社の状況、従業員の状況",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "250",
+                },
+                {
+                    "要素ID": (
+                        "jpcrp_cor:AverageAnnualSalaryInformationAbout"
+                        "ReportingCompanyInformationAboutEmployees"
+                    ),
+                    "項目名": "平均年間給与、提出会社の状況、従業員の状況",
+                    "相対年度": "当期末",
+                    "ユニットID": "JPY",
+                    "値": "50000",
+                },
+                {
+                    "要素ID": (
+                        "jpcrp_cor:AverageLengthOfServiceYearsInformationAbout"
+                        "ReportingCompanyInformationAboutEmployees"
+                    ),
+                    "項目名": "平均勤続年数（年）、提出会社の状況、従業員の状況",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "4.2",
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+
+    record = _find_record(parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL)
+    assert record is not None
+    assert record.average_age is None
+    assert record.average_annual_salary is None
+    assert record.average_years_of_service == pytest.approx(4.2)  # 妥当値は採用
+
+
+def test_parse_from_raw_facts_ignores_prior_year_employee_info() -> None:
+    """前期末の従業員情報は無視され、当期末の値だけが採用されること."""
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp_employee.csv": [
+                {
+                    "要素ID": (
+                        "jpcrp_cor:AverageLengthOfServiceYearsInformationAbout"
+                        "ReportingCompanyInformationAboutEmployees"
+                    ),
+                    "項目名": "平均勤続年数（年）、提出会社の状況、従業員の状況",
+                    "相対年度": "前期末",
+                    "ユニットID": "pure",
+                    "値": "9.9",
+                },
+                {
+                    "要素ID": (
+                        "jpcrp_cor:AverageLengthOfServiceYearsInformationAbout"
+                        "ReportingCompanyInformationAboutEmployees"
+                    ),
+                    "項目名": "平均勤続年数（年）、提出会社の状況、従業員の状況",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "4.2",
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+
+    record = _find_record(parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL)
+    assert record is not None
+    assert record.average_years_of_service == pytest.approx(4.2)
+
+
+def test_merge_llm_records_preserves_employee_info() -> None:
+    """LLM マージ後も従業員情報3指標が消えないこと (再構築時の温存)."""
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp_employee.csv": [
+                {
+                    "要素ID": (
+                        "jpcrp_cor:AverageAnnualSalaryInformationAbout"
+                        "ReportingCompanyInformationAboutEmployees"
+                    ),
+                    "項目名": "平均年間給与、提出会社の状況、従業員の状況",
+                    "相対年度": "当期末",
+                    "ユニットID": "JPY",
+                    "値": "4660000",
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+
+    llm_records = [
+        HumanMetricRecord(
+            scope=SCOPE_REPORTING_COMPANY, worker_type=WORKER_TYPE_ALL,
+            female_manager_ratio=12.5,
+        ),
+    ]
+    filled = merge_llm_records(parsed, llm_records)
+
+    record = _find_record(parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL)
+    assert filled == 1
+    assert record.female_manager_ratio == pytest.approx(12.5)
+    assert record.average_annual_salary == pytest.approx(4660000.0)  # 消えていない

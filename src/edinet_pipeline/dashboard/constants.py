@@ -26,12 +26,21 @@ HC_METRIC_LABELS: dict[str, str] = {
     "gender_wage_gap": "男女賃金格差 (%)",
 }
 
+# 従業員情報 (提出会社単体・「従業員の状況」由来)。割合ではない実数値の指標。
+# 単位 (円/年/歳) は値のフォーマット側で表現するためラベルには含めない。
+EMPLOYEE_INFO_METRIC_LABELS: dict[str, str] = {
+    "average_annual_salary": "平均年間給与",
+    "average_years_of_service": "平均勤続年数",
+    "average_age": "平均年齢",
+}
+
 # HC はパーセント表記なしの短縮版 — ヒートマップや充足率グラフで使用
 ALL_METRIC_LABELS: dict[str, str] = {
     **FINANCIAL_METRIC_LABELS,
     "female_manager_ratio": "女性管理職比率",
     "male_childcare_leave_ratio": "男性育休取得率",
     "gender_wage_gap": "男女賃金格差",
+    **EMPLOYEE_INFO_METRIC_LABELS,
 }
 
 ALL_METRIC_COLUMNS: list[str] = list(ALL_METRIC_LABELS.keys())

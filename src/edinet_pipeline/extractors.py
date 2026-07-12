@@ -41,6 +41,44 @@ HUMAN_FIELDS = (
     "gender_wage_gap",
 )
 
+# 「従業員の状況」の提出会社単体開示 (割合ではない実数値の指標)
+EMPLOYEE_INFO_FIELDS = (
+    "average_annual_salary",
+    "average_years_of_service",
+    "average_age",
+)
+
+# HumanMetricRecord が持つ全数値フィールド (HumanMetricsBuilder のバケット初期化用)
+HUMAN_RECORD_FIELDS = HUMAN_FIELDS + EMPLOYEE_INFO_FIELDS
+
+# 従業員情報系の要素IDに共通する接尾辞 (「提出会社の状況、従業員の状況」)
+_EMPLOYEE_INFO_ID_SUFFIX = "InformationAboutReportingCompanyInformationAboutEmployees"
+
+# Layer 1 (要素ID完全一致) で抽出する従業員情報系指標。
+# 値は (metric_name, component)。component="months" の行は「N年Mヶ月」形式の
+# 月部分で、年部分 (component="main") と `年 + 月/12` で合成する。
+# これらは割合ではないため、pure→% 変換や max_ratio クランプは適用しない。
+EMPLOYEE_INFO_ELEMENT_IDS: dict[str, tuple[str, str]] = {
+    f"jpcrp_cor:{stem}{_EMPLOYEE_INFO_ID_SUFFIX}": target
+    for stem, target in {
+        "AverageAnnualSalary": ("average_annual_salary", "main"),
+        "AverageLengthOfServiceYears": ("average_years_of_service", "main"),
+        "AverageLengthOfServiceMonths": ("average_years_of_service", "months"),
+        "AverageAgeYears": ("average_age", "main"),
+        "AverageAgeMonths": ("average_age", "months"),
+    }.items()
+}
+
+# 従業員情報系指標の妥当レンジ (単位: 円 / 年 / 歳)。
+# 開示ミスや単位取り違えのゴミ値を弾くための番人。給与の上限 5,000万円は
+# 国内上場企業の正当な最高値 (約2,700万円) の約2倍で、実データに存在した
+# ×100 単位ミス (例: 6.69億円) を確実に落とすための閾値。
+EMPLOYEE_INFO_RANGES: dict[str, tuple[float, float]] = {
+    "average_annual_salary": (100_000.0, 50_000_000.0),
+    "average_years_of_service": (0.0, 60.0),
+    "average_age": (15.0, 100.0),
+}
+
 # Layer 2: 項目名部分一致パターン
 EXPLICIT_PATTERNS = {
     "sales": ("売上高", "営業収益", "売上収益", "完成工事高"),
@@ -334,7 +372,7 @@ class HumanMetricsBuilder:
     def _ensure_bucket(self, scope: str, worker_type: str) -> dict[str, list[float]]:
         key = (scope, worker_type)
         if key not in self._buckets:
-            self._buckets[key] = {name: [] for name in HUMAN_FIELDS}
+            self._buckets[key] = {name: [] for name in HUMAN_RECORD_FIELDS}
         return self._buckets[key]
 
     def has_value(self, scope: str, worker_type: str, metric_name: str) -> bool:
@@ -344,11 +382,15 @@ class HumanMetricsBuilder:
         return bool(bucket.get(metric_name))
 
     def has_any_value_for_reporting_company(self) -> bool:
-        """提出会社の指標が1つでも入っているか (LLM フォールバック判定用)."""
+        """提出会社の割合3指標が1つでも入っているか (LLM フォールバック判定用).
+
+        従業員情報系 (EMPLOYEE_INFO_FIELDS) は判定に含めない — 給与だけ取れて
+        割合指標が空のケースで LLM フォールバックが抑止されるのを防ぐ。
+        """
         for (scope, _), bucket in self._buckets.items():
             if scope != SCOPE_REPORTING_COMPANY:
                 continue
-            if any(bucket.values()):
+            if any(bucket.get(name) for name in HUMAN_FIELDS):
                 return True
         return False
 
@@ -384,6 +426,9 @@ class HumanMetricsBuilder:
                 female_manager_ratio=self._aggregate(values["female_manager_ratio"]),
                 male_childcare_leave_ratio=self._aggregate(values["male_childcare_leave_ratio"]),
                 gender_wage_gap=self._aggregate(values["gender_wage_gap"]),
+                average_annual_salary=self._aggregate(values["average_annual_salary"]),
+                average_years_of_service=self._aggregate(values["average_years_of_service"]),
+                average_age=self._aggregate(values["average_age"]),
             )
             for (scope, worker_type), values in sorted(self._buckets.items())
         ]
@@ -472,6 +517,11 @@ def parse_from_raw_facts(
     hm_builder = HumanMetricsBuilder()
     employee_status_text: str | None = None  # Layer 3 の入力候補を保持
     employee_status_source: str | None = None  # 同上の出処 CSV ファイル名
+    # 従業員情報系の観測値 {metric_name: {"main": [...], "months": [...]}}。
+    # 年部分と月部分を別要素IDで開示する会社があるため、ループ後に合成する。
+    employee_info_values: dict[str, dict[str, list[float]]] = {
+        name: {"main": [], "months": []} for name in EMPLOYEE_INFO_FIELDS
+    }
 
     for raw_fact in raw_facts:
         item_name = normalize_text(raw_fact.item_name)
@@ -491,6 +541,16 @@ def parse_from_raw_facts(
 
         if not item_name and not raw_text:
             continue
+
+        # ---- Layer 1: 要素IDマッチ (従業員情報 — 給与/勤続年数/年齢) -- #
+        employee_info = EMPLOYEE_INFO_ELEMENT_IDS.get(raw_fact.element_id or "")
+        if employee_info is not None:
+            _try_collect_employee_info(
+                employee_info_values, parsed, employee_info,
+                raw_fact=raw_fact, item_name=item_name,
+                raw_text=raw_text, relative_year=relative_year,
+            )
+            continue  # 要素IDで処理済みなので Layer 2 に降りない
 
         # ---- Layer 1: 要素IDマッチ (人的資本のみ) ---------------- #
         classification = classify_element_id(raw_fact.element_id)
@@ -576,6 +636,20 @@ def parse_from_raw_facts(
             max_ratio=max_ratio,
         )
 
+    # ---- 従業員情報系の合成 (年 + 月/12) と builder への反映 --------- #
+    for metric_name, parts in employee_info_values.items():
+        if not parts["main"]:
+            continue  # 月部分のみの観測は不完全なので採用しない
+        value = statistics.median(parts["main"])
+        if parts["months"]:
+            value += statistics.median(parts["months"]) / 12.0
+        low, high = EMPLOYEE_INFO_RANGES[metric_name]
+        if not (low <= value <= high):
+            continue
+        hm_builder.set_value(
+            SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL, metric_name, value,
+        )
+
     parsed.human_metrics = hm_builder.to_records()
     parsed.employee_status_text = employee_status_text
     return parsed
@@ -624,6 +698,51 @@ def _try_apply_element_id_match(
             element_id=raw_fact.element_id,
             scope=scope,
             worker_type=worker_type,
+        )
+    )
+
+
+def _try_collect_employee_info(
+    employee_info_values: dict[str, dict[str, list[float]]],
+    parsed: ParsedDocument,
+    employee_info: tuple[str, str],
+    *,
+    raw_fact: RawFactRecord,
+    item_name: str,
+    raw_text: str,
+    relative_year: str,
+) -> None:
+    """Layer 1 (要素IDマッチ) の従業員情報系 (給与/勤続年数/年齢) への適用.
+
+    割合指標と異なり pure→% 変換は行わない (平均年齢の pure は無次元の実数)。
+    妥当レンジ検証は年部分 (main) のみ観測時に行い、月部分は 0-12 で検証する。
+    合成 (年 + 月/12) は parse_from_raw_facts のループ後に行う。
+    """
+    metric_name, component = employee_info
+    if not is_relevant_relative_year(relative_year):
+        return
+    numeric_value = extract_numeric(raw_fact.raw_value)
+    if numeric_value is None:
+        return
+    if component == "months":
+        if not (0.0 <= numeric_value <= 12.0):
+            return
+    else:
+        low, high = EMPLOYEE_INFO_RANGES[metric_name]
+        if not (low <= numeric_value <= high):
+            return
+    employee_info_values[metric_name][component].append(numeric_value)
+    parsed.evidence.append(
+        MetricEvidenceRecord(
+            metric_name=metric_name,
+            item_name=item_name or metric_name,
+            raw_value=raw_text,
+            relative_year=relative_year,
+            source_file=raw_fact.source_file,
+            matched_by="element_id_match",
+            element_id=raw_fact.element_id,
+            scope=SCOPE_REPORTING_COMPANY,
+            worker_type=WORKER_TYPE_ALL,
         )
     )
 
@@ -688,9 +807,10 @@ def merge_llm_records(
     # 既存 records を HumanMetricsBuilder にリロードし、first-wins で LLM 値をマージ。
     # マージロジックを Builder に集約することで、parse_document_zip と同じ
     # 「同一キー・同一指標で初出値を保持する」セマンティクスを再利用する。
+    # リロードは従業員情報系も含む全フィールドが対象 (マージで消失させない)。
     builder = HumanMetricsBuilder()
     for rec in parsed.human_metrics:
-        for metric_name in HUMAN_FIELDS:
+        for metric_name in HUMAN_RECORD_FIELDS:
             value = getattr(rec, metric_name)
             if value is not None:
                 builder.set_value(rec.scope, rec.worker_type, metric_name, value)

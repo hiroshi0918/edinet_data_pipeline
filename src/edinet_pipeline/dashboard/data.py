@@ -202,6 +202,7 @@ def query_company_profile(
         SELECT fiscal_year, scope, worker_type, doc_id, submitted_date,
                sales, operating_profit, net_profit, employee_count,
                female_manager_ratio, male_childcare_leave_ratio, gender_wage_gap,
+               average_annual_salary, average_years_of_service, average_age,
                industry, company_name
           FROM {_T}
          WHERE edinet_code = ?

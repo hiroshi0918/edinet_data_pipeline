@@ -10,6 +10,7 @@ from edinet_pipeline.dashboard.data import (
     query_available_companies,
     query_available_fiscal_years,
     query_company_comparison,
+    query_company_profile,
     query_financial_ranking_with_hc,
     query_hc_distribution_by_industry,
     query_kpi_summary,
@@ -50,6 +51,9 @@ def _create_analytics_schema(connection: duckdb.DuckDBPyConnection) -> None:
             female_manager_ratio DECIMAL(5,2),
             male_childcare_leave_ratio DECIMAL(5,2),
             gender_wage_gap DECIMAL(5,2),
+            average_annual_salary DECIMAL(12,2),
+            average_years_of_service DECIMAL(5,2),
+            average_age DECIMAL(5,2),
             source_name VARCHAR
         )
         """
@@ -66,19 +70,19 @@ def conn():
         INSERT INTO analytics.company_year_metrics VALUES
             ('E00001', 'Company A', '電気機器', 2023, 'D001', '2024-03-15', 'processed',
              1000000, 100000, 50000, 500, 'reporting_company', 'all',
-             15.5, 30.0, 75.0, 'EDINET_CSV'),
+             15.5, 30.0, 75.0, 6500000, 12.3, 42.1, 'EDINET_CSV'),
             ('E00001', 'Company A', '電気機器', 2024, 'D002', '2025-03-15', 'processed',
              1200000, 120000, 60000, 520, 'reporting_company', 'all',
-             18.0, 35.0, 78.0, 'EDINET_CSV'),
+             18.0, 35.0, 78.0, 6800000, 12.8, 42.5, 'EDINET_CSV'),
             ('E00002', 'Company B', '情報・通信業', 2023, 'D003', '2024-03-20', 'processed',
              500000, 50000, 25000, 200, 'reporting_company', 'all',
-             NULL, NULL, NULL, 'EDINET_CSV'),
+             NULL, NULL, NULL, 4200000, 4.2, 36.5, 'EDINET_CSV'),
             ('E00002', 'Company B', '情報・通信業', 2024, 'D004', '2025-03-20', 'failed',
              NULL, NULL, NULL, NULL, 'reporting_company', 'all',
-             NULL, NULL, NULL, 'EDINET_CSV'),
+             NULL, NULL, NULL, NULL, NULL, NULL, 'EDINET_CSV'),
             ('E00003', 'Company C', 'サービス業', 2023, 'D005', '2024-03-25', 'skipped',
              NULL, NULL, NULL, NULL, 'reporting_company', 'all',
-             NULL, NULL, NULL, 'EDINET_CSV')
+             NULL, NULL, NULL, NULL, NULL, NULL, 'EDINET_CSV')
         """
     )
     yield connection
@@ -148,6 +152,25 @@ class TestCompanyComparison:
     def test_top_n_limit(self, conn):
         df = query_company_comparison(conn, "sales", 2023, top_n=1)
         assert len(df) == 1
+
+    def test_ranks_by_average_annual_salary(self, conn):
+        """従業員情報3指標も許可リスト経由でランキングできること."""
+        df = query_company_comparison(conn, "average_annual_salary", 2023, top_n=10)
+        assert len(df) == 2
+        assert df["edinet_code"].iloc[0] == "E00001"  # 650万 > 420万
+        assert float(df["average_annual_salary"].iloc[0]) == pytest.approx(6500000)
+
+
+class TestCompanyProfile:
+    def test_includes_employee_info_columns(self, conn):
+        """企業プロファイルに従業員情報3列が含まれること."""
+        df = query_company_profile(conn, "E00001")
+        assert {
+            "average_annual_salary", "average_years_of_service", "average_age",
+        } <= set(df.columns)
+        row_2023 = df[df["fiscal_year"] == 2023].iloc[0]
+        assert float(row_2023["average_years_of_service"]) == pytest.approx(12.3)
+        assert float(row_2023["average_age"]) == pytest.approx(42.1)
 
 
 class TestHcDistributionByIndustry:

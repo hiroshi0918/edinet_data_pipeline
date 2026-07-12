@@ -391,6 +391,9 @@ class PipelineRepository:
                 record.female_manager_ratio,
                 record.male_childcare_leave_ratio,
                 record.gender_wage_gap,
+                record.average_annual_salary,
+                record.average_years_of_service,
+                record.average_age,
                 source_name,
             )
             for record in parsed.human_metrics
@@ -400,6 +403,9 @@ class PipelineRepository:
                     record.female_manager_ratio,
                     record.male_childcare_leave_ratio,
                     record.gender_wage_gap,
+                    record.average_annual_salary,
+                    record.average_years_of_service,
+                    record.average_age,
                 )
             )
         ]
@@ -413,14 +419,18 @@ class PipelineRepository:
                 INSERT INTO human_capital_metrics (
                     edinet_code, fiscal_year, scope, worker_type,
                     female_manager_ratio, male_childcare_leave_ratio,
-                    gender_wage_gap, source_name
+                    gender_wage_gap, average_annual_salary,
+                    average_years_of_service, average_age, source_name
                 )
                 VALUES %s
                 ON CONFLICT (edinet_code, fiscal_year, scope, worker_type, source_name)
                 DO UPDATE SET
                     female_manager_ratio = EXCLUDED.female_manager_ratio,
                     male_childcare_leave_ratio = EXCLUDED.male_childcare_leave_ratio,
-                    gender_wage_gap = EXCLUDED.gender_wage_gap
+                    gender_wage_gap = EXCLUDED.gender_wage_gap,
+                    average_annual_salary = EXCLUDED.average_annual_salary,
+                    average_years_of_service = EXCLUDED.average_years_of_service,
+                    average_age = EXCLUDED.average_age
                 """,
                 rows_to_upsert,
                 page_size=100,
@@ -605,6 +615,9 @@ class PipelineRepository:
                     female_manager_ratio,
                     male_childcare_leave_ratio,
                     gender_wage_gap,
+                    average_annual_salary,
+                    average_years_of_service,
+                    average_age,
                     source_name
                 FROM vw_company_year_metrics
                 ORDER BY fiscal_year, edinet_code, doc_id, scope, worker_type

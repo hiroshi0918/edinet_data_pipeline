@@ -1,8 +1,9 @@
 """企業を調べる — 会社名・年度・次元で 1 社の有価証券報告書の値を確認する.
 
 トップページ。会社名 (全件検索付き selectbox) と年度、開示範囲 (scope) ×
-労働者区分 (worker_type) を選ぶと、その 1 次元分の 7 指標 (財務 4 + 人的資本 3)
-を表で表示する。深掘りの peer 比較は「企業スポットライト」ページが担う。
+労働者区分 (worker_type) を選ぶと、その 1 次元分の 10 指標
+(財務 4 + 人的資本 3 + 従業員情報 3) を表で表示する。
+深掘りの peer 比較は「企業スポットライト」ページが担う。
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import pandas as pd
 import streamlit as st
 
 from edinet_pipeline.dashboard.constants import (
+    EMPLOYEE_INFO_METRIC_LABELS,
     FINANCIAL_METRIC_LABELS,
     HC_METRIC_LABELS,
     SCOPE_LABELS,
@@ -23,10 +25,12 @@ from edinet_pipeline.dashboard.data import (
     query_kpi_summary,
 )
 from edinet_pipeline.dashboard.theme import page_header, ratio_bar_card_html
+from edinet_pipeline.models import SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL
 
-# 表示順 (財務 4 → 人的資本 3)
+# 表示順 (財務 4 → 人的資本 3 → 従業員情報 3)
 _FINANCIAL_COLS: tuple[str, ...] = tuple(FINANCIAL_METRIC_LABELS.keys())
 _HC_COLS: tuple[str, ...] = tuple(HC_METRIC_LABELS.keys())
+_EMPLOYEE_INFO_COLS: tuple[str, ...] = tuple(EMPLOYEE_INFO_METRIC_LABELS.keys())
 
 
 def render(conn: duckdb.DuckDBPyConnection) -> None:
@@ -62,6 +66,7 @@ def render(conn: duckdb.DuckDBPyConnection) -> None:
         )
         return
     _render_metric_table(row)
+    _render_employee_info(profile_df, fiscal_year)
 
 
 # ------------------------------------------------------------------ #
@@ -179,3 +184,38 @@ def _format_financial(value: object, col: str) -> str:
     if col == "employee_count":
         return f"{int(value):,} 人"
     return f"{float(value) / 1e8:,.1f} 億円"
+
+
+def _render_employee_info(profile_df: pd.DataFrame, fiscal_year: int) -> None:
+    """従業員情報 3 指標 (平均年間給与・平均勤続年数・平均年齢) を表示する.
+
+    「従業員の状況」の提出会社単体開示のため、次元セレクタとは独立に
+    (reporting_company, all) の行から値を取る。
+    """
+    base = profile_df[
+        (profile_df["fiscal_year"] == fiscal_year)
+        & (profile_df["scope"] == SCOPE_REPORTING_COMPANY)
+        & (profile_df["worker_type"] == WORKER_TYPE_ALL)
+    ]
+    row = base.iloc[0] if not base.empty else None
+
+    st.subheader("従業員情報")
+    cols = st.columns(len(_EMPLOYEE_INFO_COLS))
+    for ax, col in zip(cols, _EMPLOYEE_INFO_COLS, strict=True):
+        value = row.get(col) if row is not None else None
+        ax.metric(EMPLOYEE_INFO_METRIC_LABELS[col], _format_employee_info(value, col))
+    st.caption(
+        "「従業員の状況」に記載される提出会社単体の値。"
+        "開示範囲・労働者区分セレクタの影響を受けません。"
+    )
+
+
+def _format_employee_info(value: object, col: str) -> str:
+    """従業員情報の値を単位付きで表示する (給与は万円へ丸める)."""
+    if value is None or pd.isna(value):
+        return "—"
+    if col == "average_annual_salary":
+        return f"{float(value) / 1e4:,.0f} 万円"
+    if col == "average_years_of_service":
+        return f"{float(value):.1f} 年"
+    return f"{float(value):.1f} 歳"

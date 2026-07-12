@@ -53,6 +53,9 @@ COMPANY_YEAR_METRICS_COLUMNS = [
     "female_manager_ratio",
     "male_childcare_leave_ratio",
     "gender_wage_gap",
+    "average_annual_salary",
+    "average_years_of_service",
+    "average_age",
     "source_name",
 ]
 
@@ -94,6 +97,9 @@ DATASET_SCHEMAS = {
             ("female_manager_ratio", pa.decimal128(5, 2)),
             ("male_childcare_leave_ratio", pa.decimal128(5, 2)),
             ("gender_wage_gap", pa.decimal128(5, 2)),
+            ("average_annual_salary", pa.decimal128(12, 2)),
+            ("average_years_of_service", pa.decimal128(5, 2)),
+            ("average_age", pa.decimal128(5, 2)),
             ("source_name", pa.string()),
         ]
     ),

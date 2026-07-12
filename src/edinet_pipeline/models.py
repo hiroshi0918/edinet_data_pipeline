@@ -66,10 +66,15 @@ class HumanMetricRecord:
         female_manager_ratio:        女性管理職比率 (%)
         male_childcare_leave_ratio:  男性育休取得率 (%)
         gender_wage_gap:             男女の賃金差異 (%)
+        average_annual_salary:       平均年間給与 (円)
+        average_years_of_service:    平均勤続年数 (年)
+        average_age:                 平均年齢 (歳)
 
     Note:
         female_manager_ratio は worker_type の区分を持たないため、
         慣例として worker_type="all" の行にのみ格納する。
+        average_* の3指標は「従業員の状況」の提出会社単体開示のため、
+        (reporting_company, all) の行にのみ格納する。
     """
 
     scope: str
@@ -77,6 +82,9 @@ class HumanMetricRecord:
     female_manager_ratio: float | None = None
     male_childcare_leave_ratio: float | None = None
     gender_wage_gap: float | None = None
+    average_annual_salary: float | None = None
+    average_years_of_service: float | None = None
+    average_age: float | None = None
 
 
 @dataclass(frozen=True)

@@ -120,6 +120,7 @@ graph LR
 
 *   **Layer 1: 要素ID完全一致（最優先）**
     CSV の `要素ID` 列が `jpcrp_cor:RatioOfFemaleEmployeesInManagerialPositionsMetricsOfReportingCompany` のような XBRL タクソノミー識別子と一致するかを判定します。識別子のサフィックス (`MetricsOfReportingCompany` / `MetricsOfConsolidatedSubsidiaries`) から **scope** を、プレフィックス (`AllEmployees` / `RegularEmployees` / `NonRegularEmployees`) から **worker_type** を導出し、`(scope, worker_type)` の次元キーで `human_capital_metrics` テーブルに格納します。`unit='pure'` の値（割合表記 0.024）は ×100 で % に換算します。
+    従業員情報3指標（**平均年間給与・平均勤続年数・平均年齢**、`jpcrp_cor:AverageAnnualSalaryInformationAboutReportingCompanyInformationAboutEmployees` 等）もこの層でのみ抽出します。これらは割合ではないため pure→% 換算は行わず、「12年3ヶ月」のように年・月が別要素IDで開示されるケースは `年 + 月/12` に合成します。
 *   **Layer 2: 項目名部分一致（旧タクソノミー救済）**
     Layer 1 で取れなかった行に対し、`項目名` 列に「管理職に占める女性労働者の割合」等のキーワードが含まれるかを判定します。財務指標（売上高・営業利益・当期純利益・従業員数）もこの層で抽出されます。
 *   **Layer 3a: テキストフォールバック（regex）**
@@ -600,6 +601,9 @@ v0.3 から次元キーが追加され、`(edinet_code, fiscal_year, scope, work
 | `female_manager_ratio` | `Numeric(5,2)`| Nullable | 女性管理職比率 (%) — `worker_type='all'` 行にのみ格納 |
 | `male_childcare_leave_ratio`| `Numeric(5,2)`| Nullable | 男性の育児休業取得率 (%) |
 | `gender_wage_gap` | `Numeric(5,2)`| Nullable | 男女間賃金格差 (%) |
+| `average_annual_salary` | `Numeric(12,2)`| Nullable | 平均年間給与 (円) — 提出会社単体、`(reporting_company, all)` 行にのみ格納 |
+| `average_years_of_service` | `Numeric(5,2)`| Nullable | 平均勤続年数 (年) — 年+月の分離開示は `年 + 月/12` に合成 |
+| `average_age` | `Numeric(5,2)`| Nullable | 平均年齢 (歳) — 同上 |
 | `engagement_score` | `Numeric(5,2)`| Nullable | エンゲージメントスコア (将来用) |
 | `source_name` | `String(100)` | `EDINET_CSV` | データ抽出元 |
 

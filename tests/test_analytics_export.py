@@ -177,6 +177,9 @@ def test_export_analytics_writes_both_outputs(
         "female_manager_ratio",
         "male_childcare_leave_ratio",
         "gender_wage_gap",
+        "average_annual_salary",
+        "average_years_of_service",
+        "average_age",
         "source_name",
     ]
 
