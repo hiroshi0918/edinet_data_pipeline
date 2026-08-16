@@ -138,7 +138,7 @@ jobs.process_documents(settings, limit, retry_failed, ...)
   │         ├─ mark_processed(doc_id, parsed)  (status + financial_metrics)
   │         ├─ delete_human_metrics_for_doc(...)  (旧次元レコード掃除)
   │         ├─ upsert_human_metrics(...)
-  │         │    └─ ON CONFLICT (edinet_code, fiscal_year, scope, worker_type, source_name)
+  │         │    └─ ON CONFLICT (doc_id, scope, worker_type, source_name)
   │         ├─ replace_metric_evidence(doc_id, evidence)
   │         └─ connection.commit()
   │

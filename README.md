@@ -31,6 +31,35 @@ EDINET API v2 から有価証券報告書を取得し、財務指標と人的資
 
 現時点の対象帳票は「有価証券報告書」のみです。
 
+### 分析対象期間
+
+運用正本に入っているのは、主に **提出日 2024-01-04 以降** の有価証券報告書です（`fiscal_year` は期末日 `periodEnd` の西暦。3 月期なら 2024-03-31 → 2024 年度）。
+
+| 提出 | 入っているか | 備考 |
+| --- | --- | --- |
+| 2022 暦年 | 基本的に無し | パイプライン開始前。サンプル `S100PUDO`（セプテーニ 2022-12 提出）は `edinet import-local` で補完できる |
+| 2023 年提出の一部 | あり（薄い） | 2024 年初の取り込み開始直後 |
+| 2024-01 以降 | あり | 分析の主対象 |
+
+2022 年提出分をまとめて足す場合（EDINET API が必要）:
+
+```bash
+edinet backfill --from 2022-01-01 --to 2022-12-31 --process-limit 20
+edinet export-analytics --format both
+```
+
+手元の CSV ZIP を 1 通だけ足す場合:
+
+```bash
+edinet import-local \
+  --zip docs/samples/edinet_csv/S100PUDO/S100PUDO.zip \
+  --doc-id S100PUDO \
+  --edinet-code E05206 \
+  --filer-name '株式会社セプテーニ・ホールディングス' \
+  --submitted-date 2022-12-21 \
+  --fiscal-year 2022
+```
+
 ## アーキテクチャ
 
 ```mermaid
@@ -153,6 +182,10 @@ graph LR
   - 元CSVの全行は `raw_edinet_facts` に保存します。
 - `edinet backfill`
   - 日付範囲を日単位で `fetch -> process` し、途中停止後も再開できます。
+- `edinet reprocess`
+  - 保存済み `raw_edinet_facts` から再抽出し、抽出ロジック修正を再ダウンロードなしで反映します。
+- `edinet import-local`
+  - 手元の CSV ZIP を API なしで 1 書類として正本へ取り込みます。
 - `edinet export-analytics`
   - PostgreSQL の分析スナップショットを Parquet と DuckDB に出力します。
 - `edinet dashboard`
@@ -588,12 +621,13 @@ pip install -e '.[viz]'
 
 ### `human_capital_metrics`
 
-会社・年度・**次元 (scope, worker_type)** ・ソース単位の人的資本指標です。
-v0.3 から次元キーが追加され、`(edinet_code, fiscal_year, scope, worker_type, source_name)` が一意です。
+書類・**次元 (scope, worker_type)** ・ソース単位の人的資本指標です。
+`(doc_id, scope, worker_type, source_name)` が一意です。同じ暦年の変則決算が 2 通あっても上書きしません。
 
 | カラム名 | データ型 | 制約・デフォルト | 説明 |
 | --- | --- | --- | --- |
 | `id` | `Integer` | **PK** (Auto) | 内部サロゲートキー |
+| `doc_id` | `String(50)` | FK (`financial_reports`) | 対象書類 |
 | `edinet_code` | `String(10)` | FK (`companies`) | 企業のEDINETコード |
 | `fiscal_year` | `Integer` | NOT NULL | 対象となる決算年度（年） |
 | `scope` | `String(40)` | `reporting_company` | 開示範囲: `reporting_company` / `consolidated_subsidiary` |

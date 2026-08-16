@@ -197,3 +197,73 @@ def test_fetch_documents_for_date_closes_client_when_fetch_fails() -> None:
 
     assert FailingClient.last_instance is not None
     assert FailingClient.last_instance.closed is True
+
+
+def test_import_local_document_upserts_without_api(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """手元 ZIP が会社・書類・指標の upsert まで走る (API を呼ばない)."""
+    import io
+    import zipfile
+
+    import pandas as pd
+
+    frame = pd.DataFrame([{"項目名": "売上高", "値": "1,234", "相対年度": "当期"}])
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr(
+            "XBRL_TO_CSV/jpcrp.csv",
+            frame.to_csv(index=False, sep="\t").encode("utf-16le"),
+        )
+    zip_path = tmp_path / "S100LOCAL.zip"
+    zip_path.write_bytes(buffer.getvalue())
+
+    settings = make_settings()
+    connection = StubConnection()
+    StubRepository.reset()
+
+    @contextmanager
+    def fake_db_connection(_database_url: str):
+        yield connection
+
+    class ImportRepo(StubRepository):
+        def __init__(self, conn: StubConnection) -> None:
+            super().__init__(conn)
+            self.processed: list[str] = []
+            self.human: list[str] = []
+
+        def replace_raw_facts(self, doc_id: str, raw_facts: Any) -> None:
+            return None
+
+        def mark_processed(self, doc_id: str, parsed: Any) -> None:
+            self.processed.append(doc_id)
+
+        def delete_human_metrics_for_doc(self, *, doc_id: str, source_name: str = "EDINET_CSV") -> None:
+            return None
+
+        def upsert_human_metrics(self, *, doc_id: str, edinet_code: str, fiscal_year: int, parsed: Any, source_name: str = "EDINET_CSV") -> int:
+            self.human.append(doc_id)
+            return 0
+
+        def replace_metric_evidence(self, doc_id: str, evidence: Any) -> None:
+            return None
+
+    monkeypatch.setattr(jobs, "db_connection", fake_db_connection)
+    monkeypatch.setattr(jobs, "PipelineRepository", ImportRepo)
+
+    jobs.import_local_document(
+        settings,
+        zip_path=zip_path,
+        doc_id="S100LOCAL",
+        edinet_code="E00001",
+        filer_name="Local Co",
+        submitted_date=date(2022, 12, 21),
+        fiscal_year=2022,
+    )
+
+    repo = ImportRepo.instances[0]
+    assert repo.companies == [("E00001", "Local Co")]
+    assert repo.documents[0].doc_id == "S100LOCAL"
+    assert repo.documents[0].fiscal_year == 2022
+    assert repo.processed == ["S100LOCAL"]
+    assert connection.commits == 1

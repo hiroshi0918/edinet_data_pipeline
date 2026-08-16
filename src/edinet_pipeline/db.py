@@ -3,7 +3,7 @@
 テーブル構成:
   companies             : 企業マスタ (edinet_code がキー)
   financial_reports     : 書類メタ + 財務指標 + 処理ステータス
-  human_capital_metrics : 人的資本指標 (女性管理職比率 等)
+  human_capital_metrics : 人的資本指標 (書類 doc_id × scope × worker_type)
   raw_edinet_facts      : 元CSVの生行データ
   metric_evidence       : 抽出根拠の監査証跡
   vw_company_year_metrics : 企業×年度ごとの統合ビュー (分析用)
@@ -368,15 +368,16 @@ class PipelineRepository:
     def upsert_human_metrics(
         self,
         *,
+        doc_id: str,
         edinet_code: str,
         fiscal_year: int,
         parsed: ParsedDocument,
         source_name: str = "EDINET_CSV",
     ) -> int:
-        """人的資本指標を (scope × worker_type) ごとに INSERT or UPDATE.
+        """人的資本指標を (doc_id × scope × worker_type) ごとに INSERT or UPDATE.
 
-        ParsedDocument.human_metrics は HumanMetricRecord のリスト。各レコードは
-        次元キー (scope, worker_type) で識別され、複合 UNIQUE 制約と整合する。
+        キーを書類単位にすることで、同じ暦年に変則決算が2通ある場合でも
+        後勝ち上書きが起きない。edinet_code / fiscal_year は検索用に冗長保持する。
         指標が全て None のレコードはスキップする。
 
         Returns:
@@ -384,6 +385,7 @@ class PipelineRepository:
         """
         rows_to_upsert = [
             (
+                doc_id,
                 edinet_code,
                 fiscal_year,
                 record.scope,
@@ -417,14 +419,16 @@ class PipelineRepository:
                 cursor,
                 """
                 INSERT INTO human_capital_metrics (
-                    edinet_code, fiscal_year, scope, worker_type,
+                    doc_id, edinet_code, fiscal_year, scope, worker_type,
                     female_manager_ratio, male_childcare_leave_ratio,
                     gender_wage_gap, average_annual_salary,
                     average_years_of_service, average_age, source_name
                 )
                 VALUES %s
-                ON CONFLICT (edinet_code, fiscal_year, scope, worker_type, source_name)
+                ON CONFLICT (doc_id, scope, worker_type, source_name)
                 DO UPDATE SET
+                    edinet_code = EXCLUDED.edinet_code,
+                    fiscal_year = EXCLUDED.fiscal_year,
                     female_manager_ratio = EXCLUDED.female_manager_ratio,
                     male_childcare_leave_ratio = EXCLUDED.male_childcare_leave_ratio,
                     gender_wage_gap = EXCLUDED.gender_wage_gap,
@@ -440,11 +444,10 @@ class PipelineRepository:
     def delete_human_metrics_for_doc(
         self,
         *,
-        edinet_code: str,
-        fiscal_year: int,
+        doc_id: str,
         source_name: str = "EDINET_CSV",
     ) -> None:
-        """指定 (会社, 年度, source_name) の既存人的資本レコードを全削除.
+        """指定書類の既存人的資本レコードを全削除.
 
         upsert_human_metrics は ON CONFLICT で個別行を更新するが、再抽出で
         次元の組合せが変わった場合 (例: 連結子会社の値が消える) に古い行が
@@ -454,9 +457,9 @@ class PipelineRepository:
             cursor.execute(
                 """
                 DELETE FROM human_capital_metrics
-                WHERE edinet_code = %s AND fiscal_year = %s AND source_name = %s
+                WHERE doc_id = %s AND source_name = %s
                 """,
-                (edinet_code, fiscal_year, source_name),
+                (doc_id, source_name),
             )
 
     def _replace_child_records(

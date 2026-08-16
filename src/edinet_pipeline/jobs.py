@@ -5,6 +5,7 @@
   process  : pending キューから書類を取得 → CSV ZIP ダウンロード → 指標抽出 → DB 更新
   backfill : 日付範囲で fetch → process を繰り返す一括実行
   reprocess: 保存済み raw_edinet_facts から再抽出 (再DLなし) → 指標・evidence を更新
+  import-local: 手元の CSV ZIP を API なしで 1 書類として取り込む
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import logging
 import re
 import time
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from edinet_pipeline.client import CsvUnavailableError, EdinetClient
@@ -336,10 +338,9 @@ def process_documents(
                         repository.replace_raw_facts(doc_id, parsed.raw_facts)
                         repository.mark_processed(doc_id, parsed)
                         # 既存の人的資本レコードを全消去 → 新次元で再upsert (整合性確保)
-                        repository.delete_human_metrics_for_doc(
-                            edinet_code=edinet_code, fiscal_year=fiscal_year,
-                        )
+                        repository.delete_human_metrics_for_doc(doc_id=doc_id)
                         repository.upsert_human_metrics(
+                            doc_id=doc_id,
                             edinet_code=edinet_code,
                             fiscal_year=fiscal_year,
                             parsed=parsed,
@@ -487,10 +488,9 @@ def reprocess_documents(settings: Settings, *, limit: int | None = None) -> int:
                 with pool.connection() as connection:
                     repository = PipelineRepository(connection)
                     repository.mark_processed(doc_id, parsed)
-                    repository.delete_human_metrics_for_doc(
-                        edinet_code=edinet_code, fiscal_year=fiscal_year,
-                    )
+                    repository.delete_human_metrics_for_doc(doc_id=doc_id)
                     repository.upsert_human_metrics(
+                        doc_id=doc_id,
                         edinet_code=edinet_code,
                         fiscal_year=fiscal_year,
                         parsed=parsed,
@@ -532,3 +532,65 @@ def reprocess_documents(settings: Settings, *, limit: int | None = None) -> int:
         return count
     finally:
         pool.closeall()
+
+
+# ------------------------------------------------------------------ #
+#  Job 5: import-local — 手元の CSV ZIP を API なしで取り込む
+# ------------------------------------------------------------------ #
+
+
+def import_local_document(
+    settings: Settings,
+    *,
+    zip_path: Path,
+    doc_id: str,
+    edinet_code: str,
+    filer_name: str,
+    submitted_date: date,
+    fiscal_year: int,
+    source_metadata: dict[str, Any] | None = None,
+) -> None:
+    """ローカルの EDINET CSV ZIP を 1 書類として登録・抽出する (API 不要).
+
+    サンプル ZIP や、API 期間外の書類を正本へ足すための経路。
+    既存の process と同じテーブルに書くので、再実行は冪等 (upsert)。
+    """
+    zip_bytes = zip_path.read_bytes()
+    parsed = parse_document_zip(zip_bytes, max_ratio=settings.human_metric_max_ratio)
+    metadata = dict(source_metadata or {})
+    metadata.setdefault("docID", doc_id)
+    metadata.setdefault("edinetCode", edinet_code)
+    metadata.setdefault("filerName", filer_name)
+    metadata.setdefault("csvFlag", "1")
+    record = DocumentRecord(
+        doc_id=doc_id,
+        edinet_code=edinet_code,
+        filer_name=filer_name,
+        submitted_date=submitted_date,
+        fiscal_year=fiscal_year,
+        csv_available=True,
+        source_metadata=metadata,
+    )
+    with db_connection(settings.database_url) as connection:
+        repository = PipelineRepository(connection)
+        repository.upsert_company(edinet_code, filer_name)
+        repository.upsert_document(record)
+        repository.replace_raw_facts(doc_id, parsed.raw_facts)
+        repository.mark_processed(doc_id, parsed)
+        repository.delete_human_metrics_for_doc(doc_id=doc_id)
+        repository.upsert_human_metrics(
+            doc_id=doc_id,
+            edinet_code=edinet_code,
+            fiscal_year=fiscal_year,
+            parsed=parsed,
+        )
+        repository.replace_metric_evidence(doc_id, parsed.evidence)
+        connection.commit()
+    log_event(
+        logger,
+        "info",
+        "document_imported_local",
+        doc_id=doc_id,
+        zip_path=str(zip_path),
+        evidence_count=len(parsed.evidence),
+    )

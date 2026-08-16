@@ -13,6 +13,7 @@ from edinet_pipeline.industry_master import update_industries
 from edinet_pipeline.jobs import (
     backfill_documents,
     fetch_documents_for_date,
+    import_local_document,
     process_documents,
     reprocess_documents,
 )
@@ -32,6 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
         process          : キューに溜まった書類を順次ダウンロード・解析
         backfill         : 日付範囲で fetch → process をまとめて実行
         reprocess        : 保存済み生行から再抽出 (再DLなし) し指標を更新
+        import-local     : 手元の CSV ZIP を API なしで 1 書類として取り込む
         export-analytics : PostgreSQL → Parquet / DuckDB へスナップショット出力
         dashboard        : 分析ダッシュボードを起動 (要 viz 依存)
     """
@@ -118,6 +120,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum documents to reprocess (default: all with raw facts)",
     )
 
+    # --- import-local: 手元 ZIP を API なしで取り込む ---
+    import_parser = subparsers.add_parser(
+        "import-local",
+        help="Import one local EDINET CSV ZIP without calling the API",
+    )
+    import_parser.add_argument("--zip", dest="zip_path", required=True, type=str)
+    import_parser.add_argument("--doc-id", required=True)
+    import_parser.add_argument("--edinet-code", required=True)
+    import_parser.add_argument("--filer-name", required=True)
+    import_parser.add_argument("--submitted-date", required=True, type=parse_date)
+    import_parser.add_argument("--fiscal-year", required=True, type=int)
+
     # --- reset-stale: 停滞した processing 行を手動で pending へ復旧 ---
     reset_stale_parser = subparsers.add_parser(
         "reset-stale",
@@ -199,6 +213,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "reprocess":
         count = reprocess_documents(settings, limit=args.limit)
         print(f"reprocessed: count={count}")
+        return 0
+
+    if args.command == "import-local":
+        from pathlib import Path
+
+        zip_path = Path(args.zip_path)
+        if not zip_path.is_file():
+            parser.error(f"ZIP not found: {zip_path}")
+        import_local_document(
+            settings,
+            zip_path=zip_path,
+            doc_id=args.doc_id,
+            edinet_code=args.edinet_code,
+            filer_name=args.filer_name,
+            submitted_date=args.submitted_date,
+            fiscal_year=args.fiscal_year,
+        )
+        print(f"imported: doc_id={args.doc_id}")
         return 0
 
     if args.command == "export-analytics":

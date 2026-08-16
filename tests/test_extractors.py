@@ -10,6 +10,7 @@ import pytest
 
 from edinet_pipeline.extractors import (
     classify_element_id,
+    classify_sales_element_id,
     convert_to_percentage,
     extract_human_capital_from_text,
     extract_numeric,
@@ -843,3 +844,204 @@ def test_merge_llm_records_preserves_employee_info() -> None:
     assert filled == 1
     assert record.female_manager_ratio == pytest.approx(12.5)
     assert record.average_annual_salary == pytest.approx(4660000.0)  # 消えていない
+
+
+def test_classify_sales_element_id_orders_ifrs_ahead_of_operating_revenue() -> None:
+    """連結 IFRS ヘッドラインが単体営業収益より優先される."""
+    assert classify_sales_element_id(
+        "jpcrp030000-asr_E01777-000:SalesAndFinancialServicesRevenueIFRSKeyFinancialData"
+    ) == 0
+    assert classify_sales_element_id(
+        "jpcrp_cor:RevenueIFRSSummaryOfBusinessResults"
+    ) == 1
+    assert classify_sales_element_id(
+        "jpcrp_cor:NetSalesSummaryOfBusinessResults"
+    ) == 3
+    assert classify_sales_element_id(
+        "jpcrp_cor:OperatingRevenue1SummaryOfBusinessResults"
+    ) == 4
+    assert classify_sales_element_id("jpigp_cor:CostOfSalesIFRS") is None
+    assert classify_sales_element_id("jpcrp_cor:NetSales") is None
+
+
+def test_parse_document_zip_prefers_ifrs_sales_over_operating_revenue() -> None:
+    """先に単体営業収益が来ても、IFRS 連結売上の要素IDが勝つ."""
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp_sales.csv": [
+                {
+                    "要素ID": "jpcrp_cor:OperatingRevenue1SummaryOfBusinessResults",
+                    "項目名": "営業収益、経営指標等",
+                    "相対年度": "当期",
+                    "ユニットID": "JPY",
+                    "値": "473255000000",
+                },
+                {
+                    "要素ID": (
+                        "jpcrp030000-asr_E01777-000:"
+                        "SalesAndFinancialServicesRevenueIFRSKeyFinancialData"
+                    ),
+                    "項目名": "売上高及び金融ビジネス収入（IFRS）",
+                    "相対年度": "当期",
+                    "ユニットID": "JPY",
+                    "値": "13020768000000",
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+    assert parsed.financial_metrics["sales"] == 13_020_768_000_000
+    sales_ev = [e for e in parsed.evidence if e.metric_name == "sales"]
+    assert len(sales_ev) == 1
+    assert sales_ev[0].matched_by == "element_id_match"
+    assert sales_ev[0].element_id is not None
+    assert "KeyFinancialData" in sales_ev[0].element_id
+
+
+def test_parse_document_zip_sales_layer1_ignores_prior_year() -> None:
+    """売上 Layer 1 は前期の経営指標等を採用しない."""
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp_sales.csv": [
+                {
+                    "要素ID": "jpcrp_cor:NetSalesSummaryOfBusinessResults",
+                    "項目名": "売上高、経営指標等",
+                    "相対年度": "前期",
+                    "値": "100",
+                },
+                {
+                    "要素ID": "jpcrp_cor:NetSalesSummaryOfBusinessResults",
+                    "項目名": "売上高、経営指標等",
+                    "相対年度": "当期",
+                    "値": "200",
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+    assert parsed.financial_metrics["sales"] == 200
+
+
+def test_parse_document_zip_hc_layer1_ignores_prior_year() -> None:
+    """人的資本 Layer 1 は前期を中央値に混ぜない."""
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp.csv": [
+                {
+                    "要素ID": (
+                        "jpcrp_cor:RatioOfFemaleEmployeesInManagerialPositions"
+                        "MetricsOfReportingCompany"
+                    ),
+                    "項目名": "管理職に占める女性労働者の割合、提出会社の指標",
+                    "相対年度": "前期末",
+                    "ユニットID": "pure",
+                    "値": "0.116",
+                },
+                {
+                    "要素ID": (
+                        "jpcrp_cor:RatioOfFemaleEmployeesInManagerialPositions"
+                        "MetricsOfReportingCompany"
+                    ),
+                    "項目名": "管理職に占める女性労働者の割合、提出会社の指標",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "0.190",
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+    record = _find_record(parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL)
+    assert record is not None
+    assert record.female_manager_ratio == pytest.approx(19.0)
+
+
+def test_parse_document_zip_discards_low_text_fallback_wage_gap() -> None:
+    """text_fallback の 20% 未満賃金差異は注記誤抽出として棄却する."""
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp.csv": [
+                {
+                    "項目名": "従業員の状況 [テキストブロック]",
+                    "相対年度": "提出者",
+                    "値": (
+                        "管理職に占める女性労働者の割合 12.5 "
+                        "男性労働者の育児休業取得率 80.0 "
+                        "労働者の男女の賃金の差異(%) 7.48"
+                    ),
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+    record = _find_record(parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL)
+    assert record is not None
+    assert record.female_manager_ratio == pytest.approx(12.5)
+    assert record.male_childcare_leave_ratio == pytest.approx(80.0)
+    assert record.gender_wage_gap is None
+    assert not any(
+        e.metric_name == "gender_wage_gap" and e.matched_by == "text_fallback"
+        for e in parsed.evidence
+    )
+
+
+def test_parse_document_zip_promotes_regular_wage_gap_over_low_text_fallback() -> None:
+    """棄却した全労働者の text_fallback の代わりに正規雇用 Layer 1 を使う."""
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp.csv": [
+                {
+                    "要素ID": (
+                        "jpcrp_cor:RegularEmployeesDifferencesInWagesBetweenMaleAnd"
+                        "FemaleEmployeesMetricsOfReportingCompany"
+                    ),
+                    "項目名": "正規雇用労働者、労働者の男女の賃金の差異、提出会社の指標",
+                    "相対年度": "当期末",
+                    "ユニットID": "pure",
+                    "値": "0.593",
+                },
+                {
+                    "項目名": "従業員の状況 [テキストブロック]",
+                    "相対年度": "提出者",
+                    "値": (
+                        "管理職に占める女性労働者の割合 33.3 "
+                        "労働者の男女の賃金の差異(%) 1.0"
+                    ),
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+    all_record = _find_record(parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL)
+    regular = _find_record(parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_REGULAR)
+    assert all_record is not None
+    assert regular is not None
+    assert regular.gender_wage_gap == pytest.approx(59.3)
+    assert all_record.gender_wage_gap == pytest.approx(59.3)
+    assert not any(
+        e.metric_name == "gender_wage_gap" and e.matched_by == "text_fallback"
+        for e in parsed.evidence
+    )
+
+
+def test_parse_document_zip_keeps_plausible_text_fallback_wage_gap() -> None:
+    """text_fallback でも 20% 以上の賃金差異は採用する."""
+    zip_bytes = build_zip(
+        {
+            "XBRL_TO_CSV/jpcrp.csv": [
+                {
+                    "項目名": "従業員の状況 [テキストブロック]",
+                    "相対年度": "提出者",
+                    "値": (
+                        "管理職に占める女性労働者の割合 12.5 "
+                        "男性労働者の育児休業取得率 80.0 "
+                        "労働者の男女の賃金の差異(%) 75.5"
+                    ),
+                },
+            ],
+        }
+    )
+    parsed = parse_document_zip(zip_bytes)
+    record = _find_record(parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL)
+    assert record is not None
+    assert record.gender_wage_gap == pytest.approx(75.5)

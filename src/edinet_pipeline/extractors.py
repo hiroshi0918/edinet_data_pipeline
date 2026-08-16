@@ -1,8 +1,11 @@
 """EDINET CSV からの指標抽出 — 3層戦略.
 
-  Layer 1: 要素IDマッチ (jpcrp_cor:RatioOf...) — 構造化XBRL の決定論的抽出
+  Layer 1: 要素IDマッチ
+    - 人的資本: jpcrp_cor:RatioOf... (当期のみ)
+    - 売上: IFRS KeyFinancialData / 経営指標等の売上要素を優先度順に採用
   Layer 2: 項目名マッチ — 旧タクソノミー / カスタム項目名のフォールバック
   Layer 3: テキストブロックからの抽出 — Layer 1/2 で空のときの最終手段
+           提出会社×全労働者の賃金差異が 20% 未満の text_fallback は棄却
 
 Layer 3 の中ではさらに:
   3a. 正規表現ベース (extract_human_capital_from_text)
@@ -16,6 +19,7 @@ import re
 import statistics
 import unicodedata
 import zipfile
+from dataclasses import replace
 
 import pandas as pd
 
@@ -78,6 +82,45 @@ EMPLOYEE_INFO_RANGES: dict[str, tuple[float, float]] = {
     "average_years_of_service": (0.0, 60.0),
     "average_age": (15.0, 100.0),
 }
+
+# 提出会社×全労働者の賃金差異で text_fallback を採用する下限 (%).
+# 法令上の「女性賃金÷男性賃金×100」は通常 40〜90% に集まり、20% 未満は
+# 注記番号 (「(注) 1.」) の誤抽出である可能性が極めて高い。
+TEXT_FALLBACK_WAGE_GAP_MIN = 20.0
+
+# Layer 1 売上の要素ID優先度 (小さいほど優先).
+# 連結 IFRS のヘッドライン (KeyFinancialData / 経営指標等の IFRS 売上収益) を
+# 単体の「営業収益、経営指標等」より先に採用する。
+SALES_ELEMENT_ID_PRIORITY: tuple[tuple[int, tuple[str, ...]], ...] = (
+    (
+        0,
+        (
+            "SalesAndFinancialServicesRevenueIFRSKeyFinancialData",
+            "OperatingRevenuesIFRSKeyFinancialData",
+            "RevenueIFRSKeyFinancialData",
+            "NetSalesIFRSKeyFinancialData",
+        ),
+    ),
+    (1, ("RevenueIFRSSummaryOfBusinessResults",)),
+    (2, ("NetSalesIFRS",)),
+    (3, ("NetSalesSummaryOfBusinessResults",)),
+    (4, ("OperatingRevenue1SummaryOfBusinessResults",)),
+    (5, ("OperatingRevenue2SummaryOfBusinessResults",)),
+    (6, ("NetSalesOfCompletedConstructionContractsSummaryOfBusinessResults",)),
+    (7, ("GrossOperatingRevenueSummaryOfBusinessResults",)),
+    (8, ("BusinessRevenueSummaryOfBusinessResults",)),
+)
+
+# 売上候補から除外する部分文字列 (原価・利益・セグメント間など)
+_SALES_ELEMENT_ID_EXCLUDE = (
+    "CostOf",
+    "Profit",
+    "Income",
+    "Intersegment",
+    "ToCustomers",
+    "GrossProfit",
+    "Unearned",
+)
 
 # Layer 2: 項目名部分一致パターン
 EXPLICIT_PATTERNS = {
@@ -163,6 +206,22 @@ def classify_element_id(element_id: str | None) -> tuple[str, str, str] | None:
         worker_type = WORKER_TYPE_ALL  # フォールバック
 
     return (metric, scope, worker_type)
+
+
+def classify_sales_element_id(element_id: str | None) -> int | None:
+    """売上の XBRL 要素ID から優先度 (小さいほど優先) を返す.
+
+    判定不能・除外対象なら None。
+    """
+    if not element_id:
+        return None
+    local = element_id.split(":", 1)[-1]
+    if any(token in local for token in _SALES_ELEMENT_ID_EXCLUDE):
+        return None
+    for rank, suffixes in SALES_ELEMENT_ID_PRIORITY:
+        if any(suffix in local for suffix in suffixes):
+            return rank
+    return None
 
 
 # ------------------------------------------------------------------ #
@@ -522,6 +581,8 @@ def parse_from_raw_facts(
     employee_info_values: dict[str, dict[str, list[float]]] = {
         name: {"main": [], "months": []} for name in EMPLOYEE_INFO_FIELDS
     }
+    # Layer 1 売上候補: (priority, value, raw_fact, item_name, raw_text, relative_year, source)
+    sales_candidates: list[tuple[int, float, RawFactRecord, str, str, str, str]] = []
 
     for raw_fact in raw_facts:
         item_name = normalize_text(raw_fact.item_name)
@@ -562,6 +623,20 @@ def parse_from_raw_facts(
                 csv_file=source_file, max_ratio=max_ratio,
             )
             continue  # 要素IDで処理済みなので Layer 2 に降りない
+
+        # ---- Layer 1: 売上の要素ID (IFRS ヘッドライン優先) -------- #
+        sales_rank = classify_sales_element_id(raw_fact.element_id)
+        if sales_rank is not None:
+            if is_relevant_relative_year(relative_year):
+                numeric_sales = extract_numeric(raw_value)
+                if numeric_sales is not None:
+                    sales_candidates.append(
+                        (
+                            sales_rank, numeric_sales, raw_fact,
+                            item_name, raw_text, relative_year, source_file,
+                        )
+                    )
+            continue
 
         # ---- Layer 2: 項目名マッチ -------------------------------- #
         # 財務指標はテキストブロック行に誤マッチさせない。地域情報等の
@@ -650,7 +725,9 @@ def parse_from_raw_facts(
             SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL, metric_name, value,
         )
 
+    _apply_sales_element_id_winner(parsed, sales_candidates)
     parsed.human_metrics = hm_builder.to_records()
+    _sanitize_text_fallback_wage_gap(parsed)
     parsed.employee_status_text = employee_status_text
     return parsed
 
@@ -679,6 +756,8 @@ def _try_apply_element_id_match(
     で中央値に集約する。evidence には観測した全 raw_fact を記録するため、
     後段で「どの値が採用されたか」を辿れる。
     """
+    if not is_relevant_relative_year(relative_year):
+        return
     metric_name, scope, worker_type = classification
     numeric_value = extract_numeric(raw_fact.raw_value)
     if numeric_value is None:
@@ -775,6 +854,121 @@ def _apply_text_fallback(
                 worker_type=WORKER_TYPE_ALL,
             )
         )
+
+
+def _apply_sales_element_id_winner(
+    parsed: ParsedDocument,
+    sales_candidates: list[tuple[int, float, RawFactRecord, str, str, str, str]],
+) -> None:
+    """Layer 1 売上候補があれば最優先ランクの最大値を採用し、Layer 2 売上を上書きする.
+
+    同一優先度に個別/連結が並ぶ場合は大きい方 (通常は連結) を取る。
+    """
+    if not sales_candidates:
+        return
+    best_rank = min(candidate[0] for candidate in sales_candidates)
+    best = [c for c in sales_candidates if c[0] == best_rank]
+    _rank, value, raw_fact, item_name, raw_text, relative_year, source_file = max(
+        best, key=lambda candidate: candidate[1]
+    )
+    parsed.financial_metrics["sales"] = int(round(value))
+    parsed.evidence = [
+        ev
+        for ev in parsed.evidence
+        if not (ev.metric_name == "sales" and ev.matched_by == "item_name_match")
+    ]
+    parsed.evidence.append(
+        MetricEvidenceRecord(
+            metric_name="sales",
+            item_name=item_name or (
+                (raw_fact.element_id or "sales").split(":")[-1]
+            ),
+            raw_value=raw_text,
+            relative_year=relative_year,
+            source_file=source_file,
+            matched_by="element_id_match",
+            element_id=raw_fact.element_id,
+        )
+    )
+
+
+def _human_record_has_values(record: HumanMetricRecord) -> bool:
+    """HumanMetricRecord に数値フィールドが1つでも入っているか."""
+    return any(getattr(record, name) is not None for name in HUMAN_RECORD_FIELDS)
+
+
+def _sanitize_text_fallback_wage_gap(parsed: ParsedDocument) -> None:
+    """提出会社×全労働者の text_fallback 賃金差異が下限未満なら棄却する.
+
+    正規雇用の Layer 1 値があればそちらを全労働者枠に昇格させる。
+    無ければ NULL (誤った注記番号をダッシュボード既定次元に出さない)。
+    """
+    tf_evidence = [
+        ev
+        for ev in parsed.evidence
+        if ev.metric_name == "gender_wage_gap"
+        and ev.matched_by == "text_fallback"
+        and ev.scope == SCOPE_REPORTING_COMPANY
+        and ev.worker_type == WORKER_TYPE_ALL
+    ]
+    if not tf_evidence:
+        return
+
+    all_record = next(
+        (
+            rec
+            for rec in parsed.human_metrics
+            if rec.scope == SCOPE_REPORTING_COMPANY and rec.worker_type == WORKER_TYPE_ALL
+        ),
+        None,
+    )
+    if all_record is None or all_record.gender_wage_gap is None:
+        return
+    if all_record.gender_wage_gap >= TEXT_FALLBACK_WAGE_GAP_MIN:
+        return
+
+    regular_record = next(
+        (
+            rec
+            for rec in parsed.human_metrics
+            if rec.scope == SCOPE_REPORTING_COMPANY
+            and rec.worker_type == WORKER_TYPE_REGULAR
+        ),
+        None,
+    )
+    regular_gap = (
+        regular_record.gender_wage_gap if regular_record is not None else None
+    )
+
+    parsed.evidence = [ev for ev in parsed.evidence if ev not in tf_evidence]
+
+    if regular_gap is not None:
+        parsed.human_metrics = [
+            replace(rec, gender_wage_gap=regular_gap) if rec is all_record else rec
+            for rec in parsed.human_metrics
+        ]
+        regular_ev = next(
+            (
+                ev
+                for ev in parsed.evidence
+                if ev.metric_name == "gender_wage_gap"
+                and ev.scope == SCOPE_REPORTING_COMPANY
+                and ev.worker_type == WORKER_TYPE_REGULAR
+                and ev.matched_by == "element_id_match"
+            ),
+            None,
+        )
+        if regular_ev is not None:
+            parsed.evidence.append(replace(regular_ev, worker_type=WORKER_TYPE_ALL))
+        return
+
+    cleared = replace(all_record, gender_wage_gap=None)
+    parsed.human_metrics = [
+        cleared if rec is all_record else rec for rec in parsed.human_metrics
+    ]
+    parsed.human_metrics = [
+        rec for rec in parsed.human_metrics if _human_record_has_values(rec)
+    ]
 
 
 # ------------------------------------------------------------------ #
