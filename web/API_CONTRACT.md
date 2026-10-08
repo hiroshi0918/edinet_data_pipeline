@@ -21,7 +21,7 @@ Rails（`/api/v1`）と React の接点。JSON のキーは snake_case。メソ�
 | `GET /rankings/size` | `SizeRankingQuery` |
 | `GET /nikkei225` | `Nikkei225Query` |
 
-図鑑の画面は `/`、`/companies/:code`、`/companies/:code/story`、`/rankings`、`/nikkei225`。`/` は表紙で、業種の目次に `GET /industries` を読む。`/companies/:code` は `GET /companies/:code/sheet` を読む。`/rankings` は `?industry=&axis=` を URL に持つ。spotlight、業種分布、人的資本ランキング、規模ランキングのエンドポイントは残している。
+図鑑の画面は `/`、`/companies/:code`、`/companies/:code/story`、`/compare`、`/rankings`、`/nikkei225`。`/` は表紙で、業種の目次に `GET /industries` を読む。`/companies/:code` は `GET /companies/:code/sheet` を読む。`/rankings` は `?industry=&axis=` を URL に持つ。`/compare` は `?a=&b=` に会社コードを持ち、2社の `GET /companies/:code/story` を読んで売上高・営業利益・営業利益率を同じ目盛りで重ねる（BS は未取り込みなので対象外）。spotlight、業種分布、人的資本ランキング、規模ランキングのエンドポイントは残している。
 
 ## 共通パラメータ
 

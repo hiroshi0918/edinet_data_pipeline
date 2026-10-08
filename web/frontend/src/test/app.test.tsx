@@ -94,6 +94,30 @@ test('カードを開くと有報の実数が出る', async () => {
   expect(screen.getByText('決算月の終値')).toBeInTheDocument()
 })
 
+test('/compare は2社のPLを同じ目盛りで重ね、最新の値を右にそろえる', async () => {
+  renderAt('/compare?a=E05206&b=E10001')
+  expect(screen.getByRole('heading', { name: '2社をくらべる' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { name: '売上高' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: '営業利益' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: '営業利益率' })).toBeInTheDocument()
+  expect(screen.getByText('1,200.0 億円')).toBeInTheDocument()
+  expect(screen.getByText('500.0 億円')).toBeInTheDocument()
+  expect(screen.getByText('7.5%')).toBeInTheDocument()
+  expect(screen.getAllByText('2026年度').length).toBeGreaterThan(0)
+  expect(screen.getAllByRole('img', { name: /億円/ })).toHaveLength(2)
+})
+
+test('/compare は1社しか無いと、2社えらぶよう促す', () => {
+  renderAt('/compare?a=E05206')
+  expect(screen.getByText('くらべる会社を2社えらんでください。')).toBeInTheDocument()
+})
+
+test('シートから比較へ、その会社を1社目にして入れる', async () => {
+  renderAt('/companies/E05206')
+  const link = await screen.findByRole('link', { name: 'ほかの会社とくらべる' })
+  expect(link).toHaveAttribute('href', '/compare?a=E05206')
+})
+
 function routePaths(routes: RouteObject[]): string[] {
   return routes.flatMap((route) => [
     route.path ?? '',
@@ -109,6 +133,7 @@ test('外した分析画面はルートに無い', () => {
     'companies',
     'companies/:code',
     'companies/:code/story',
+    'compare',
     'nikkei225',
     'rankings',
     '*',

@@ -206,6 +206,12 @@ export function CompanySheet({ sheet }: { sheet: SheetResponse }) {
               歩みを見る
               <ArrowRightIcon className="size-4" strokeWidth={3} aria-hidden="true" />
             </Link>
+            <Link
+              className="col-span-2 justify-self-start text-sm font-bold text-ink underline decoration-shu decoration-2 underline-offset-4 sm:col-span-1 sm:col-start-1 sm:row-start-3"
+              to={`/compare?a=${sheet.edinet_code}`}
+            >
+              ほかの会社とくらべる
+            </Link>
           </div>
           <h2 className="mt-8 mb-2 text-xs font-black tracking-[0.2em] text-shu">ステータス</h2>
           <div className="-mx-3 space-y-1 sm:-mx-4">
