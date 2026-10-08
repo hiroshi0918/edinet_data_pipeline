@@ -135,7 +135,7 @@ KPI の件数は、既定の次元（`reporting_company` × `all`）で数える
 
 ### GET /api/v1/companies/:code/story
 
-直近10年の売上・営業利益・従業員数と、事業の内容・沿革。保存済みの書き直しがあればそれを返し、無ければ原文の抜粋を返す。この GET は書き直さない。保存は `bin/rails 'story:rewrite[EDINETコード]'`。
+直近10年の売上・営業利益・従業員数と、事業の内容・沿革。保存済みの書き直しがあればそれを返し、無ければ原文の抜粋を返す。事業の `source` は事業の内容の全文、沿革の `source` は根拠の引用。この GET は書き直さない。保存は `bin/rails 'story:rewrite[EDINETコード]'`。
 
 ### GET /api/v1/industries
 

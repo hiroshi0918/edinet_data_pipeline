@@ -1,4 +1,4 @@
-# 原文チェックを通った書き直しだけを保存する。抜粋は保存しない。
+# 書き直しだけを保存する。抜粋は保存しない。
 class StoryCache
   def self.read(doc_id)
     row = ApplicationRecord.connection.select_one(

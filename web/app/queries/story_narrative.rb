@@ -1,11 +1,12 @@
 # 事業の内容と沿革を歩みにする。
-# 読み取りは保存済みの書き直し、無ければ原文の抜粋。原文に無い文は出さない。
+# 読み取りは保存済みの書き直し、無ければ原文の抜粋。
 class StoryNarrative
   class RewriteError < StandardError; end
 
   BUSINESS_ITEM = "事業の内容 [テキストブロック]"
   HISTORY_ITEM = "沿革 [テキストブロック]"
   YEAR_PATTERN = /(?:平成|令和|昭和)?\d{1,4}年/
+  HEADING_PATTERN = /\A[0-9０-９]+[[:space:]]*【[^】]*】[[:space:]]*/
 
   def self.empty
     { business: nil, history: [], rewritten: false }
@@ -26,7 +27,7 @@ class StoryNarrative
     end
 
     rewritten = StoryRewriter.rewrite(key, business_source, history_source)
-    raise RewriteError, "原文に沿った文章になりませんでした" if rewritten.nil?
+    raise RewriteError, "書き直しが取れませんでした" if rewritten.nil?
 
     StoryCache.write(doc_id, rewritten)
     rewritten
@@ -64,6 +65,7 @@ class StoryNarrative
       .gsub(/[ \t]+/, " ")
       .gsub(/\n{2,}/, "\n")
       .strip
+      .sub(HEADING_PATTERN, "")
   end
 
   def self.excerpt(source)

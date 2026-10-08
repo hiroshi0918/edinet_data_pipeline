@@ -53,7 +53,7 @@ RSpec.describe "Api::V1::Companies story", type: :request do
       row: 4,
       element_id: nil,
       relative_year: nil,
-      raw_value: "当社はソフトを作る。次の文です。",
+      raw_value: " ３ 【事業の内容】　当社はソフトを作る。次の文です。",
       item_name: "事業の内容 [テキストブロック]"
     )
     insert_fact(
@@ -75,8 +75,8 @@ RSpec.describe "Api::V1::Companies story", type: :request do
     expect(by_year[2025]["sales"]).to eq(80)
     expect(by_year[2022]["sales"]).to eq(40)
     expect(by_year[2017]["sales"]).to be_nil
-    expect(json_body["narrative"]["business"]["text"]).to include("ソフトを作る")
-    expect(json_body["narrative"]["business"]["source"]).to include("ソフトを作る")
+    expect(json_body["narrative"]["business"]["text"]).to start_with("当社はソフトを作る")
+    expect(json_body["narrative"]["business"]["source"]).to start_with("当社はソフトを作る")
     expect(json_body["narrative"]["rewritten"]).to be(false)
     labels = json_body["narrative"]["history"].map { |beat| beat["label"] }
     expect(labels).to include("1990年", "2001年")
