@@ -4,7 +4,7 @@ class ApplicationQuery
 
   # SQL が返す列名。別名 value はここでは扱わず、呼び出し側が元の列をコピーする。
   INTEGER_KEYS = %w[
-    sales operating_profit net_profit employee_count fiscal_year
+    sales operating_profit net_profit employee_count fiscal_year shares_outstanding
     company_count year_count total_records
   ].freeze
 

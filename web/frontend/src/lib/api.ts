@@ -3,16 +3,11 @@ import type {
   ApiErrorBody,
   CompaniesResponse,
   CompanyDetail,
-  HcDistributionResponse,
-  HcMetric,
-  HcRankingResponse,
+  SheetResponse,
+  StoryResponse,
   MetaResponse,
-  RankingHcMetric,
-  SizeAxis,
-  SizeRankingResponse,
-  SpotlightResponse,
-  SpotlightScope,
-  WorkerType,
+  RankingsResponse,
+  Nikkei225Response,
 } from '@/lib/types'
 
 export class ApiError extends Error {
@@ -63,45 +58,23 @@ export function fetchCompany(code: string) {
   return apiGet<CompanyDetail>(`/companies/${encodeURIComponent(code)}`)
 }
 
-export function fetchSpotlight(
-  code: string,
-  params: {
-    year?: number
-    scope?: SpotlightScope
-    worker_type?: WorkerType
-  },
-) {
-  return apiGet<SpotlightResponse>(
-    `/companies/${encodeURIComponent(code)}/spotlight`,
-    params,
-  )
+export function fetchSheet(code: string) {
+  return apiGet<SheetResponse>(`/companies/${encodeURIComponent(code)}/sheet`)
 }
 
-export function fetchHcDistribution(params: {
-  year: number
-  scope: string
-  worker_type: string
-  metric: HcMetric
-}) {
-  return apiGet<HcDistributionResponse>('/industries/hc_distribution', params)
+export function fetchStory(code: string) {
+  return apiGet<StoryResponse>(`/companies/${encodeURIComponent(code)}/story`)
 }
 
-export function fetchHcRanking(params: {
-  year: number
-  scope: string
-  worker_type: string
-  metric: RankingHcMetric
-}) {
-  return apiGet<HcRankingResponse>('/rankings/human_capital', params)
+export function fetchNikkei225() {
+  return apiGet<Nikkei225Response>('/nikkei225')
 }
 
-export function fetchSizeRanking(params: {
-  year: number
-  scope: string
-  worker_type: string
-  axis: SizeAxis
-}) {
-  return apiGet<SizeRankingResponse>('/rankings/size', params)
+export function fetchRankings(industry?: string, axis?: string) {
+  return apiGet<RankingsResponse>('/rankings', {
+    industry: industry && industry !== 'all' ? industry : undefined,
+    axis: axis && axis !== 'level' ? axis : undefined,
+  })
 }
 
 export function errorMessage(error: unknown): string {

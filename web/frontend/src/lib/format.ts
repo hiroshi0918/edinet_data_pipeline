@@ -56,6 +56,16 @@ export function formatAge(
   return withUnit(value.toFixed(1), '歳', options)
 }
 
+export function formatMultiple(value: number | null | undefined): string {
+  if (isBlank(value)) return '—'
+  return `${value.toFixed(1)}倍`
+}
+
+export function formatRatioAsPct(value: number | null | undefined): string {
+  if (isBlank(value)) return '—'
+  return `${(value * 100).toFixed(1)}%`
+}
+
 export function formatPct(value: number | null | undefined): string {
   if (isBlank(value)) return '—'
   return `${value.toFixed(1)}%`

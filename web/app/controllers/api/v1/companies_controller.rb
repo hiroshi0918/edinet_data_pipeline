@@ -15,6 +15,20 @@ module Api
         render json: company
       end
 
+      def sheet
+        sheet = SheetQuery.call(params[:code])
+        return render_not_found("Company not found") unless sheet
+
+        render json: sheet
+      end
+
+      def story
+        story = StoryQuery.call(params[:code])
+        return render_not_found("Company not found") unless story
+
+        render json: story
+      end
+
       # scope=auto（または auto=1）は SpotlightQuery が評価次元を決める。
       def spotlight
         company = Company.find_by(edinet_code: params[:code])

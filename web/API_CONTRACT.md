@@ -6,15 +6,21 @@ Base: `http://localhost:3000/api/v1`（Vite が `/api` を Rails へ proxy）。
 
 実装の対応:
 
-| エンドポイント | Query | 画面 |
-| --- | --- | --- |
-| `GET /meta` | `MetaQuery` | 全ページの KPI・既定年度 |
-| `GET /companies` | `CompaniesQuery.index` | Combobox |
-| `GET /companies/:code` | `CompaniesQuery.show` | `/companies/:code` |
-| `GET /companies/:code/spotlight` | `SpotlightQuery` | `/companies/:code/spotlight` |
-| `GET /industries/hc_distribution` | `HcDistributionQuery` | `/industry` |
-| `GET /rankings/human_capital` | `HumanCapitalRankingQuery` | `/hc-ranking` |
-| `GET /rankings/size` | `SizeRankingQuery` | `/size-hc` |
+| エンドポイント | Query |
+| --- | --- |
+| `GET /meta` | `MetaQuery` |
+| `GET /companies` | `CompaniesQuery.index` |
+| `GET /companies/:code` | `CompaniesQuery.show` |
+| `GET /companies/:code/sheet` | `SheetQuery` |
+| `GET /companies/:code/story` | `StoryQuery` |
+| `GET /companies/:code/spotlight` | `SpotlightQuery` |
+| `GET /industries/hc_distribution` | `HcDistributionQuery` |
+| `GET /rankings` | `RankingsQuery` |
+| `GET /rankings/human_capital` | `HumanCapitalRankingQuery` |
+| `GET /rankings/size` | `SizeRankingQuery` |
+| `GET /nikkei225` | `Nikkei225Query` |
+
+図鑑の画面は `/companies`、`/companies/:code`、`/companies/:code/story`、`/rankings`、`/nikkei225`。`/companies/:code` は `GET /companies/:code/sheet` を読む。spotlight、業種分布、人的資本ランキング、規模ランキングのエンドポイントは残している。
 
 ## Shared params
 
@@ -81,6 +87,97 @@ All (year, scope, worker_type) rows for one company.
       "average_annual_salary": 6500000,
       "average_years_of_service": 8.2,
       "average_age": 36.4
+    }
+  ]
+}
+```
+
+### GET /api/v1/companies/:code/sheet
+
+最新有報年度のキャラクターシート。年度・scope・worker_type は受け取らない。人的資本は `reporting_company` × `all` だけ。比較相手はその年度・同じ業種で、軸ごとに非欠損が 5 社未満なら `score` は null。点は「自分以下の社数 / 比較社数」を 100 点満点に丸めた値。`level` は score がある軸の平均（開示の 0 は入れる。期待は株価が揃うまで null）。業種が無い会社は点も level も null。未知のコードは 404。
+
+```json
+{
+  "edinet_code": "E05206",
+  "company_name": "株式会社セプテーニ・ホールディングス",
+  "industry": "サービス業",
+  "fiscal_year": 2024,
+  "level": 86,
+  "axes": [
+    { "key": "sales", "label": "売上高", "nickname": "規模", "score": 80, "value": 17628035000, "peer_count": 40 },
+    { "key": "employee_count", "label": "従業員数", "nickname": "人数", "score": 40, "value": 58, "peer_count": 40 },
+    { "key": "operating_margin", "label": "営業利益率", "nickname": "稼ぐ力", "score": 70, "value": 0.0567, "peer_count": 38 },
+    {
+      "key": "people",
+      "label": "人的資本",
+      "nickname": "人",
+      "score": 60,
+      "value": null,
+      "peer_count": null,
+      "average_age": 36.4,
+      "metrics": [
+        { "key": "female_manager_ratio", "value": 12.3, "score": 40, "peer_count": 30 },
+        { "key": "male_childcare_leave_ratio", "value": null, "score": null, "peer_count": 4 },
+        { "key": "gender_wage_gap", "value": 78.5, "score": 80, "peer_count": 28 }
+      ],
+      "disclosure": { "key": "disclosure", "label": "人の開示", "nickname": "開示", "score": 67, "value": 2, "peer_count": null, "disclosed_count": 2, "expected_count": 3 }
+    },
+    { "key": "average_annual_salary", "label": "平均年間給与", "nickname": "待遇", "score": 55, "value": 6500000, "peer_count": 36 },
+    { "key": "average_years_of_service", "label": "平均勤続年数", "nickname": "定着", "score": 50, "value": 8.2, "peer_count": 36 },
+    { "key": "expectation", "label": "株価売上高倍率", "nickname": "期待", "score": null, "value": null, "peer_count": null, "per": null, "psr_basis": null }
+  ]
+}
+```
+
+`gender_wage_gap` は高いほど均衡に近い。人の欠測は 0 点にしない。営業利益率は売上が 0 以下なら null。開示は人的資本の `disclosure`。期待の `psr_basis` は `close`（決算月の終値）か `reported_per`（有報の株価収益率から戻した倍率）。
+
+### GET /api/v1/companies/:code/story
+
+直近10年の売上・営業利益・従業員数と、事業の内容・沿革。保存済みの書き直しがあればそれを返し、無ければ原文の抜粋を返す。この GET は書き直さない。保存は `bin/rails 'story:rewrite[EDINETコード]'`。
+
+### GET /api/v1/rankings?industry=&axis=
+
+図鑑のランキング。`axis` を省略すると総合点。`sales` `employee_count` `operating_margin` `people` `average_annual_salary` `average_years_of_service` `expectation` `disclosure` のいずれかなら、その軸の点で並べる。点がない会社は末尾。`industry` はその業種だけ。未知の `axis` は 400。各行の `edinet_code` はシートの会社コード。
+
+```json
+{
+  "axis": "level",
+  "industry": null,
+  "industries": ["輸送用機器"],
+  "axes": [{ "key": "level", "label": "総合" }],
+  "companies": [
+    {
+      "edinet_code": "E02144",
+      "company_name": "トヨタ自動車株式会社",
+      "industry": "輸送用機器",
+      "fiscal_year": 2026,
+      "level": 78,
+      "score": 78
+    }
+  ]
+}
+```
+
+### GET /api/v1/nikkei225
+
+日経平均の構成銘柄。`data/nikkei225.json`（2026-10-08 時点）を、EDINETコードで companies に結ぶ。`level` はシートと同じ総合点。図鑑に無い銘柄は `has_sheet: false` で、`edinet_code` と `level` は null。並びは総合点の降順、点が無い会社は末尾。
+
+```json
+{
+  "as_of": "2026-10-08",
+  "source_note": "日経平均プロフィルの構成銘柄を証券コードで結んだ。",
+  "companies": [
+    {
+      "securities_code": "7203",
+      "short_name": "トヨタ",
+      "listed_name": "トヨタ自動車（株）",
+      "nikkei_sector": "自動車",
+      "edinet_code": "E02144",
+      "company_name": "トヨタ自動車株式会社",
+      "industry": "輸送用機器",
+      "fiscal_year": 2026,
+      "level": 76,
+      "has_sheet": true
     }
   ]
 }

@@ -1,13 +1,6 @@
-// 5 画面のナビ。スポットライトは選択中の企業コードをパスに載せる。
-import {
-  Building2Icon,
-  FactoryIcon,
-  LayoutDashboardIcon,
-  ScaleIcon,
-  ScanSearchIcon,
-  TrophyIcon,
-} from 'lucide-react'
-import { Link, useLocation, useParams } from 'react-router'
+// 会社図鑑のナビ。入口は社名検索だけ。
+import { BookOpenIcon, Building2Icon, ListIcon, TrophyIcon } from 'lucide-react'
+import { Link, useLocation } from 'react-router'
 
 import {
   Sidebar,
@@ -21,63 +14,53 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
 
-const NAV = [
-  { id: 'companies', label: '企業を調べる', icon: Building2Icon },
-  { id: 'industry', label: '業種で比べる', icon: FactoryIcon },
-  { id: 'hc-ranking', label: '人的資本トップ/ボトム', icon: TrophyIcon },
-  { id: 'size-hc', label: '規模×人的資本', icon: ScaleIcon },
-  { id: 'spotlight', label: 'スポットライト', icon: ScanSearchIcon },
-] as const
-
 export function AppSidebar() {
   const location = useLocation()
-  const { code } = useParams()
-  const search = location.search
-
-  function hrefFor(id: (typeof NAV)[number]['id']) {
-    if (id === 'companies') return { pathname: '/companies', search }
-    if (id === 'industry') return { pathname: '/industry', search }
-    if (id === 'hc-ranking') return { pathname: '/hc-ranking', search }
-    if (id === 'size-hc') return { pathname: '/size-hc', search }
-    if (code) return { pathname: `/companies/${code}/spotlight`, search }
-    return { pathname: '/companies', search }
-  }
-
-  function isActive(id: (typeof NAV)[number]['id']) {
-    const path = location.pathname
-    if (id === 'spotlight') return path.includes('/spotlight')
-    if (id === 'companies') {
-      return path.startsWith('/companies') && !path.includes('/spotlight')
-    }
-    return path === `/${id}` || path.startsWith(`/${id}/`)
-  }
+  const onCompanies =
+    location.pathname.startsWith('/companies') && location.pathname !== '/nikkei225'
+  const onNikkei = location.pathname.startsWith('/nikkei225')
+  const onRankings = location.pathname.startsWith('/rankings')
 
   return (
     <Sidebar>
       <SidebarHeader className="px-4 py-4">
         <div className="flex items-center gap-2 text-sidebar-foreground">
-          <LayoutDashboardIcon className="size-5" />
+          <BookOpenIcon className="size-5" />
           <div className="leading-tight">
-            <div className="text-sm font-semibold">EDINET</div>
-            <div className="text-xs text-sidebar-foreground/70">人的資本ダッシュボード</div>
+            <div className="text-sm font-semibold">会社図鑑</div>
+            <div className="text-xs text-sidebar-foreground/70">有報から読む</div>
           </div>
         </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>分析</SidebarGroupLabel>
+          <SidebarGroupLabel>開く</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {NAV.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton asChild isActive={isActive(item.id)}>
-                    <Link to={hrefFor(item.id)}>
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={onCompanies}>
+                  <Link to="/companies">
+                    <Building2Icon />
+                    <span>会社を開く</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={onRankings}>
+                  <Link to="/rankings">
+                    <TrophyIcon />
+                    <span>ランキング</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={onNikkei}>
+                  <Link to="/nikkei225">
+                    <ListIcon />
+                    <span>日経225</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

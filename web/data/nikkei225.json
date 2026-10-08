@@ -1,0 +1,1581 @@
+{
+  "as_of": "2026-10-08",
+  "source_note": "日経平均プロフィルの構成銘柄（2026-10-08）を、EDINETコード集約一覧（2026-05-18）の証券コードで結んだ。",
+  "constituents": [
+    {
+      "securities_code": "285A",
+      "short_name": "キオクシア",
+      "listed_name": "キオクシアホールディングス（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E35948"
+    },
+    {
+      "securities_code": "4062",
+      "short_name": "イビデン",
+      "listed_name": "イビデン（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E00775"
+    },
+    {
+      "securities_code": "6479",
+      "short_name": "ミネベア",
+      "listed_name": "ミネベアミツミ（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01607"
+    },
+    {
+      "securities_code": "6501",
+      "short_name": "日立",
+      "listed_name": "（株）日立製作所",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01737"
+    },
+    {
+      "securities_code": "6503",
+      "short_name": "三菱電",
+      "listed_name": "三菱電機（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01739"
+    },
+    {
+      "securities_code": "6504",
+      "short_name": "富士電機",
+      "listed_name": "富士電機（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01740"
+    },
+    {
+      "securities_code": "6506",
+      "short_name": "安川電",
+      "listed_name": "（株）安川電機",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01741"
+    },
+    {
+      "securities_code": "6525",
+      "short_name": "コクサイエレ",
+      "listed_name": "（株）ＫＯＫＵＳＡＩ　ＥＬＥＣＴＲＩＣ",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E37488"
+    },
+    {
+      "securities_code": "6526",
+      "short_name": "ソシオネクス",
+      "listed_name": "（株）ソシオネクスト",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E37978"
+    },
+    {
+      "securities_code": "6645",
+      "short_name": "オムロン",
+      "listed_name": "オムロン（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01755"
+    },
+    {
+      "securities_code": "6701",
+      "short_name": "ＮＥＣ",
+      "listed_name": "日本電気（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01765"
+    },
+    {
+      "securities_code": "6702",
+      "short_name": "富士通",
+      "listed_name": "富士通（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01766"
+    },
+    {
+      "securities_code": "6723",
+      "short_name": "ルネサス",
+      "listed_name": "ルネサスエレクトロニクス（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E02081"
+    },
+    {
+      "securities_code": "6724",
+      "short_name": "エプソン",
+      "listed_name": "セイコーエプソン（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01873"
+    },
+    {
+      "securities_code": "6752",
+      "short_name": "パナＨＤ",
+      "listed_name": "パナソニック　ホールディングス（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01772"
+    },
+    {
+      "securities_code": "6753",
+      "short_name": "シャープ",
+      "listed_name": "シャープ（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01773"
+    },
+    {
+      "securities_code": "6758",
+      "short_name": "ソニーＧ",
+      "listed_name": "ソニーグループ（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01777"
+    },
+    {
+      "securities_code": "6762",
+      "short_name": "ＴＤＫ",
+      "listed_name": "ＴＤＫ（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01780"
+    },
+    {
+      "securities_code": "6770",
+      "short_name": "アルプスアル",
+      "listed_name": "アルプスアルパイン（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01793"
+    },
+    {
+      "securities_code": "6841",
+      "short_name": "横河電",
+      "listed_name": "横河電機（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01878"
+    },
+    {
+      "securities_code": "6857",
+      "short_name": "アドテスト",
+      "listed_name": "（株）アドバンテスト",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01950"
+    },
+    {
+      "securities_code": "6861",
+      "short_name": "キーエンス",
+      "listed_name": "（株）キーエンス",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01967"
+    },
+    {
+      "securities_code": "6902",
+      "short_name": "デンソー",
+      "listed_name": "（株）デンソー",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01892"
+    },
+    {
+      "securities_code": "6920",
+      "short_name": "レーザーテク",
+      "listed_name": "レーザーテック（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01991"
+    },
+    {
+      "securities_code": "6954",
+      "short_name": "ファナック",
+      "listed_name": "ファナック（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01946"
+    },
+    {
+      "securities_code": "6963",
+      "short_name": "ローム",
+      "listed_name": "ローム（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01953"
+    },
+    {
+      "securities_code": "6971",
+      "short_name": "京セラ",
+      "listed_name": "京セラ（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01182"
+    },
+    {
+      "securities_code": "6976",
+      "short_name": "太陽誘電",
+      "listed_name": "太陽誘電（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01824"
+    },
+    {
+      "securities_code": "6981",
+      "short_name": "村田製",
+      "listed_name": "（株）村田製作所",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E01914"
+    },
+    {
+      "securities_code": "7735",
+      "short_name": "スクリン",
+      "listed_name": "（株）ＳＣＲＥＥＮホールディングス",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E02288"
+    },
+    {
+      "securities_code": "7751",
+      "short_name": "キヤノン",
+      "listed_name": "キヤノン（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E02274"
+    },
+    {
+      "securities_code": "7752",
+      "short_name": "リコー",
+      "listed_name": "（株）リコー",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E02275"
+    },
+    {
+      "securities_code": "8035",
+      "short_name": "東エレク",
+      "listed_name": "東京エレクトロン（株）",
+      "nikkei_sector": "電気機器",
+      "edinet_code": "E02652"
+    },
+    {
+      "securities_code": "7201",
+      "short_name": "日産自",
+      "listed_name": "日産自動車（株）",
+      "nikkei_sector": "自動車",
+      "edinet_code": "E02142"
+    },
+    {
+      "securities_code": "7202",
+      "short_name": "いすゞ",
+      "listed_name": "いすゞ自動車（株）",
+      "nikkei_sector": "自動車",
+      "edinet_code": "E02143"
+    },
+    {
+      "securities_code": "7203",
+      "short_name": "トヨタ",
+      "listed_name": "トヨタ自動車（株）",
+      "nikkei_sector": "自動車",
+      "edinet_code": "E02144"
+    },
+    {
+      "securities_code": "7211",
+      "short_name": "三菱自",
+      "listed_name": "三菱自動車工業（株）",
+      "nikkei_sector": "自動車",
+      "edinet_code": "E02213"
+    },
+    {
+      "securities_code": "7261",
+      "short_name": "マツダ",
+      "listed_name": "マツダ（株）",
+      "nikkei_sector": "自動車",
+      "edinet_code": "E02163"
+    },
+    {
+      "securities_code": "7267",
+      "short_name": "ホンダ",
+      "listed_name": "本田技研工業（株）",
+      "nikkei_sector": "自動車",
+      "edinet_code": "E02166"
+    },
+    {
+      "securities_code": "7269",
+      "short_name": "スズキ",
+      "listed_name": "スズキ（株）",
+      "nikkei_sector": "自動車",
+      "edinet_code": "E02167"
+    },
+    {
+      "securities_code": "7270",
+      "short_name": "ＳＵＢＡＲＵ",
+      "listed_name": "（株）ＳＵＢＡＲＵ",
+      "nikkei_sector": "自動車",
+      "edinet_code": "E02152"
+    },
+    {
+      "securities_code": "7272",
+      "short_name": "ヤマハ発",
+      "listed_name": "ヤマハ発動機（株）",
+      "nikkei_sector": "自動車",
+      "edinet_code": "E02168"
+    },
+    {
+      "securities_code": "4543",
+      "short_name": "テルモ",
+      "listed_name": "テルモ（株）",
+      "nikkei_sector": "精密機器",
+      "edinet_code": "E01630"
+    },
+    {
+      "securities_code": "6146",
+      "short_name": "ディスコ",
+      "listed_name": "（株）ディスコ",
+      "nikkei_sector": "精密機器",
+      "edinet_code": "E01506"
+    },
+    {
+      "securities_code": "7731",
+      "short_name": "ニコン",
+      "listed_name": "（株）ニコン",
+      "nikkei_sector": "精密機器",
+      "edinet_code": "E02271"
+    },
+    {
+      "securities_code": "7733",
+      "short_name": "オリンパス",
+      "listed_name": "オリンパス（株）",
+      "nikkei_sector": "精密機器",
+      "edinet_code": "E02272"
+    },
+    {
+      "securities_code": "7741",
+      "short_name": "ＨＯＹＡ",
+      "listed_name": "ＨＯＹＡ（株）",
+      "nikkei_sector": "精密機器",
+      "edinet_code": "E01124"
+    },
+    {
+      "securities_code": "2432",
+      "short_name": "ディーエヌエ",
+      "listed_name": "（株）ディー・エヌ・エー",
+      "nikkei_sector": "情報通信",
+      "edinet_code": "E05460"
+    },
+    {
+      "securities_code": "3659",
+      "short_name": "ネクソン",
+      "listed_name": "（株）ネクソン",
+      "nikkei_sector": "情報通信",
+      "edinet_code": "E25850"
+    },
+    {
+      "securities_code": "3697",
+      "short_name": "ＳＨＩＦＴ",
+      "listed_name": "（株）ＳＨＩＦＴ",
+      "nikkei_sector": "情報通信",
+      "edinet_code": "E30969"
+    },
+    {
+      "securities_code": "4307",
+      "short_name": "野村総研",
+      "listed_name": "（株）野村総合研究所",
+      "nikkei_sector": "情報通信",
+      "edinet_code": "E05062"
+    },
+    {
+      "securities_code": "4385",
+      "short_name": "メルカリ",
+      "listed_name": "（株）メルカリ",
+      "nikkei_sector": "情報通信",
+      "edinet_code": "E34064"
+    },
+    {
+      "securities_code": "4689",
+      "short_name": "ラインヤフー",
+      "listed_name": "ＬＩＮＥヤフー（株）",
+      "nikkei_sector": "情報通信",
+      "edinet_code": "E05000"
+    },
+    {
+      "securities_code": "4704",
+      "short_name": "トレンド",
+      "listed_name": "トレンドマイクロ（株）",
+      "nikkei_sector": "情報通信",
+      "edinet_code": "E04999"
+    },
+    {
+      "securities_code": "7974",
+      "short_name": "任天堂",
+      "listed_name": "任天堂（株）",
+      "nikkei_sector": "情報通信",
+      "edinet_code": "E02367"
+    },
+    {
+      "securities_code": "9432",
+      "short_name": "ＮＴＴ",
+      "listed_name": "ＮＴＴ（株）",
+      "nikkei_sector": "情報通信",
+      "edinet_code": "E04430"
+    },
+    {
+      "securities_code": "9433",
+      "short_name": "ＫＤＤＩ",
+      "listed_name": "ＫＤＤＩ（株）",
+      "nikkei_sector": "情報通信",
+      "edinet_code": "E04425"
+    },
+    {
+      "securities_code": "9434",
+      "short_name": "ＳＢ",
+      "listed_name": "ソフトバンク（株）",
+      "nikkei_sector": "情報通信",
+      "edinet_code": "E04426"
+    },
+    {
+      "securities_code": "9602",
+      "short_name": "東宝",
+      "listed_name": "東宝（株）",
+      "nikkei_sector": "情報通信",
+      "edinet_code": "E04583"
+    },
+    {
+      "securities_code": "9697",
+      "short_name": "カプコン",
+      "listed_name": "（株）カプコン",
+      "nikkei_sector": "情報通信",
+      "edinet_code": "E02417"
+    },
+    {
+      "securities_code": "9766",
+      "short_name": "コナミＧ",
+      "listed_name": "コナミグループ（株）",
+      "nikkei_sector": "情報通信",
+      "edinet_code": "E01956"
+    },
+    {
+      "securities_code": "9984",
+      "short_name": "ＳＢＧ",
+      "listed_name": "ソフトバンクグループ（株）",
+      "nikkei_sector": "情報通信",
+      "edinet_code": "E02778"
+    },
+    {
+      "securities_code": "5831",
+      "short_name": "しずおかＦＧ",
+      "listed_name": "（株）しずおかフィナンシャルグループ",
+      "nikkei_sector": "銀行",
+      "edinet_code": "E37777"
+    },
+    {
+      "securities_code": "7186",
+      "short_name": "横浜ＦＧ",
+      "listed_name": "（株）横浜フィナンシャルグループ",
+      "nikkei_sector": "銀行",
+      "edinet_code": "E32022"
+    },
+    {
+      "securities_code": "8304",
+      "short_name": "あおぞら銀",
+      "listed_name": "（株）あおぞら銀行",
+      "nikkei_sector": "銀行",
+      "edinet_code": "E03531"
+    },
+    {
+      "securities_code": "8306",
+      "short_name": "三菱ＵＦＪ",
+      "listed_name": "（株）三菱ＵＦＪフィナンシャル・グループ",
+      "nikkei_sector": "銀行",
+      "edinet_code": "E03606"
+    },
+    {
+      "securities_code": "8308",
+      "short_name": "りそなＨＤ",
+      "listed_name": "（株）りそなホールディングス",
+      "nikkei_sector": "銀行",
+      "edinet_code": "E03610"
+    },
+    {
+      "securities_code": "8309",
+      "short_name": "三井住友トラ",
+      "listed_name": "三井住友トラストグループ（株）",
+      "nikkei_sector": "銀行",
+      "edinet_code": "E03611"
+    },
+    {
+      "securities_code": "8316",
+      "short_name": "三井住友ＦＧ",
+      "listed_name": "（株）三井住友フィナンシャルグループ",
+      "nikkei_sector": "銀行",
+      "edinet_code": "E03614"
+    },
+    {
+      "securities_code": "8331",
+      "short_name": "千葉銀",
+      "listed_name": "（株）千葉銀行",
+      "nikkei_sector": "銀行",
+      "edinet_code": "E03556"
+    },
+    {
+      "securities_code": "8354",
+      "short_name": "ふくおかＦＧ",
+      "listed_name": "（株）ふくおかフィナンシャルグループ",
+      "nikkei_sector": "銀行",
+      "edinet_code": "E03624"
+    },
+    {
+      "securities_code": "8411",
+      "short_name": "みずほＦＧ",
+      "listed_name": "（株）みずほフィナンシャルグループ",
+      "nikkei_sector": "銀行",
+      "edinet_code": "E03615"
+    },
+    {
+      "securities_code": "8253",
+      "short_name": "クレセゾン",
+      "listed_name": "（株）クレディセゾン",
+      "nikkei_sector": "その他金融",
+      "edinet_code": "E03041"
+    },
+    {
+      "securities_code": "8591",
+      "short_name": "オリックス",
+      "listed_name": "オリックス（株）",
+      "nikkei_sector": "その他金融",
+      "edinet_code": "E04762"
+    },
+    {
+      "securities_code": "8697",
+      "short_name": "日本取引所",
+      "listed_name": "（株）日本取引所グループ",
+      "nikkei_sector": "その他金融",
+      "edinet_code": "E03814"
+    },
+    {
+      "securities_code": "8601",
+      "short_name": "大和",
+      "listed_name": "（株）大和証券グループ本社",
+      "nikkei_sector": "証券",
+      "edinet_code": "E03753"
+    },
+    {
+      "securities_code": "8604",
+      "short_name": "野村",
+      "listed_name": "野村ホールディングス（株）",
+      "nikkei_sector": "証券",
+      "edinet_code": "E03752"
+    },
+    {
+      "securities_code": "8630",
+      "short_name": "ＳＯＭＰＯ",
+      "listed_name": "ＳＯＭＰＯホールディングス（株）",
+      "nikkei_sector": "保険",
+      "edinet_code": "E23924"
+    },
+    {
+      "securities_code": "8725",
+      "short_name": "ＭＳ＆ＡＤ",
+      "listed_name": "ＭＳ＆ＡＤインシュアランスグループホールディングス（株）",
+      "nikkei_sector": "保険",
+      "edinet_code": "E03854"
+    },
+    {
+      "securities_code": "8750",
+      "short_name": "第一ライフ",
+      "listed_name": "（株）第一ライフグループ",
+      "nikkei_sector": "保険",
+      "edinet_code": "E06141"
+    },
+    {
+      "securities_code": "8766",
+      "short_name": "東京海上",
+      "listed_name": "東京海上ホールディングス（株）",
+      "nikkei_sector": "保険",
+      "edinet_code": "E03847"
+    },
+    {
+      "securities_code": "8795",
+      "short_name": "Ｔ＆Ｄ",
+      "listed_name": "（株）Ｔ＆Ｄホールディングス",
+      "nikkei_sector": "保険",
+      "edinet_code": "E03851"
+    },
+    {
+      "securities_code": "1332",
+      "short_name": "ニッスイ",
+      "listed_name": "（株）ニッスイ",
+      "nikkei_sector": "水産",
+      "edinet_code": "E00014"
+    },
+    {
+      "securities_code": "2002",
+      "short_name": "日清粉Ｇ",
+      "listed_name": "（株）日清製粉グループ本社",
+      "nikkei_sector": "食品",
+      "edinet_code": "E00346"
+    },
+    {
+      "securities_code": "2269",
+      "short_name": "明治ＨＤ",
+      "listed_name": "明治ホールディングス（株）",
+      "nikkei_sector": "食品",
+      "edinet_code": "E21902"
+    },
+    {
+      "securities_code": "2282",
+      "short_name": "日ハム",
+      "listed_name": "日本ハム（株）",
+      "nikkei_sector": "食品",
+      "edinet_code": "E00334"
+    },
+    {
+      "securities_code": "2501",
+      "short_name": "サッポロ",
+      "listed_name": "サッポロビール（株）",
+      "nikkei_sector": "食品",
+      "edinet_code": "E00393"
+    },
+    {
+      "securities_code": "2502",
+      "short_name": "アサヒ",
+      "listed_name": "アサヒグループホールディングス（株）",
+      "nikkei_sector": "食品",
+      "edinet_code": "E00394"
+    },
+    {
+      "securities_code": "2503",
+      "short_name": "キリンＨＤ",
+      "listed_name": "キリンホールディングス（株）",
+      "nikkei_sector": "食品",
+      "edinet_code": "E00395"
+    },
+    {
+      "securities_code": "2801",
+      "short_name": "キッコマン",
+      "listed_name": "キッコーマン（株）",
+      "nikkei_sector": "食品",
+      "edinet_code": "E00435"
+    },
+    {
+      "securities_code": "2802",
+      "short_name": "味の素",
+      "listed_name": "味の素（株）",
+      "nikkei_sector": "食品",
+      "edinet_code": "E00436"
+    },
+    {
+      "securities_code": "2871",
+      "short_name": "ニチレイ",
+      "listed_name": "（株）ニチレイ",
+      "nikkei_sector": "食品",
+      "edinet_code": "E00446"
+    },
+    {
+      "securities_code": "2914",
+      "short_name": "ＪＴ",
+      "listed_name": "日本たばこ産業（株）",
+      "nikkei_sector": "食品",
+      "edinet_code": "E00492"
+    },
+    {
+      "securities_code": "4151",
+      "short_name": "協和キリン",
+      "listed_name": "協和キリン（株）",
+      "nikkei_sector": "医薬品",
+      "edinet_code": "E00816"
+    },
+    {
+      "securities_code": "4502",
+      "short_name": "武田",
+      "listed_name": "武田薬品工業（株）",
+      "nikkei_sector": "医薬品",
+      "edinet_code": "E00919"
+    },
+    {
+      "securities_code": "4503",
+      "short_name": "アステラス",
+      "listed_name": "アステラス製薬（株）",
+      "nikkei_sector": "医薬品",
+      "edinet_code": "E00920"
+    },
+    {
+      "securities_code": "4506",
+      "short_name": "住友ファーマ",
+      "listed_name": "住友ファーマ（株）",
+      "nikkei_sector": "医薬品",
+      "edinet_code": "E00922"
+    },
+    {
+      "securities_code": "4507",
+      "short_name": "塩野義",
+      "listed_name": "塩野義製薬（株）",
+      "nikkei_sector": "医薬品",
+      "edinet_code": "E00923"
+    },
+    {
+      "securities_code": "4519",
+      "short_name": "中外薬",
+      "listed_name": "中外製薬（株）",
+      "nikkei_sector": "医薬品",
+      "edinet_code": "E00932"
+    },
+    {
+      "securities_code": "4523",
+      "short_name": "エーザイ",
+      "listed_name": "エーザイ（株）",
+      "nikkei_sector": "医薬品",
+      "edinet_code": "E00939"
+    },
+    {
+      "securities_code": "4568",
+      "short_name": "第一三共",
+      "listed_name": "第一三共（株）",
+      "nikkei_sector": "医薬品",
+      "edinet_code": "E00984"
+    },
+    {
+      "securities_code": "4578",
+      "short_name": "大塚ＨＤ",
+      "listed_name": "大塚ホールディングス（株）",
+      "nikkei_sector": "医薬品",
+      "edinet_code": "E21183"
+    },
+    {
+      "securities_code": "3086",
+      "short_name": "Ｊフロント",
+      "listed_name": "Ｊ．フロント　リテイリング（株）",
+      "nikkei_sector": "小売業",
+      "edinet_code": "E03516"
+    },
+    {
+      "securities_code": "3092",
+      "short_name": "ＺＯＺＯ",
+      "listed_name": "（株）ＺＯＺＯ",
+      "nikkei_sector": "小売業",
+      "edinet_code": "E05725"
+    },
+    {
+      "securities_code": "3099",
+      "short_name": "三越伊勢丹",
+      "listed_name": "（株）三越伊勢丹ホールディングス",
+      "nikkei_sector": "小売業",
+      "edinet_code": "E03521"
+    },
+    {
+      "securities_code": "3382",
+      "short_name": "セブン＆アイ",
+      "listed_name": "（株）セブン＆アイ・ホールディングス",
+      "nikkei_sector": "小売業",
+      "edinet_code": "E03462"
+    },
+    {
+      "securities_code": "7453",
+      "short_name": "良品計画",
+      "listed_name": "（株）良品計画",
+      "nikkei_sector": "小売業",
+      "edinet_code": "E03248"
+    },
+    {
+      "securities_code": "7532",
+      "short_name": "パンパシＨＤ",
+      "listed_name": "（株）パン・パシフィック・インターナショナルホールディングス",
+      "nikkei_sector": "小売業",
+      "edinet_code": "E03280"
+    },
+    {
+      "securities_code": "8233",
+      "short_name": "高島屋",
+      "listed_name": "（株）高島屋",
+      "nikkei_sector": "小売業",
+      "edinet_code": "E03013"
+    },
+    {
+      "securities_code": "8252",
+      "short_name": "丸井Ｇ",
+      "listed_name": "（株）丸井グループ",
+      "nikkei_sector": "小売業",
+      "edinet_code": "E03040"
+    },
+    {
+      "securities_code": "8267",
+      "short_name": "イオン",
+      "listed_name": "イオン（株）",
+      "nikkei_sector": "小売業",
+      "edinet_code": "E03061"
+    },
+    {
+      "securities_code": "9843",
+      "short_name": "ニトリＨＤ",
+      "listed_name": "（株）ニトリホールディングス",
+      "nikkei_sector": "小売業",
+      "edinet_code": "E03144"
+    },
+    {
+      "securities_code": "9983",
+      "short_name": "ファストリ",
+      "listed_name": "（株）ファーストリテイリング",
+      "nikkei_sector": "小売業",
+      "edinet_code": "E03217"
+    },
+    {
+      "securities_code": "2413",
+      "short_name": "エムスリー",
+      "listed_name": "エムスリー（株）",
+      "nikkei_sector": "サービス",
+      "edinet_code": "E05425"
+    },
+    {
+      "securities_code": "4324",
+      "short_name": "電通グループ",
+      "listed_name": "（株）電通グループ",
+      "nikkei_sector": "サービス",
+      "edinet_code": "E04760"
+    },
+    {
+      "securities_code": "4661",
+      "short_name": "ＯＬＣ",
+      "listed_name": "（株）オリエンタルランド",
+      "nikkei_sector": "サービス",
+      "edinet_code": "E04707"
+    },
+    {
+      "securities_code": "4751",
+      "short_name": "サイバー",
+      "listed_name": "（株）サイバーエージェント",
+      "nikkei_sector": "サービス",
+      "edinet_code": "E05072"
+    },
+    {
+      "securities_code": "4755",
+      "short_name": "楽天グループ",
+      "listed_name": "楽天グループ（株）",
+      "nikkei_sector": "サービス",
+      "edinet_code": "E05080"
+    },
+    {
+      "securities_code": "6098",
+      "short_name": "リクルート",
+      "listed_name": "（株）リクルートホールディングス",
+      "nikkei_sector": "サービス",
+      "edinet_code": "E07801"
+    },
+    {
+      "securities_code": "6178",
+      "short_name": "日本郵政",
+      "listed_name": "日本郵政（株）",
+      "nikkei_sector": "サービス",
+      "edinet_code": "E31748"
+    },
+    {
+      "securities_code": "6532",
+      "short_name": "ベイカレント",
+      "listed_name": "（株）ベイカレント",
+      "nikkei_sector": "サービス",
+      "edinet_code": "E32549"
+    },
+    {
+      "securities_code": "9735",
+      "short_name": "セコム",
+      "listed_name": "セコム（株）",
+      "nikkei_sector": "サービス",
+      "edinet_code": "E04773"
+    },
+    {
+      "securities_code": "1605",
+      "short_name": "ＩＮＰＥＸ",
+      "listed_name": "（株）ＩＮＰＥＸ",
+      "nikkei_sector": "鉱業",
+      "edinet_code": "E00043"
+    },
+    {
+      "securities_code": "3401",
+      "short_name": "帝人",
+      "listed_name": "帝人（株）",
+      "nikkei_sector": "繊維",
+      "edinet_code": "E00872"
+    },
+    {
+      "securities_code": "3402",
+      "short_name": "東レ",
+      "listed_name": "東レ（株）",
+      "nikkei_sector": "繊維",
+      "edinet_code": "E00873"
+    },
+    {
+      "securities_code": "3861",
+      "short_name": "王子ＨＤ",
+      "listed_name": "王子ホールディングス（株）",
+      "nikkei_sector": "パルプ・紙",
+      "edinet_code": "E00642"
+    },
+    {
+      "securities_code": "3405",
+      "short_name": "クラレ",
+      "listed_name": "（株）クラレ",
+      "nikkei_sector": "化学",
+      "edinet_code": "E00876"
+    },
+    {
+      "securities_code": "3407",
+      "short_name": "旭化成",
+      "listed_name": "旭化成（株）",
+      "nikkei_sector": "化学",
+      "edinet_code": "E00877"
+    },
+    {
+      "securities_code": "4004",
+      "short_name": "レゾナック",
+      "listed_name": "（株）レゾナック・ホールディングス",
+      "nikkei_sector": "化学",
+      "edinet_code": "E00751"
+    },
+    {
+      "securities_code": "4005",
+      "short_name": "住友化",
+      "listed_name": "住友化学（株）",
+      "nikkei_sector": "化学",
+      "edinet_code": "E00752"
+    },
+    {
+      "securities_code": "4021",
+      "short_name": "日産化",
+      "listed_name": "日産化学（株）",
+      "nikkei_sector": "化学",
+      "edinet_code": "E00759"
+    },
+    {
+      "securities_code": "4042",
+      "short_name": "東ソー",
+      "listed_name": "東ソー（株）",
+      "nikkei_sector": "化学",
+      "edinet_code": "E00767"
+    },
+    {
+      "securities_code": "4043",
+      "short_name": "トクヤマ",
+      "listed_name": "（株）トクヤマ",
+      "nikkei_sector": "化学",
+      "edinet_code": "E00768"
+    },
+    {
+      "securities_code": "4061",
+      "short_name": "デンカ",
+      "listed_name": "デンカ（株）",
+      "nikkei_sector": "化学",
+      "edinet_code": "E00774"
+    },
+    {
+      "securities_code": "4063",
+      "short_name": "信越化",
+      "listed_name": "信越化学工業（株）",
+      "nikkei_sector": "化学",
+      "edinet_code": "E00776"
+    },
+    {
+      "securities_code": "4183",
+      "short_name": "三井化学",
+      "listed_name": "三井化学（株）",
+      "nikkei_sector": "化学",
+      "edinet_code": "E00840"
+    },
+    {
+      "securities_code": "4188",
+      "short_name": "三菱ケミＧ",
+      "listed_name": "三菱ケミカルグループ（株）",
+      "nikkei_sector": "化学",
+      "edinet_code": "E00808"
+    },
+    {
+      "securities_code": "4208",
+      "short_name": "ＵＢＥ",
+      "listed_name": "ＵＢＥ（株）",
+      "nikkei_sector": "化学",
+      "edinet_code": "E01002"
+    },
+    {
+      "securities_code": "4452",
+      "short_name": "花王",
+      "listed_name": "花王（株）",
+      "nikkei_sector": "化学",
+      "edinet_code": "E00883"
+    },
+    {
+      "securities_code": "4901",
+      "short_name": "富士フイルム",
+      "listed_name": "富士フイルムホールディングス（株）",
+      "nikkei_sector": "化学",
+      "edinet_code": "E00988"
+    },
+    {
+      "securities_code": "4911",
+      "short_name": "資生堂",
+      "listed_name": "（株）資生堂",
+      "nikkei_sector": "化学",
+      "edinet_code": "E00990"
+    },
+    {
+      "securities_code": "6988",
+      "short_name": "日東電",
+      "listed_name": "日東電工（株）",
+      "nikkei_sector": "化学",
+      "edinet_code": "E01888"
+    },
+    {
+      "securities_code": "5019",
+      "short_name": "出光興産",
+      "listed_name": "出光興産（株）",
+      "nikkei_sector": "石油",
+      "edinet_code": "E01084"
+    },
+    {
+      "securities_code": "5020",
+      "short_name": "ＥＮＥＯＳ",
+      "listed_name": "ＥＮＥＯＳホールディングス（株）",
+      "nikkei_sector": "石油",
+      "edinet_code": "E24050"
+    },
+    {
+      "securities_code": "5101",
+      "short_name": "浜ゴム",
+      "listed_name": "横浜ゴム（株）",
+      "nikkei_sector": "ゴム",
+      "edinet_code": "E01085"
+    },
+    {
+      "securities_code": "5108",
+      "short_name": "ブリヂストン",
+      "listed_name": "（株）ブリヂストン",
+      "nikkei_sector": "ゴム",
+      "edinet_code": "E01086"
+    },
+    {
+      "securities_code": "5201",
+      "short_name": "ＡＧＣ",
+      "listed_name": "ＡＧＣ（株）",
+      "nikkei_sector": "窯業",
+      "edinet_code": "E01122"
+    },
+    {
+      "securities_code": "5214",
+      "short_name": "日電硝",
+      "listed_name": "日本電気硝子（株）",
+      "nikkei_sector": "窯業",
+      "edinet_code": "E01190"
+    },
+    {
+      "securities_code": "5233",
+      "short_name": "太平洋セメ",
+      "listed_name": "太平洋セメント（株）",
+      "nikkei_sector": "窯業",
+      "edinet_code": "E01130"
+    },
+    {
+      "securities_code": "5301",
+      "short_name": "東海カーボン",
+      "listed_name": "東海カーボン（株）",
+      "nikkei_sector": "窯業",
+      "edinet_code": "E01162"
+    },
+    {
+      "securities_code": "5332",
+      "short_name": "ＴＯＴＯ",
+      "listed_name": "ＴＯＴＯ（株）",
+      "nikkei_sector": "窯業",
+      "edinet_code": "E01138"
+    },
+    {
+      "securities_code": "5333",
+      "short_name": "ＮＧＫ",
+      "listed_name": "ＮＧＫ（株）",
+      "nikkei_sector": "窯業",
+      "edinet_code": "E01137"
+    },
+    {
+      "securities_code": "5401",
+      "short_name": "日本製鉄",
+      "listed_name": "日本製鉄（株）",
+      "nikkei_sector": "鉄鋼",
+      "edinet_code": "E01225"
+    },
+    {
+      "securities_code": "5406",
+      "short_name": "神戸鋼",
+      "listed_name": "（株）神戸製鋼所",
+      "nikkei_sector": "鉄鋼",
+      "edinet_code": "E01231"
+    },
+    {
+      "securities_code": "5411",
+      "short_name": "ＪＦＥ",
+      "listed_name": "ＪＦＥホールディングス（株）",
+      "nikkei_sector": "鉄鋼",
+      "edinet_code": "E01264"
+    },
+    {
+      "securities_code": "3436",
+      "short_name": "ＳＵＭＣＯ",
+      "listed_name": "（株）ＳＵＭＣＯ",
+      "nikkei_sector": "非鉄・金属",
+      "edinet_code": "E02103"
+    },
+    {
+      "securities_code": "5016",
+      "short_name": "ＪＸ金属",
+      "listed_name": "ＪＸ金属（株）",
+      "nikkei_sector": "非鉄・金属",
+      "edinet_code": "E01081"
+    },
+    {
+      "securities_code": "5706",
+      "short_name": "三井金属",
+      "listed_name": "三井金属（株）",
+      "nikkei_sector": "非鉄・金属",
+      "edinet_code": "E00024"
+    },
+    {
+      "securities_code": "5711",
+      "short_name": "三菱マ",
+      "listed_name": "三菱マテリアル（株）",
+      "nikkei_sector": "非鉄・金属",
+      "edinet_code": "E00021"
+    },
+    {
+      "securities_code": "5713",
+      "short_name": "住友鉱",
+      "listed_name": "住友金属鉱山（株）",
+      "nikkei_sector": "非鉄・金属",
+      "edinet_code": "E00023"
+    },
+    {
+      "securities_code": "5714",
+      "short_name": "ＤＯＷＡ",
+      "listed_name": "ＤＯＷＡホールディングス（株）",
+      "nikkei_sector": "非鉄・金属",
+      "edinet_code": "E00028"
+    },
+    {
+      "securities_code": "5801",
+      "short_name": "古河電",
+      "listed_name": "古河電気工業（株）",
+      "nikkei_sector": "非鉄・金属",
+      "edinet_code": "E01332"
+    },
+    {
+      "securities_code": "5802",
+      "short_name": "住友電",
+      "listed_name": "住友電気工業（株）",
+      "nikkei_sector": "非鉄・金属",
+      "edinet_code": "E01333"
+    },
+    {
+      "securities_code": "5803",
+      "short_name": "フジクラ",
+      "listed_name": "（株）フジクラ",
+      "nikkei_sector": "非鉄・金属",
+      "edinet_code": "E01334"
+    },
+    {
+      "securities_code": "2768",
+      "short_name": "双日",
+      "listed_name": "双日（株）",
+      "nikkei_sector": "商社",
+      "edinet_code": "E02958"
+    },
+    {
+      "securities_code": "8001",
+      "short_name": "伊藤忠",
+      "listed_name": "伊藤忠商事（株）",
+      "nikkei_sector": "商社",
+      "edinet_code": "E02497"
+    },
+    {
+      "securities_code": "8002",
+      "short_name": "丸紅",
+      "listed_name": "丸紅（株）",
+      "nikkei_sector": "商社",
+      "edinet_code": "E02498"
+    },
+    {
+      "securities_code": "8015",
+      "short_name": "豊田通商",
+      "listed_name": "豊田通商（株）",
+      "nikkei_sector": "商社",
+      "edinet_code": "E02505"
+    },
+    {
+      "securities_code": "8031",
+      "short_name": "三井物",
+      "listed_name": "三井物産（株）",
+      "nikkei_sector": "商社",
+      "edinet_code": "E02513"
+    },
+    {
+      "securities_code": "8053",
+      "short_name": "住友商",
+      "listed_name": "住友商事（株）",
+      "nikkei_sector": "商社",
+      "edinet_code": "E02528"
+    },
+    {
+      "securities_code": "8058",
+      "short_name": "三菱商",
+      "listed_name": "三菱商事（株）",
+      "nikkei_sector": "商社",
+      "edinet_code": "E02529"
+    },
+    {
+      "securities_code": "1721",
+      "short_name": "コムシスＨＤ",
+      "listed_name": "コムシスホールディングス（株）",
+      "nikkei_sector": "建設",
+      "edinet_code": "E00322"
+    },
+    {
+      "securities_code": "1801",
+      "short_name": "大成建",
+      "listed_name": "大成建設（株）",
+      "nikkei_sector": "建設",
+      "edinet_code": "E00052"
+    },
+    {
+      "securities_code": "1802",
+      "short_name": "大林組",
+      "listed_name": "（株）大林組",
+      "nikkei_sector": "建設",
+      "edinet_code": "E00055"
+    },
+    {
+      "securities_code": "1803",
+      "short_name": "清水建",
+      "listed_name": "清水建設（株）",
+      "nikkei_sector": "建設",
+      "edinet_code": "E00053"
+    },
+    {
+      "securities_code": "1808",
+      "short_name": "長谷工",
+      "listed_name": "（株）長谷工コーポレーション",
+      "nikkei_sector": "建設",
+      "edinet_code": "E00090"
+    },
+    {
+      "securities_code": "1812",
+      "short_name": "鹿島",
+      "listed_name": "鹿島建設（株）",
+      "nikkei_sector": "建設",
+      "edinet_code": "E00058"
+    },
+    {
+      "securities_code": "1925",
+      "short_name": "ハウス",
+      "listed_name": "大和ハウス工業（株）",
+      "nikkei_sector": "建設",
+      "edinet_code": "E00048"
+    },
+    {
+      "securities_code": "1928",
+      "short_name": "積ハウス",
+      "listed_name": "積水ハウス（株）",
+      "nikkei_sector": "建設",
+      "edinet_code": "E00143"
+    },
+    {
+      "securities_code": "1963",
+      "short_name": "日揮ＨＤ",
+      "listed_name": "日揮ホールディングス（株）",
+      "nikkei_sector": "建設",
+      "edinet_code": "E01575"
+    },
+    {
+      "securities_code": "5631",
+      "short_name": "日製鋼",
+      "listed_name": "（株）日本製鋼所",
+      "nikkei_sector": "機械",
+      "edinet_code": "E01232"
+    },
+    {
+      "securities_code": "6103",
+      "short_name": "オークマ",
+      "listed_name": "オークマ（株）",
+      "nikkei_sector": "機械",
+      "edinet_code": "E01481"
+    },
+    {
+      "securities_code": "6113",
+      "short_name": "アマダ",
+      "listed_name": "（株）アマダ",
+      "nikkei_sector": "機械",
+      "edinet_code": "E01486"
+    },
+    {
+      "securities_code": "6273",
+      "short_name": "ＳＭＣ",
+      "listed_name": "ＳＭＣ（株）",
+      "nikkei_sector": "機械",
+      "edinet_code": "E01673"
+    },
+    {
+      "securities_code": "6301",
+      "short_name": "コマツ",
+      "listed_name": "（株）小松製作所",
+      "nikkei_sector": "機械",
+      "edinet_code": "E01532"
+    },
+    {
+      "securities_code": "6302",
+      "short_name": "住友重",
+      "listed_name": "住友重機械工業（株）",
+      "nikkei_sector": "機械",
+      "edinet_code": "E01533"
+    },
+    {
+      "securities_code": "6305",
+      "short_name": "日立建機",
+      "listed_name": "日立建機（株）",
+      "nikkei_sector": "機械",
+      "edinet_code": "E01585"
+    },
+    {
+      "securities_code": "6326",
+      "short_name": "クボタ",
+      "listed_name": "（株）クボタ",
+      "nikkei_sector": "機械",
+      "edinet_code": "E01267"
+    },
+    {
+      "securities_code": "6361",
+      "short_name": "荏原",
+      "listed_name": "（株）荏原製作所",
+      "nikkei_sector": "機械",
+      "edinet_code": "E01542"
+    },
+    {
+      "securities_code": "6367",
+      "short_name": "ダイキン",
+      "listed_name": "ダイキン工業（株）",
+      "nikkei_sector": "機械",
+      "edinet_code": "E01570"
+    },
+    {
+      "securities_code": "6471",
+      "short_name": "日精工",
+      "listed_name": "日本精工（株）",
+      "nikkei_sector": "機械",
+      "edinet_code": "E01600"
+    },
+    {
+      "securities_code": "6472",
+      "short_name": "ＮＴＮ",
+      "listed_name": "ＮＴＮ（株）",
+      "nikkei_sector": "機械",
+      "edinet_code": "E01601"
+    },
+    {
+      "securities_code": "6473",
+      "short_name": "ジェイテクト",
+      "listed_name": "（株）ジェイテクト",
+      "nikkei_sector": "機械",
+      "edinet_code": "E01602"
+    },
+    {
+      "securities_code": "7011",
+      "short_name": "三菱重",
+      "listed_name": "三菱重工業（株）",
+      "nikkei_sector": "機械",
+      "edinet_code": "E02126"
+    },
+    {
+      "securities_code": "7013",
+      "short_name": "ＩＨＩ",
+      "listed_name": "（株）ＩＨＩ",
+      "nikkei_sector": "機械",
+      "edinet_code": "E02128"
+    },
+    {
+      "securities_code": "7012",
+      "short_name": "川重",
+      "listed_name": "川崎重工業（株）",
+      "nikkei_sector": "造船",
+      "edinet_code": "E02127"
+    },
+    {
+      "securities_code": "7832",
+      "short_name": "バンナムＨＤ",
+      "listed_name": "（株）バンダイナムコホールディングス",
+      "nikkei_sector": "その他製造",
+      "edinet_code": "E02481"
+    },
+    {
+      "securities_code": "7911",
+      "short_name": "ＴＯＰＰＡＮ",
+      "listed_name": "ＴＯＰＰＡＮホールディングス（株）",
+      "nikkei_sector": "その他製造",
+      "edinet_code": "E00692"
+    },
+    {
+      "securities_code": "7912",
+      "short_name": "大日印",
+      "listed_name": "大日本印刷（株）",
+      "nikkei_sector": "その他製造",
+      "edinet_code": "E00693"
+    },
+    {
+      "securities_code": "7951",
+      "short_name": "ヤマハ",
+      "listed_name": "ヤマハ（株）",
+      "nikkei_sector": "その他製造",
+      "edinet_code": "E02362"
+    },
+    {
+      "securities_code": "3289",
+      "short_name": "東急不ＨＤ",
+      "listed_name": "東急不動産ホールディングス（株）",
+      "nikkei_sector": "不動産",
+      "edinet_code": "E27633"
+    },
+    {
+      "securities_code": "8801",
+      "short_name": "三井不",
+      "listed_name": "三井不動産（株）",
+      "nikkei_sector": "不動産",
+      "edinet_code": "E03855"
+    },
+    {
+      "securities_code": "8802",
+      "short_name": "菱地所",
+      "listed_name": "三菱地所（株）",
+      "nikkei_sector": "不動産",
+      "edinet_code": "E03856"
+    },
+    {
+      "securities_code": "8804",
+      "short_name": "東建物",
+      "listed_name": "東京建物（株）",
+      "nikkei_sector": "不動産",
+      "edinet_code": "E03859"
+    },
+    {
+      "securities_code": "8830",
+      "short_name": "住友不",
+      "listed_name": "住友不動産（株）",
+      "nikkei_sector": "不動産",
+      "edinet_code": "E03907"
+    },
+    {
+      "securities_code": "9001",
+      "short_name": "東武",
+      "listed_name": "東武鉄道（株）",
+      "nikkei_sector": "鉄道・バス",
+      "edinet_code": "E04094"
+    },
+    {
+      "securities_code": "9005",
+      "short_name": "東急",
+      "listed_name": "東急（株）",
+      "nikkei_sector": "鉄道・バス",
+      "edinet_code": "E04090"
+    },
+    {
+      "securities_code": "9007",
+      "short_name": "小田急",
+      "listed_name": "小田急電鉄（株）",
+      "nikkei_sector": "鉄道・バス",
+      "edinet_code": "E04088"
+    },
+    {
+      "securities_code": "9008",
+      "short_name": "京王",
+      "listed_name": "京王電鉄（株）",
+      "nikkei_sector": "鉄道・バス",
+      "edinet_code": "E04092"
+    },
+    {
+      "securities_code": "9009",
+      "short_name": "京成",
+      "listed_name": "京成電鉄（株）",
+      "nikkei_sector": "鉄道・バス",
+      "edinet_code": "E04091"
+    },
+    {
+      "securities_code": "9020",
+      "short_name": "ＪＲ東日本",
+      "listed_name": "東日本旅客鉄道（株）",
+      "nikkei_sector": "鉄道・バス",
+      "edinet_code": "E04147"
+    },
+    {
+      "securities_code": "9021",
+      "short_name": "ＪＲ西日本",
+      "listed_name": "西日本旅客鉄道（株）",
+      "nikkei_sector": "鉄道・バス",
+      "edinet_code": "E04148"
+    },
+    {
+      "securities_code": "9022",
+      "short_name": "ＪＲ東海",
+      "listed_name": "東海旅客鉄道（株）",
+      "nikkei_sector": "鉄道・バス",
+      "edinet_code": "E04149"
+    },
+    {
+      "securities_code": "9064",
+      "short_name": "ヤマトＨＤ",
+      "listed_name": "ヤマトホールディングス（株）",
+      "nikkei_sector": "陸運",
+      "edinet_code": "E04187"
+    },
+    {
+      "securities_code": "9147",
+      "short_name": "ＮＸＨＤ",
+      "listed_name": "ＮＩＰＰＯＮ　ＥＸＰＲＥＳＳホールディングス（株）",
+      "nikkei_sector": "陸運",
+      "edinet_code": "E36706"
+    },
+    {
+      "securities_code": "9101",
+      "short_name": "郵船",
+      "listed_name": "日本郵船（株）",
+      "nikkei_sector": "海運",
+      "edinet_code": "E04235"
+    },
+    {
+      "securities_code": "9104",
+      "short_name": "商船三井",
+      "listed_name": "（株）商船三井",
+      "nikkei_sector": "海運",
+      "edinet_code": "E04236"
+    },
+    {
+      "securities_code": "9107",
+      "short_name": "川崎汽",
+      "listed_name": "川崎汽船（株）",
+      "nikkei_sector": "海運",
+      "edinet_code": "E04237"
+    },
+    {
+      "securities_code": "9201",
+      "short_name": "ＪＡＬ",
+      "listed_name": "日本航空（株）",
+      "nikkei_sector": "空運",
+      "edinet_code": "E04272"
+    },
+    {
+      "securities_code": "9202",
+      "short_name": "ＡＮＡＨＤ",
+      "listed_name": "ＡＮＡホールディングス（株）",
+      "nikkei_sector": "空運",
+      "edinet_code": "E04273"
+    },
+    {
+      "securities_code": "9501",
+      "short_name": "東電ＨＤ",
+      "listed_name": "東京電力ホールディングス（株）",
+      "nikkei_sector": "電力",
+      "edinet_code": "E04498"
+    },
+    {
+      "securities_code": "9502",
+      "short_name": "中部電",
+      "listed_name": "中部電力（株）",
+      "nikkei_sector": "電力",
+      "edinet_code": "E04502"
+    },
+    {
+      "securities_code": "9503",
+      "short_name": "関西電",
+      "listed_name": "関西電力（株）",
+      "nikkei_sector": "電力",
+      "edinet_code": "E04499"
+    },
+    {
+      "securities_code": "9531",
+      "short_name": "東ガス",
+      "listed_name": "東京瓦斯（株）",
+      "nikkei_sector": "ガス",
+      "edinet_code": "E04514"
+    },
+    {
+      "securities_code": "9532",
+      "short_name": "大ガス",
+      "listed_name": "大阪瓦斯（株）",
+      "nikkei_sector": "ガス",
+      "edinet_code": "E04520"
+    }
+  ]
+}

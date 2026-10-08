@@ -1,6 +1,10 @@
 module Api
   module V1
     class RankingsController < BaseController
+      def index
+        render json: RankingsQuery.call(industry: params[:industry], axis: params[:axis])
+      end
+
       # GET /rankings/human_capital
       def human_capital
         render json: HumanCapitalRankingQuery.call(

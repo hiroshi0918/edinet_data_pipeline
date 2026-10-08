@@ -1,12 +1,11 @@
-// 画面と URL の対応。フィルタは各ページが search params で持つ。
+// 会社図鑑。検索と、選んだ会社のシート。
 import { Navigate, type RouteObject } from 'react-router'
 
 import { AppLayout } from '@/components/layout/app-layout'
 import { CompaniesPage } from '@/pages/companies-page'
-import { HcRankingPage } from '@/pages/hc-ranking-page'
-import { IndustryPage } from '@/pages/industry-page'
-import { SizeHcPage } from '@/pages/size-hc-page'
-import { SpotlightPage } from '@/pages/spotlight-page'
+import { Nikkei225Page } from '@/pages/nikkei225-page'
+import { RankingsPage } from '@/pages/rankings-page'
+import { StoryPage } from '@/pages/story-page'
 
 export const routeObjects: RouteObject[] = [
   {
@@ -16,10 +15,10 @@ export const routeObjects: RouteObject[] = [
       { index: true, element: <Navigate to="/companies" replace /> },
       { path: 'companies', element: <CompaniesPage /> },
       { path: 'companies/:code', element: <CompaniesPage /> },
-      { path: 'companies/:code/spotlight', element: <SpotlightPage /> },
-      { path: 'industry', element: <IndustryPage /> },
-      { path: 'hc-ranking', element: <HcRankingPage /> },
-      { path: 'size-hc', element: <SizeHcPage /> },
+      { path: 'companies/:code/story', element: <StoryPage /> },
+      { path: 'nikkei225', element: <Nikkei225Page /> },
+      { path: 'rankings', element: <RankingsPage /> },
+      { path: '*', element: <Navigate to="/companies" replace /> },
     ],
   },
 ]

@@ -7,10 +7,14 @@ Rails.application.routes.draw do
       get "meta", to: "meta#show"
       resources :companies, only: [ :index, :show ], param: :code do
         get :spotlight, on: :member
+        get :sheet, on: :member
+        get :story, on: :member
       end
       get "industries/hc_distribution", to: "industries#hc_distribution"
+      get "rankings", to: "rankings#index"
       get "rankings/human_capital", to: "rankings#human_capital"
       get "rankings/size", to: "rankings#size"
+      get "nikkei225", to: "nikkei225#index"
     end
   end
 

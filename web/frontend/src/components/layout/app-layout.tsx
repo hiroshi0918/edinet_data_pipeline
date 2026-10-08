@@ -17,9 +17,7 @@ export function AppLayout() {
         <header className="flex h-12 items-center gap-2 border-b px-4">
           <SidebarTrigger />
           <Separator orientation="vertical" className="h-4" />
-          <span className="text-sm text-muted-foreground">
-            有価証券報告書の人的資本・財務指標
-          </span>
+          <span className="text-sm text-muted-foreground">有報から読む会社図鑑</span>
         </header>
         <div className="flex-1 space-y-6 p-6">
           <Outlet />
