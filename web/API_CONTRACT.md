@@ -1,10 +1,10 @@
-# Web dashboard API contract
+# Web ダッシュボード API 契約
 
-Rails (`/api/v1`) と React の接点。JSON キーは snake_case。GET のみ。
+Rails（`/api/v1`）と React の接点。JSON のキーは snake_case。メソッドは GET のみ。
 
-Base: `http://localhost:3000/api/v1`（Vite が `/api` を Rails へ proxy）。
+基底 URL は `http://localhost:3000/api/v1`（Vite が `/api` を Rails へ proxy）。
 
-実装の対応:
+エンドポイントと Query の対応。
 
 | エンドポイント | Query |
 | --- | --- |
@@ -22,15 +22,15 @@ Base: `http://localhost:3000/api/v1`（Vite が `/api` を Rails へ proxy）。
 
 図鑑の画面は `/companies`、`/companies/:code`、`/companies/:code/story`、`/rankings`、`/nikkei225`。`/companies/:code` は `GET /companies/:code/sheet` を読む。spotlight、業種分布、人的資本ランキング、規模ランキングのエンドポイントは残している。
 
-## Shared params
+## 共通パラメータ
 
-- `year` integer fiscal year
-- `scope` `reporting_company` | `consolidated_subsidiary` (default `reporting_company`)
-- `worker_type` `all` | `regular` | `non_regular` (default `all`)
-- Invalid metric/scope/worker_type → `400 { "error": "..." }`
-- Unknown company code → `404 { "error": "..." }`
+- `year` は会計年度の整数
+- `scope` は `reporting_company` または `consolidated_subsidiary`（既定は `reporting_company`）
+- `worker_type` は `all`、`regular`、`non_regular`（既定は `all`）
+- metric、scope、worker_type が不正なら `400 { "error": "..." }`
+- 未知の会社コードは `404 { "error": "..." }`
 
-## Endpoints
+## エンドポイント
 
 ### GET /api/v1/meta
 
@@ -45,13 +45,13 @@ Base: `http://localhost:3000/api/v1`（Vite が `/api` を Rails へ proxy）。
 }
 ```
 
-KPI counts use default dimension (`reporting_company` × `all`). `default_year` is the year with the most companies in that dimension.
+KPI の件数は、既定の次元（`reporting_company` × `all`）で数える。`default_year` は、その次元で会社数が最も多い会計年度。
 
 ### GET /api/v1/companies?q=&limit=
 
-Without `q`: distinct `edinet_code, company_name, industry` ordered by upper(company_name). `limit` を付けたときだけその件数。省略時は全件。
+`q` が無いとき。`edinet_code`、`company_name`、`industry` の重複を除き、`upper(company_name)` の順に並べる。`limit` を付けたときだけその件数。省略したときは全件。
 
-With `q`: `company_name ILIKE %q%`. `limit` の既定は 50。
+`q` があるとき。`company_name` を `ILIKE %q%` で探す。`limit` の既定は 50。
 
 ```json
 {
@@ -63,7 +63,7 @@ With `q`: `company_name ILIKE %q%`. `limit` の既定は 50。
 
 ### GET /api/v1/companies/:code
 
-All (year, scope, worker_type) rows for one company.
+1社について、年度・scope・worker_type の組の行をすべて返す。
 
 ```json
 {
@@ -94,7 +94,7 @@ All (year, scope, worker_type) rows for one company.
 
 ### GET /api/v1/companies/:code/sheet
 
-最新有報年度のキャラクターシート。年度・scope・worker_type は受け取らない。人的資本は `reporting_company` × `all` だけ。比較相手はその年度・同じ業種で、軸ごとに非欠損が 5 社未満なら `score` は null。点は「自分以下の社数 / 比較社数」を 100 点満点に丸めた値。`level` は score がある軸の平均（開示の 0 は入れる。期待は株価が揃うまで null）。業種が無い会社は点も level も null。未知のコードは 404。
+最新有報年度のキャラクターシート。年度、scope、worker_type は受け取らない。人的資本は `reporting_company` × `all` だけ。比較相手はその年度の同じ業種である。軸ごとに、比較相手の非欠損が 5 社未満なら `score` は null。点は「自分以下の社数 / 比較社数」を 100 点満点に丸めた値。`level` は、score がある軸の平均。開示の 0 は平均に入れる。期待は、株価が揃うまで null。業種が無い会社は、点も level も null。未知のコードは 404。
 
 ```json
 {
@@ -137,7 +137,7 @@ All (year, scope, worker_type) rows for one company.
 
 ### GET /api/v1/rankings?industry=&axis=
 
-図鑑のランキング。`axis` を省略すると総合点。`sales` `employee_count` `operating_margin` `people` `average_annual_salary` `average_years_of_service` `expectation` `disclosure` のいずれかなら、その軸の点で並べる。点がない会社は末尾。`industry` はその業種だけ。未知の `axis` は 400。各行の `edinet_code` はシートの会社コード。
+図鑑のランキング。`axis` を省略すると総合点。`sales`、`employee_count`、`operating_margin`、`people`、`average_annual_salary`、`average_years_of_service`、`expectation`、`disclosure` のいずれかなら、その軸の点で並べる。点がない会社は末尾。`industry` はその業種だけ。未知の `axis` は 400。各行の `edinet_code` はシートの会社コード。
 
 ```json
 {
@@ -160,7 +160,7 @@ All (year, scope, worker_type) rows for one company.
 
 ### GET /api/v1/nikkei225
 
-日経平均の構成銘柄。`data/nikkei225.json`（2026-10-08 時点）を、EDINETコードで companies に結ぶ。`level` はシートと同じ総合点。図鑑に無い銘柄は `has_sheet: false` で、`edinet_code` と `level` は null。並びは総合点の降順、点が無い会社は末尾。
+日経平均の構成銘柄。`data/nikkei225.json`（2026-10-08 時点）を、EDINETコードで companies に結ぶ。`level` はシートと同じ総合点。図鑑に無い銘柄は `has_sheet: false` で、`edinet_code` と `level` は null。並びは総合点の降順で、点が無い会社は末尾。
 
 ```json
 {
@@ -185,7 +185,7 @@ All (year, scope, worker_type) rows for one company.
 
 ### GET /api/v1/companies/:code/spotlight?year=&scope=&worker_type=
 
-`scope=auto` (or omitted with `auto=1`) runs holding-company detection: if reporting_company × all has both `female_manager_ratio` and `male_childcare_leave_ratio` NULL, use `consolidated_subsidiary`.
+`scope=auto` のとき、または scope を省いて `auto=1` のとき、持株会社の判定をする。`reporting_company` × `all` で `female_manager_ratio` と `male_childcare_leave_ratio` がどちらも NULL なら、`consolidated_subsidiary` を使う。
 
 ```json
 {
@@ -217,13 +217,13 @@ All (year, scope, worker_type) rows for one company.
 }
 ```
 
-Size peers: `LOG10(employee_count)` within target ± 0.3. Ideal cluster: 3 HC ≥ P75 of the same year/scope/worker set AND operating_profit/sales ≥ P50.
+規模が近い会社（size peers）は、対象の `LOG10(employee_count)` から ±0.3 の範囲。理想集団（ideal cluster）は、人的資本 3 指標が同じ年度・scope・worker の集合の P75 以上で、かつ `operating_profit / sales` が P50 以上。
 
 `industry_rank.metrics[].among` は順位の分母。売上と女性管理職は非 NULL の社数。営業利益は業種の全社数（Streamlit と同じ）。
 
 ### GET /api/v1/industries/hc_distribution?year=&scope=&worker_type=&metric=
 
-`metric` one of `female_manager_ratio`, `male_childcare_leave_ratio`, `gender_wage_gap`. Drop industries with fewer than 5 non-null values.
+`metric` は `female_manager_ratio`、`male_childcare_leave_ratio`、`gender_wage_gap` のいずれか。非 NULL の値が 5 未満の業種は除く。
 
 ```json
 {
@@ -236,7 +236,7 @@ Size peers: `LOG10(employee_count)` within target ± 0.3. Ideal cluster: 3 HC �
 
 ### GET /api/v1/rankings/human_capital?year=&scope=&worker_type=&metric=
 
-`metric` `female_manager_ratio` or `gender_wage_gap` only. Top/bottom 10, NULL excluded. Sort DESC for top, ASC for bottom (higher `gender_wage_gap` = closer to parity = 上位).
+`metric` は `female_manager_ratio` か `gender_wage_gap` だけ。上位と下位は各 10 件で、NULL は除く。上位は降順、下位は昇順に並べる（`gender_wage_gap` は高いほど均衡に近く、上位になる）。
 
 ```json
 {
@@ -248,7 +248,7 @@ Size peers: `LOG10(employee_count)` within target ± 0.3. Ideal cluster: 3 HC �
 
 ### GET /api/v1/rankings/size?year=&scope=&worker_type=&axis=
 
-`axis` `sales` | `operating_profit` | `employee_count`. Top/bottom 10. Bottom floors: sales ≥ 1e8, employee_count ≥ 1, operating_profit none. Include `female_manager_ratio` and `gender_wage_gap` on each row.
+`axis` は `sales`、`operating_profit`、`employee_count` のいずれか。上位と下位は各 10 件。下位の下限は、sales が 1e8 以上、employee_count が 1 以上。operating_profit に下限は無い。各行に `female_manager_ratio` と `gender_wage_gap` を含める。
 
 ```json
 {
@@ -258,9 +258,9 @@ Size peers: `LOG10(employee_count)` within target ± 0.3. Ideal cluster: 3 HC �
 }
 ```
 
-## Domain constants
+## ドメインの定数
 
-- Default scope `reporting_company`, worker_type `all`
-- Lookup employee-info cards always read `(reporting_company, all)` for that year
-- Childcare leave chart display clip 0–100, values >100 still in data
-- Do not include childcare leave on ranking/size tables
+- 既定の scope は `reporting_company`、worker_type は `all`
+- Lookup の従業員情報カードは、その年度の `(reporting_company, all)` を常に読む
+- 育休のグラフは、表示を 0〜100 に切る。100 を超える値はデータに残す
+- ランキングと規模の表に、育休は含めない
