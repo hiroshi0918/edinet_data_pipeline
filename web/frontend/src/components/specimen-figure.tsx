@@ -1,5 +1,8 @@
-// 業種の標本。絵は1枚。無い業種は卵。段階はキャプションに出る。
-import { specimenCaption, specimenPortrait } from '@/lib/specimen'
+// 業種の標本。すみかの円の上にキャラが立ち、図鑑番号と段階が札に出る。
+import { motion } from 'motion/react'
+
+import { CharacterImage } from '@/components/character-image'
+import { specimenCaption, specimenNo } from '@/lib/specimen'
 
 export function SpecimenFigure({
   industry,
@@ -8,26 +11,38 @@ export function SpecimenFigure({
   industry: string | null
   level: number | null
 }) {
-  const portrait = specimenPortrait(industry)
   const caption = specimenCaption(industry, level)
 
   return (
-    <figure className="flex w-full shrink-0 flex-col items-center">
-      {portrait ? (
-        <img
-          src={portrait}
-          alt={caption}
-          className="h-auto w-auto max-h-[26rem] max-w-full object-contain object-bottom sm:max-h-[32rem] lg:max-h-[40rem]"
+    <figure className="relative flex w-full flex-col items-center">
+      <div className="relative flex aspect-square w-full max-w-[26rem] items-end justify-center">
+        <div
+          aria-hidden="true"
+          className="absolute inset-[6%] rounded-full border-[length:var(--line)] border-ink bg-paper-deep"
         />
-      ) : (
-        <svg viewBox="0 0 120 120" className="h-auto w-52 overflow-visible sm:w-72" aria-hidden="true">
-          <ellipse cx="60" cy="76" rx="18" ry="23" fill="var(--label)" stroke="var(--ink)" strokeWidth="1.6" />
-          <path d="M48 72c6-4 18-4 24 0" fill="none" stroke="var(--pencil)" strokeWidth="1.2" />
-          <circle cx="60" cy="82" r="3" fill="var(--ink)" />
-        </svg>
-      )}
-      <figcaption className="mt-2 text-center font-mono text-[11px] leading-none text-pencil">
-        {caption}
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-[14%] bottom-[9%] h-[10%] rounded-[50%] bg-ink/10"
+        />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.55, y: 40 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ type: 'spring', stiffness: 260, damping: 14 }}
+          className="relative h-[96%] w-full"
+        >
+          <CharacterImage
+            industry={industry}
+            variant="full"
+            alt={caption}
+            idle
+            eager
+            className="mx-auto h-full w-auto"
+          />
+        </motion.div>
+      </div>
+      <figcaption className="-mt-3 flex items-center gap-2 rounded-full border-[length:var(--line)] border-ink bg-page px-4 py-1.5 shadow-ink-sm">
+        <span className="font-num text-xs font-black text-shu">{specimenNo(industry)}</span>
+        <span className="text-sm font-black text-ink">{caption}</span>
       </figcaption>
     </figure>
   )

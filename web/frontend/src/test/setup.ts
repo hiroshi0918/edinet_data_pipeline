@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 
 Element.prototype.scrollIntoView = vi.fn()
+window.scrollTo = vi.fn() as unknown as typeof window.scrollTo
 HTMLElement.prototype.hasPointerCapture = vi.fn()
 HTMLElement.prototype.setPointerCapture = vi.fn()
 HTMLElement.prototype.releasePointerCapture = vi.fn()

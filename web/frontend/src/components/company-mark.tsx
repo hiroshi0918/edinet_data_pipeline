@@ -17,16 +17,16 @@ export function CompanyMark({
 
   return (
     <div className="flex w-16 shrink-0 flex-col items-center gap-1 sm:w-20">
-      <div className="flex size-16 items-center justify-center overflow-hidden border border-ink bg-label sm:size-20">
+      <div className="flex size-16 items-center justify-center overflow-hidden rounded-2xl border-[length:var(--line)] border-ink bg-page shadow-ink-sm sm:size-20">
         {showLogo ? (
           <img
             src={`https://img.logo.dev/ticker/${encodeURIComponent(ticker ?? '')}?token=${encodeURIComponent(token ?? '')}&format=png&size=128&retina=true&fallback=404`}
             alt={`${name}のロゴ`}
-            className="size-full object-contain"
+            className="size-full object-contain p-1"
             onError={() => setFailed(true)}
           />
         ) : (
-          <span className="font-display text-2xl leading-none text-ink sm:text-3xl" aria-hidden="true">
+          <span className="text-2xl leading-none font-black text-ink sm:text-3xl" aria-hidden="true">
             {monogramChar(name)}
           </span>
         )}
@@ -34,12 +34,12 @@ export function CompanyMark({
       {showLogo ? (
         <a
           href="https://logo.dev"
-          className="font-mono text-[10px] leading-none text-pencil underline decoration-pencil/60 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-habitat"
+          className="text-[10px] leading-none text-ink-soft underline decoration-ink-soft/60 underline-offset-2"
         >
           ロゴ: logo.dev
         </a>
       ) : (
-        <span className="font-mono text-[10px] leading-none text-pencil">社章</span>
+        <span className="text-[10px] leading-none text-ink-soft">社章</span>
       )}
     </div>
   )
