@@ -28,6 +28,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.unstubAllEnvs()
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
 })
@@ -183,6 +184,33 @@ test('ランキングは総合点から始まり、業種と軸で並びが変�
   })
   expect(router.state.location.search).toBe(`?axis=sales&industry=${encodeURIComponent('輸送用機器')}`)
   expect(screen.getByRole('link', { name: '日経225' })).toBeInTheDocument()
+})
+
+test('ランキングと日経225は社名の前にロゴを出す', async () => {
+  vi.stubEnv('VITE_LOGO_DEV_PUBLISHABLE_KEY', 'publishable-test')
+  const rankings = renderAt('/rankings')
+  const toyota = await screen.findByRole('img', { name: '高い会社のロゴ' })
+  expect(toyota).toHaveAttribute('src', expect.stringContaining('/ticker/7203.T?'))
+  expect(screen.getByRole('img', { name: '売上の会社のロゴ' })).toHaveAttribute(
+    'src',
+    expect.stringContaining('/ticker/7267.T?'),
+  )
+  expect(screen.queryByRole('img', { name: '別業種の会社のロゴ' })).not.toBeInTheDocument()
+  expect(rankings.container.querySelector('img[src*="/characters/"]')).not.toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'ロゴ: logo.dev' })).toBeInTheDocument()
+  rankings.unmount()
+
+  const nikkei = renderAt('/nikkei225')
+  expect(await screen.findByRole('img', { name: 'トヨタ自動車株式会社のロゴ' })).toHaveAttribute(
+    'src',
+    expect.stringContaining('/ticker/7203.T?'),
+  )
+  expect(screen.getByRole('img', { name: '（株）商船三井のロゴ' })).toHaveAttribute(
+    'src',
+    expect.stringContaining('/ticker/9104.T?'),
+  )
+  expect(nikkei.container.querySelector('img[src*="/characters/"]')).not.toBeInTheDocument()
+  vi.unstubAllEnvs()
 })
 
 test('歩みのページにグラフと原文の抜粋が出る', async () => {

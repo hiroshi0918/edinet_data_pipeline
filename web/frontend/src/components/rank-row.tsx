@@ -1,20 +1,22 @@
-// 一覧の1行。1〜3位は王冠つきで大きく出す。
+// 一覧の1行。1〜3位は王冠つきで大きく出す。社名の前はロゴ。
 import { CrownIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 
-import { CharacterImage } from '@/components/character-image'
+import { CompanyMark } from '@/components/company-mark'
 import { cn } from '@/lib/utils'
 
 export function RankRow({
   rank,
-  industry,
+  companyName,
+  securitiesCode,
   title,
   meta,
   score,
   podium = rank <= 3,
 }: {
   rank: number
-  industry: string | null
+  companyName: string
+  securitiesCode: string | null
   title: ReactNode
   meta?: ReactNode
   score: number | null
@@ -23,7 +25,7 @@ export function RankRow({
   return (
     <li
       className={cn(
-        'group grid grid-cols-[2.75rem_auto_minmax(0,1fr)_auto] items-center gap-x-3 sm:gap-x-4',
+        'grid grid-cols-[2.75rem_auto_minmax(0,1fr)_auto] items-center gap-x-3 sm:gap-x-4',
         podium
           ? 'sheet mb-3 px-3 py-3 sm:px-5'
           : 'border-b-2 border-dashed border-ink/15 px-3 py-2.5 transition-colors hover:bg-paper-deep/70 sm:px-5',
@@ -39,12 +41,11 @@ export function RankRow({
           <span className="font-num text-base font-extrabold text-ink-soft">{rank}</span>
         )}
       </span>
-      <CharacterImage
-        industry={industry}
-        className={cn(
-          'transition-transform duration-300 ease-(--ease-pop) group-hover:-translate-y-1 group-hover:-rotate-6',
-          podium ? 'size-14 sm:size-16' : 'size-9',
-        )}
+      <CompanyMark
+        name={companyName}
+        securitiesCode={securitiesCode}
+        layout="inline"
+        className={podium ? 'size-14 rounded-2xl sm:size-16' : 'size-9'}
       />
       <span className="min-w-0">
         <span className={cn('block truncate', podium ? 'text-base font-black sm:text-lg' : 'text-sm font-bold')}>

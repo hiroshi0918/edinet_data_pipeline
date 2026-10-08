@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 
 import { CharacterImage } from '@/components/character-image'
+import { LogoCredit } from '@/components/company-mark'
 import { FilterSelect } from '@/components/filter-select'
 import { QueryState } from '@/components/query-state'
 import { RankRow } from '@/components/rank-row'
@@ -78,7 +79,8 @@ export function RankingsPage() {
                 <RankRow
                   key={company.edinet_code}
                   rank={index + 1}
-                  industry={company.industry}
+                  companyName={company.company_name}
+                  securitiesCode={company.securities_code}
                   score={company.score}
                   title={
                     <Link
@@ -103,6 +105,7 @@ export function RankingsPage() {
                 </Button>
               </div>
             ) : null}
+            <LogoCredit />
           </div>
         ) : null}
       </QueryState>

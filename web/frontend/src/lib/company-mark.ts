@@ -3,6 +3,7 @@ export function logoDevSrc(
   securitiesCode: string | null | undefined,
   token: string | null | undefined,
   size: number,
+  retry = 0,
 ): string | null {
   const ticker = tokyoTicker(securitiesCode)
   if (!token || !ticker) return null
@@ -13,6 +14,7 @@ export function logoDevSrc(
     retina: 'true',
     fallback: '404',
   })
+  if (retry > 0) params.set('retry', String(retry))
   return `https://img.logo.dev/ticker/${encodeURIComponent(ticker)}?${params}`
 }
 

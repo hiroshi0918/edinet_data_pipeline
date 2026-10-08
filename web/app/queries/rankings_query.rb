@@ -18,6 +18,7 @@ class RankingsQuery
         edinet_code: company.edinet_code,
         company_name: company.company_name,
         industry: company.industry,
+        securities_code: company.securities_code.presence,
         fiscal_year: summary[:fiscal_year],
         level: summary[:level],
         score: score

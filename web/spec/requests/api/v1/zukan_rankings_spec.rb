@@ -30,6 +30,7 @@ RSpec.describe "Api::V1::Rankings index", type: :request do
     end
     create(:company, edinet_code: "E91008", company_name: "書類なし", industry: "輸送用機器")
     seed_peer("E91009", industry: "水産・農林業", sales: 9_000, employees: 90, skip_hc: true)
+    Company.find("E91001").update!(securities_code: "7203")
   end
 
   def codes
@@ -44,7 +45,9 @@ RSpec.describe "Api::V1::Rankings index", type: :request do
     expect(codes).to eq(%w[E91001 E91002 E91003 E91004 E91005 E91009 E91008])
     expect(json_body["companies"].first["score"]).to eq(json_body["companies"].first["level"])
     expect(json_body["companies"].map { |row| row["score"] }.last(2)).to eq([ 0, nil ])
-    expect(json_body["companies"]).to all(include("edinet_code"))
+    expect(json_body["companies"]).to all(include("edinet_code", "securities_code"))
+    expect(json_body["companies"].find { |row| row["edinet_code"] == "E91001" }["securities_code"]).to eq("7203")
+    expect(json_body["companies"].find { |row| row["edinet_code"] == "E91008" }["securities_code"]).to be_nil
   end
 
   it "restricts the list to one industry" do

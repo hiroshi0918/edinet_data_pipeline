@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 
+import { LogoCredit } from '@/components/company-mark'
 import { EggFigure } from '@/components/egg-figure'
 import { FilterSelect } from '@/components/filter-select'
 import { QueryState } from '@/components/query-state'
@@ -52,6 +53,7 @@ export function Nikkei225Page() {
               ))}
             </ol>
             <p className="text-xs text-ink-soft">{query.data.source_note}</p>
+            <LogoCredit />
           </div>
         ) : null}
       </QueryState>
@@ -76,7 +78,8 @@ function NikkeiRow({ company, rank }: { company: Nikkei225Company; rank: number 
   return (
     <RankRow
       rank={rank}
-      industry={company.industry}
+      companyName={company.company_name}
+      securitiesCode={company.securities_code}
       score={company.level}
       podium={rank <= 3 && company.level != null}
       meta={meta}

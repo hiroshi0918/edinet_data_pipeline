@@ -158,7 +158,7 @@ KPI の件数は、既定の次元（`reporting_company` × `all`）で数える
 
 ### GET /api/v1/rankings?industry=&axis=
 
-図鑑のランキング。`axis` を省略すると総合点。`sales`、`employee_count`、`operating_margin`、`people`、`average_annual_salary`、`average_years_of_service`、`expectation`、`disclosure` のいずれかなら、その軸の点で並べる。点がない会社は末尾。`industry` はその業種だけ。未知の `axis` は 400。各行の `edinet_code` はシートの会社コード。
+図鑑のランキング。`axis` を省略すると総合点。`sales`、`employee_count`、`operating_margin`、`people`、`average_annual_salary`、`average_years_of_service`、`expectation`、`disclosure` のいずれかなら、その軸の点で並べる。点がない会社は末尾。`industry` はその業種だけ。未知の `axis` は 400。各行の `edinet_code` はシートの会社コード。`securities_code` は companies の証券コードで、ロゴに使う。無いときは null。点の計算には使わない。
 
 ```json
 {
@@ -171,6 +171,7 @@ KPI の件数は、既定の次元（`reporting_company` × `all`）で数える
       "edinet_code": "E02144",
       "company_name": "トヨタ自動車株式会社",
       "industry": "輸送用機器",
+      "securities_code": "7203",
       "fiscal_year": 2026,
       "level": 78,
       "score": 78
