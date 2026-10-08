@@ -9,7 +9,6 @@ vw_company_year_metrics の JOIN も doc_id に切り替える。
 from __future__ import annotations
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0007_human_metrics_by_doc_id"

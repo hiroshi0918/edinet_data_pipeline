@@ -12,9 +12,8 @@
 from __future__ import annotations
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "0003_add_dimension_columns"
 down_revision = "0002_add_raw_edinet_facts"

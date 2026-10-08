@@ -1,6 +1,6 @@
 """LT_slides.pptx の全スライドにフェード切り替え効果を追加."""
-from pptx import Presentation
 from lxml import etree
+from pptx import Presentation
 
 NS_P = "http://schemas.openxmlformats.org/presentationml/2006/main"
 TRANSITION_XML = f"""<p:transition xmlns:p="{NS_P}" spd="med"><p:fade/></p:transition>"""
