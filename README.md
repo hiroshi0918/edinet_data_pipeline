@@ -911,7 +911,10 @@ python -m pip install -e '.[dev]'
 alembic upgrade head
 ruff check .
 pytest -q
+pre-commit install
 ```
+
+`pre-commit install` は初回だけ実行します。以降の `git commit` では、`.pre-commit-config.yaml` の gitleaks（v8.30.1）がステージした差分をスキャンします。ルールは `.gitleaks.toml` です。履歴全体を見るときは `gitleaks git --redact` を実行します。このコミットだけ外すときは `SKIP=gitleaks git commit` です。
 
 Streamlit ダッシュボード開発を含む場合:
 
@@ -940,7 +943,7 @@ CI では次を実行します。
 
 - `ruff check .`
 - `pytest -q`
-- `gitleaks`
+- `gitleaks`（`gitleaks/gitleaks-action@v3`。ルールは `.gitleaks.toml`）
 
 integration test は PostgreSQL を前提にしています。
 
