@@ -1,29 +1,29 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource/ibm-plex-sans-jp/japanese-400.css";
-@import "@fontsource/ibm-plex-sans-jp/latin-400.css";
-@import "@fontsource/ibm-plex-sans-jp/japanese-500.css";
-@import "@fontsource/ibm-plex-sans-jp/latin-500.css";
-@import "@fontsource/ibm-plex-mono/latin-400.css";
-@import "@fontsource/ibm-plex-mono/latin-500.css";
-@import "@fontsource/shippori-mincho/japanese-500.css";
-@import "@fontsource/shippori-mincho/latin-500.css";
+@import "@fontsource/zen-maru-gothic/500.css";
+@import "@fontsource/zen-maru-gothic/700.css";
+@import "@fontsource/zen-maru-gothic/900.css";
+@import "@fontsource/nunito/latin-700.css";
+@import "@fontsource/nunito/latin-800.css";
+@import "@fontsource/nunito/latin-900.css";
 
 @custom-variant dark (&:is(.dark *));
 
+/* 昼の絵本図鑑。仕様は DESIGN_SYSTEM.md。 */
 @theme inline {
+    --font-sans: 'Zen Maru Gothic', 'Hiragino Maru Gothic ProN', 'Hiragino Sans', sans-serif;
     --font-heading: var(--font-sans);
-    --font-sans: 'IBM Plex Sans JP', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
-    --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
-    --font-display: 'Shippori Mincho', 'Yu Mincho', 'Hiragino Mincho ProN', serif;
-    --color-drawer: var(--drawer);
+    --font-display: var(--font-sans);
+    --font-num: 'Nunito', 'Zen Maru Gothic', ui-rounded, sans-serif;
+    --font-mono: var(--font-num);
+    --color-paper: var(--paper);
+    --color-paper-deep: var(--paper-deep);
+    --color-page: var(--page);
     --color-ink: var(--ink);
-    --color-label: var(--label);
-    --color-habitat: var(--habitat);
-    --color-stamp: var(--stamp);
-    --color-brass: var(--brass);
-    --color-pencil: var(--pencil);
+    --color-ink-soft: var(--ink-soft);
+    --color-shu: var(--shu);
+    --color-marker: var(--marker);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -62,77 +62,128 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
+    --shadow-ink-sm: 2px 2px 0 var(--ink);
+    --shadow-ink: 4px 4px 0 var(--ink);
+    --shadow-ink-lg: 6px 6px 0 var(--ink);
+    --ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 :root {
-    --drawer: #e4e7e1;
-    --ink: #1c2421;
-    --label: #f4f3ee;
-    --habitat: #2f5d50;
-    --stamp: #8c3a2f;
-    --brass: #a6843d;
-    --pencil: #7c766c;
-    --background: var(--drawer);
+    --paper: #fbf5e9;
+    --paper-deep: #f2e8d5;
+    --page: #fffdf7;
+    --ink: #2b211b;
+    --ink-soft: #6b5e52;
+    --shu: #c63f28;
+    --marker: #ffe08a;
+
+    --line: 2.5px;
+    --dur-press: 160ms;
+    --dur-reveal: 320ms;
+    --dur-gauge: 700ms;
+
+    --background: var(--paper);
     --foreground: var(--ink);
-    --card: var(--label);
+    --card: var(--page);
     --card-foreground: var(--ink);
-    --popover: var(--label);
+    --popover: var(--page);
     --popover-foreground: var(--ink);
-    --primary: var(--habitat);
-    --primary-foreground: var(--label);
-    --secondary: #d9ddd6;
+    --primary: var(--shu);
+    --primary-foreground: var(--page);
+    --secondary: var(--paper-deep);
     --secondary-foreground: var(--ink);
-    --muted: #d9ddd6;
-    --muted-foreground: var(--pencil);
-    --accent: #d9ddd6;
+    --muted: var(--paper-deep);
+    --muted-foreground: var(--ink-soft);
+    --accent: var(--paper-deep);
     --accent-foreground: var(--ink);
-    --destructive: var(--ink);
-    --border: #c9c4b8;
-    --input: #c9c4b8;
-    --ring: var(--habitat);
-    --chart-1: var(--habitat);
-    --chart-2: var(--ink);
-    --chart-3: var(--pencil);
-    --chart-4: #d9ddd6;
-    --chart-5: var(--label);
-    --radius: 2px;
-    --sidebar: var(--drawer);
+    --destructive: var(--shu);
+    --border: color-mix(in srgb, var(--ink) 22%, transparent);
+    --input: var(--ink);
+    --ring: var(--shu);
+    --chart-1: var(--ink);
+    --chart-2: var(--shu);
+    --chart-3: var(--ink-soft);
+    --chart-4: var(--marker);
+    --chart-5: var(--paper-deep);
+    --radius: 0.875rem;
+    --sidebar: var(--paper);
     --sidebar-foreground: var(--ink);
-    --sidebar-primary: var(--habitat);
-    --sidebar-primary-foreground: var(--label);
-    --sidebar-accent: #d5d8d0;
+    --sidebar-primary: var(--shu);
+    --sidebar-primary-foreground: var(--page);
+    --sidebar-accent: var(--paper-deep);
     --sidebar-accent-foreground: var(--ink);
-    --sidebar-border: #c9c4b8;
-    --sidebar-ring: var(--habitat);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--shu);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    }
-  body {
-    @apply bg-background text-foreground;
-    }
+  }
   html {
     @apply font-sans;
-    }
-}
-
-/* 標本ラベル。右上の欠けは抽斗のつまみ。採集尺の長さが点数。 */
-.plate {
-  position: relative;
-  background: var(--label);
-  color: var(--ink);
-  box-shadow: inset 0 0 0 1px var(--ink);
-  clip-path: polygon(0 0, calc(100% - 3.25rem) 0, 100% 3.25rem, 100% 100%, 0 100%);
-}
-
-@media (min-width: 40rem) {
-  .plate {
-    clip-path: polygon(0 0, calc(100% - 4.75rem) 0, 100% 4.75rem, 100% 100%, 0 100%);
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-weight: 500;
+    /* 紙の粒。SVG のノイズをごく薄く敷く。 */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .17 0 0 0 0 .13 0 0 0 0 .1 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  ::selection {
+    background: var(--marker);
+    color: var(--ink);
+  }
+  :focus-visible {
+    outline: 3px solid var(--shu);
+    outline-offset: 3px;
   }
 }
 
+@utility font-num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 墨線の紙面。絵本の1ページ。 */
+@utility sheet {
+  background: var(--page);
+  border: var(--line) solid var(--ink);
+  border-radius: 1.5rem;
+  box-shadow: var(--shadow-ink);
+}
+
+/* 押せる物の手触り。押すと影が縮んで沈む。 */
+@utility press {
+  box-shadow: var(--shadow-ink);
+  transition:
+    transform var(--dur-press) var(--ease-pop),
+    box-shadow var(--dur-press) var(--ease-pop);
+  &:hover {
+    transform: translate(-1px, -2px);
+    box-shadow: 5px 6px 0 var(--ink);
+  }
+  &:active {
+    transform: translate(3px, 3px);
+    box-shadow: 1px 1px 0 var(--ink);
+  }
+}
+
+/* 見出しの蛍光ペン。 */
+@utility marker-line {
+  background-image: linear-gradient(transparent 58%, var(--marker) 58%, var(--marker) 92%, transparent 92%);
+  background-repeat: no-repeat;
+  padding-inline: 0.15em;
+  box-decoration-break: clone;
+}
+
+/* 紙の上のキャラ。PNG の白いにじみを紙に溶かす。 */
+@utility on-paper {
+  mix-blend-mode: multiply;
+}
+
+/* 採集尺。太いゲージで、長さが同業の中での位置。 */
 .collect-rule {
   display: block;
 }
@@ -140,23 +191,25 @@
 .collect-rule-track {
   position: relative;
   display: block;
-  height: 12px;
-  background: color-mix(in srgb, var(--pencil) 22%, var(--label));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 45%, transparent);
+  height: 16px;
+  border-radius: 999px;
+  background: var(--paper-deep);
+  box-shadow: inset 0 0 0 2px var(--ink);
+  overflow: visible;
 }
 
 .collect-rule-track::before {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: 3px 0;
   background-image:
     linear-gradient(var(--ink), var(--ink)),
     linear-gradient(var(--ink), var(--ink)),
     linear-gradient(var(--ink), var(--ink));
-  background-size: 1px 100%, 1px 100%, 1px 100%;
+  background-size: 2px 100%, 2px 100%, 2px 100%;
   background-position: 25% 0, 50% 0, 75% 0;
   background-repeat: no-repeat;
-  opacity: 0.35;
+  opacity: 0.18;
   pointer-events: none;
 }
 
@@ -165,45 +218,155 @@
   top: 0;
   bottom: 0;
   left: 0;
-  background: var(--habitat);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.38) 0 34%, transparent 34%),
+    var(--shu);
+  box-shadow: inset 0 0 0 2px var(--ink);
   transform-origin: left center;
-  animation: rule-draw 700ms ease-out both;
+  animation: rule-draw var(--dur-gauge) var(--ease-out-soft) both;
+  animation-delay: var(--rule-delay, 0ms);
 }
 
 .collect-rule-pin {
   position: absolute;
   top: 50%;
-  width: 12px;
-  height: 12px;
-  margin-top: -6px;
-  margin-left: -6px;
+  width: 22px;
+  height: 22px;
+  margin-top: -11px;
+  margin-left: -11px;
   border-radius: 999px;
-  background: var(--brass);
-  box-shadow: inset 0 0 0 1.5px var(--ink);
+  background: var(--marker);
+  box-shadow: inset 0 0 0 2px var(--ink), 2px 2px 0 var(--ink);
+  animation: pin-pop 420ms var(--ease-pop) both;
+  animation-delay: calc(var(--rule-delay, 0ms) + var(--dur-gauge) - 120ms);
 }
 
 .collect-rule-ticks {
   display: flex;
   justify-content: space-between;
-  margin-top: 3px;
-  font-family: var(--font-mono);
-  font-size: 9px;
+  margin-top: 4px;
+  font-family: var(--font-num);
+  font-weight: 700;
+  font-size: 10px;
   line-height: 1;
-  color: var(--pencil);
+  color: var(--ink-soft);
 }
 
 @keyframes rule-draw {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes pin-pop {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+/* キャラの待機。ふわふわ浮く。 */
+.idle-bob {
+  animation: bob 3.2s ease-in-out infinite;
+  animation-delay: var(--bob-delay, 0s);
+}
+
+@keyframes bob {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-8px) rotate(1.5deg); }
+}
+
+/* 行進。帯を2周ぶん並べ、半分ずらして継ぎ目を消す。 */
+.parade-track {
+  display: flex;
+  width: max-content;
+  animation: parade var(--parade-duration, 60s) linear infinite;
+}
+
+.parade:hover .parade-track {
+  animation-play-state: paused;
+}
+
+.parade-step {
+  animation: step 0.9s ease-in-out infinite;
+  animation-delay: var(--step-delay, 0s);
+  transform-origin: 50% 100%;
+}
+
+@keyframes parade {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes step {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-10%) rotate(2deg); }
+}
+
+/* 判子。少し傾いて押される。 */
+.hanko {
+  animation: hanko-press 520ms var(--ease-pop) both;
+  animation-delay: var(--hanko-delay, 0ms);
+}
+
+@keyframes hanko-press {
+  0% { opacity: 0; transform: scale(1.8) rotate(-24deg); }
+  60% { opacity: 1; transform: scale(0.92) rotate(-6deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-9deg); }
+}
+
+/* たまご。揺れて待つ。 */
+.egg-wobble {
+  animation: wobble 1.4s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+
+@keyframes wobble {
+  0%, 100% { transform: rotate(0); }
+  20% { transform: rotate(-12deg); }
+  40% { transform: rotate(10deg); }
+  60% { transform: rotate(-6deg); }
+  80% { transform: rotate(3deg); }
+}
+
+/* 折れ線が描かれていく。polyline に pathLength="1" を付ける。 */
+.draw-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw 1.4s var(--ease-out-soft) forwards;
+  animation-delay: var(--draw-delay, 0ms);
+}
+
+@keyframes draw {
+  to { stroke-dashoffset: 0; }
+}
+
+.rise-in {
+  animation: rise-in var(--dur-reveal) var(--ease-out-soft) both;
+}
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .collect-rule-fill {
+  html {
+    scroll-behavior: auto;
+  }
+  .collect-rule-fill,
+  .collect-rule-pin,
+  .idle-bob,
+  .parade-track,
+  .parade-step,
+  .hanko,
+  .egg-wobble,
+  .rise-in {
     animation: none;
-    transform: none;
+  }
+  .hanko {
+    transform: rotate(-9deg);
+  }
+  .draw-line {
+    animation: none;
+    stroke-dashoffset: 0;
   }
 }
