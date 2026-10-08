@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'vitest'
 
 import { monogramChar, tokyoTicker } from '@/lib/company-mark'
-import { specimenCaption, specimenPortrait, specimenStage } from '@/lib/specimen'
+import {
+  industryIndex,
+  specimenCaption,
+  specimenNo,
+  specimenPortrait,
+  specimenStage,
+  specimenThumb,
+} from '@/lib/specimen'
 
 describe('specimenStage', () => {
   test('点がないときはたまご、点数で4段階に分かれる', () => {
@@ -36,10 +43,45 @@ describe('specimenCaption', () => {
   })
 })
 
+describe('specimenNo', () => {
+  test('東証33業種の並びで番号を振り、卵は 000', () => {
+    expect(specimenNo('水産・農林業')).toBe('No.001')
+    expect(specimenNo('輸送用機器')).toBe('No.017')
+    expect(specimenNo('運輸業')).toBe(specimenNo('陸運業'))
+    expect(specimenNo('サービス業')).toBe('No.033')
+    expect(specimenNo(null)).toBe('No.000')
+  })
+})
+
+describe('industryIndex', () => {
+  test('絵ごとに1マスで図鑑番号の順。別名の社数は足し、多い方の名前へ進む', () => {
+    const entries = industryIndex([
+      { industry: 'サービス業', company_count: 10 },
+      { industry: '陸運業', company_count: 5 },
+      { industry: '運輸業', company_count: 2 },
+      { industry: '内国法人・組合（有価証券報告書等の提出義務者以外）', company_count: 3 },
+    ])
+    expect(entries).toHaveLength(34)
+    expect(entries[0]).toMatchObject({ no: 'No.001', industry: '水産・農林業', companyCount: 0 })
+    expect(entries.find((entry) => entry.no === 'No.021')).toMatchObject({
+      industry: '陸運業',
+      companyCount: 7,
+    })
+    expect(entries.at(-1)).toMatchObject({ no: 'No.000', label: '卵', companyCount: 3 })
+  })
+
+  test('社数が来る前は業種だけ並べ、卵は出さない', () => {
+    const entries = industryIndex(undefined)
+    expect(entries).toHaveLength(33)
+    expect(entries.every((entry) => entry.companyCount == null)).toBe(true)
+  })
+})
+
 describe('specimenPortrait', () => {
   test('33業種の絵を返し、別名は同じファイル、未知は無し', () => {
-    expect(specimenPortrait('鉄鋼')).toBe(`/characters/${encodeURIComponent('鉄鋼')}.png`)
-    expect(specimenPortrait('運輸業')).toBe(`/characters/${encodeURIComponent('陸運業')}.png`)
+    expect(specimenPortrait('鉄鋼')).toBe(`/characters/webp/${encodeURIComponent('鉄鋼')}.webp`)
+    expect(specimenThumb('鉄鋼')).toBe(`/characters/thumb/${encodeURIComponent('鉄鋼')}.webp`)
+    expect(specimenPortrait('運輸業')).toBe(`/characters/webp/${encodeURIComponent('陸運業')}.webp`)
     expect(specimenPortrait('運輸業')).toBe(specimenPortrait('陸運業'))
     expect(specimenPortrait('内国法人・組合（有価証券報告書等の提出義務者以外）')).toBeNull()
     expect(specimenPortrait(null)).toBeNull()
