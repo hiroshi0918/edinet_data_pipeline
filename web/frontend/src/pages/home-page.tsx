@@ -109,7 +109,7 @@ function Hero() {
         </motion.a>
       </motion.div>
 
-      <div aria-hidden="true" className="relative h-[clamp(10rem,30vh,17rem)] shrink-0">
+      <div aria-hidden="true" className="relative h-[clamp(12rem,34vh,17rem)] shrink-0">
         <motion.div style={{ y: backY }} className="absolute inset-x-0 bottom-[46%]">
           <Parade industries={BACK_ROW} duration={95} itemClass="h-[clamp(3.75rem,10vh,6rem)]" reverseDelay />
         </motion.div>
@@ -137,7 +137,7 @@ function Hero() {
           />
         </svg>
         <motion.div style={{ y: frontY }} className="absolute inset-x-0 bottom-[10%]">
-          <Parade industries={FRONT_ROW} duration={70} itemClass="h-[clamp(6rem,18vh,10.5rem)]" />
+          <Parade industries={FRONT_ROW} duration={70} itemClass="h-[clamp(7rem,20vh,10.5rem)]" />
         </motion.div>
       </div>
     </section>

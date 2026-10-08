@@ -187,8 +187,9 @@ export function CompanySheet({ sheet }: { sheet: SheetResponse }) {
               <span className="rounded-full border-2 border-ink/20 px-2.5 py-0.5">{sheet.fiscal_year}年度の有報</span>
             ) : null}
           </div>
-          <div className="mt-4 flex flex-wrap items-start justify-between gap-5">
-            <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
+          {/* スマホは社名を1行に取り、総合点と「歩み」を下に並べる。広い幅では総合点を右上に置く。 */}
+          <div className="mt-4 grid grid-cols-[auto_1fr] items-center gap-x-5 gap-y-5 sm:grid-cols-[1fr_auto] sm:items-start">
+            <div className="col-span-2 flex min-w-0 items-start gap-3 sm:col-span-1 sm:gap-4">
               <CompanyMark name={sheet.company_name} securitiesCode={sheet.securities_code} />
               <div className="min-w-0 flex-1">
                 <h1 className="text-2xl leading-tight font-black text-ink sm:text-[2rem]">{sheet.company_name}</h1>
@@ -197,15 +198,15 @@ export function CompanySheet({ sheet }: { sheet: SheetResponse }) {
                 </p>
               </div>
             </div>
-            <LevelBadge level={sheet.level} />
+            <LevelBadge level={sheet.level} className="sm:col-start-2 sm:row-span-2 sm:row-start-1" />
+            <Link
+              className="press inline-flex h-11 items-center gap-2 justify-self-start rounded-full border-[length:var(--line)] border-ink bg-shu px-5 text-sm font-black text-page sm:col-start-1 sm:row-start-2"
+              to={`/companies/${sheet.edinet_code}/story`}
+            >
+              歩みを見る
+              <ArrowRightIcon className="size-4" strokeWidth={3} aria-hidden="true" />
+            </Link>
           </div>
-          <Link
-            className="press mt-6 inline-flex h-11 items-center gap-2 rounded-full border-[length:var(--line)] border-ink bg-shu px-5 text-sm font-black text-page"
-            to={`/companies/${sheet.edinet_code}/story`}
-          >
-            歩みを見る
-            <ArrowRightIcon className="size-4" strokeWidth={3} aria-hidden="true" />
-          </Link>
           <h2 className="mt-8 mb-2 text-xs font-black tracking-[0.2em] text-shu">ステータス</h2>
           <div className="-mx-3 space-y-1 sm:-mx-4">
             {sheet.axes.map((axis, index) => (

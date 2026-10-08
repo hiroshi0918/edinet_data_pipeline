@@ -15,7 +15,7 @@ export function SpecimenFigure({
 
   return (
     <figure className="relative flex w-full flex-col items-center">
-      <div className="relative flex aspect-square w-full max-w-[26rem] items-end justify-center">
+      <div className="relative aspect-square w-full max-w-[26rem]">
         <div
           aria-hidden="true"
           className="absolute inset-[6%] rounded-full border-[length:var(--line)] border-ink bg-paper-deep"
@@ -28,7 +28,7 @@ export function SpecimenFigure({
           initial={{ opacity: 0, scale: 0.55, y: 40 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ type: 'spring', stiffness: 260, damping: 14 }}
-          className="relative h-[96%] w-full"
+          className="absolute inset-x-0 top-0 bottom-[6%]"
         >
           <CharacterImage
             industry={industry}
