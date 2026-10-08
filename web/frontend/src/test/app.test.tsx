@@ -31,12 +31,34 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-test('/ は /companies にリダイレクトする', async () => {
+test('/ は表紙で、検索と業種の目次を出す', async () => {
+  renderAt('/')
+  expect(screen.getByRole('heading', { level: 1, name: '会社図鑑' })).toBeInTheDocument()
+  expect(screen.getByRole('combobox', { name: '企業を検索・選択' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: '業種の目次' })).toBeInTheDocument()
+
+  const tile = screen.getByRole('link', { name: '輸送用機器の会社を見る' })
+  expect(tile).toHaveAttribute('href', `/rankings?industry=${encodeURIComponent('輸送用機器')}`)
+  expect(tile).toHaveTextContent('No.017')
+  await waitFor(() => expect(tile).toHaveTextContent('12社'))
+  expect(screen.getByRole('link', { name: 'サービス業の会社を見る' })).toHaveTextContent('1,234社')
+})
+
+test('目次の業種を押すと、その業種のランキングが開く', async () => {
+  const user = userEvent.setup()
   const { router } = renderAt('/')
-  await waitFor(() => {
-    expect(router.state.location.pathname).toBe('/companies')
-  })
-  expect(await screen.findByRole('heading', { name: '会社を開く' })).toBeInTheDocument()
+  await user.click(screen.getByRole('link', { name: '輸送用機器の会社を見る' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/rankings'))
+  expect(router.state.location.search).toBe(`?industry=${encodeURIComponent('輸送用機器')}`)
+  expect(await screen.findByRole('heading', { name: '輸送用機器' })).toBeInTheDocument()
+  const links = await screen.findAllByRole('link', { name: /会社$/ })
+  expect(links.map((link) => link.textContent)).toEqual(['高い会社', '売上の会社'])
+})
+
+test('/companies と未知のパスは表紙へ戻る', async () => {
+  const { router } = renderAt('/companies')
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  expect(screen.getByRole('heading', { level: 1, name: '会社図鑑' })).toBeInTheDocument()
 })
 
 test('/companies/:code はシートの点を出す', async () => {
@@ -95,7 +117,7 @@ test('外した分析画面はルートに無い', () => {
 
 test('ランキングは総合点から始まり、業種と軸で並びが変わる', async () => {
   const user = userEvent.setup()
-  renderAt('/rankings')
+  const { router } = renderAt('/rankings')
   expect(await screen.findByRole('heading', { name: 'ランキング' })).toBeInTheDocument()
   const overall = await screen.findAllByRole('link', { name: /会社$/ })
   expect(overall.map((link) => link.textContent)).toEqual([
@@ -106,11 +128,15 @@ test('ランキングは総合点から始まり、業種と軸で並びが変�
   expect(overall[0]).toHaveAttribute('href', '/companies/E10001')
 
   await user.selectOptions(screen.getByRole('combobox', { name: '軸' }), 'sales')
-  const bySales = await screen.findAllByRole('link', { name: /会社$/ })
-  expect(bySales[0]).toHaveTextContent('売上の会社')
+  await waitFor(() => {
+    expect(screen.getAllByRole('link', { name: /会社$/ })[0]).toHaveTextContent('売上の会社')
+  })
 
   await user.selectOptions(screen.getByRole('combobox', { name: '業種' }), '輸送用機器')
-  expect(screen.queryByRole('link', { name: '別業種の会社' })).not.toBeInTheDocument()
+  await waitFor(() => {
+    expect(screen.queryByRole('link', { name: '別業種の会社' })).not.toBeInTheDocument()
+  })
+  expect(router.state.location.search).toBe(`?axis=sales&industry=${encodeURIComponent('輸送用機器')}`)
   expect(screen.getByRole('link', { name: '日経225' })).toBeInTheDocument()
 })
 
