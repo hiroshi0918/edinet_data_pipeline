@@ -28,7 +28,7 @@ import type {
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-const GAUGE_STAGGER_MS = 110
+const GAUGE_STAGGER_MS = 160
 const GAUGE_START_MS = 350
 
 function scoreText(score: number | null): string {
