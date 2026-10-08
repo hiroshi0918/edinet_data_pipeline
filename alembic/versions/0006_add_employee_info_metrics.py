@@ -11,7 +11,6 @@ DROP → CREATE で再構築する (0004 と同じパターン)。
 from __future__ import annotations
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0006_add_employee_info_metrics"

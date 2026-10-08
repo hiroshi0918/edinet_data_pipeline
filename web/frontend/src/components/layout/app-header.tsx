@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 
 const TABS = [
   { to: '/', label: 'さがす', match: (path: string) => path === '/' || path.startsWith('/companies') },
+  { to: '/compare', label: 'くらべる', match: (path: string) => path.startsWith('/compare') },
   { to: '/rankings', label: 'ランキング', match: (path: string) => path.startsWith('/rankings') },
   { to: '/nikkei225', label: '日経225', match: (path: string) => path.startsWith('/nikkei225') },
 ]
@@ -24,7 +25,8 @@ export function AppHeader({ overlay }: { overlay: boolean }) {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:gap-3 sm:px-8">
         <Link to="/" className="group flex items-center gap-1.5 rounded-full" aria-label="会社図鑑 トップ">
           <EggFigure className="h-8 w-auto transition-transform duration-300 ease-(--ease-pop) group-hover:-rotate-12" />
-          <span className="text-base font-black whitespace-nowrap text-ink sm:text-xl sm:tracking-wide">会社図鑑</span>
+          {/* タブが4つになったので、狭いスマホではロゴの文字を隠して卵だけにする。 */}
+          <span className="hidden text-base font-black whitespace-nowrap text-ink min-[420px]:inline sm:text-xl sm:tracking-wide">会社図鑑</span>
         </Link>
         <nav aria-label="ページ">
           <ul className="flex items-center gap-0.5 sm:gap-2">
@@ -36,7 +38,7 @@ export function AppHeader({ overlay }: { overlay: boolean }) {
                     to={tab.to}
                     aria-current={active ? 'page' : undefined}
                     className={cn(
-                      'inline-flex h-9 items-center rounded-full px-2.5 text-[13px] font-bold whitespace-nowrap text-ink transition-[background-color,transform] duration-150 sm:h-10 sm:px-4 sm:text-sm',
+                      'inline-flex h-9 items-center rounded-full px-2 text-[13px] font-bold whitespace-nowrap text-ink transition-[background-color,transform] duration-150 sm:h-10 sm:px-4 sm:text-sm',
                       active
                         ? 'border-[length:var(--line)] border-ink bg-marker shadow-ink-sm'
                         : 'border-[length:var(--line)] border-transparent hover:-translate-y-0.5 hover:bg-paper-deep',

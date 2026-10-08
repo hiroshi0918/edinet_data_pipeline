@@ -238,10 +238,20 @@ def test_import_local_document_upserts_without_api(
         def mark_processed(self, doc_id: str, parsed: Any) -> None:
             self.processed.append(doc_id)
 
-        def delete_human_metrics_for_doc(self, *, doc_id: str, source_name: str = "EDINET_CSV") -> None:
+        def delete_human_metrics_for_doc(
+            self, *, doc_id: str, source_name: str = "EDINET_CSV"
+        ) -> None:
             return None
 
-        def upsert_human_metrics(self, *, doc_id: str, edinet_code: str, fiscal_year: int, parsed: Any, source_name: str = "EDINET_CSV") -> int:
+        def upsert_human_metrics(
+            self,
+            *,
+            doc_id: str,
+            edinet_code: str,
+            fiscal_year: int,
+            parsed: Any,
+            source_name: str = "EDINET_CSV",
+        ) -> int:
             self.human.append(doc_id)
             return 0
 

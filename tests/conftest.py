@@ -6,7 +6,6 @@ from urllib.parse import urlparse
 
 import psycopg2
 import pytest
-
 from alembic import command
 from alembic.config import Config
 

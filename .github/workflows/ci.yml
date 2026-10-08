@@ -40,7 +40,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[dev]
+          # ダッシュボードのテストは streamlit / plotly を import する。
+          pip install -e '.[dev,viz]'
 
       - name: Run migrations
         run: alembic upgrade head
@@ -54,7 +55,10 @@ jobs:
   secret-scan:
     runs-on: ubuntu-latest
     steps:
+      # gitleaks は対象コミットの親との差分を見る。depth 1 だと親が無く scan 自体が失敗する。
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

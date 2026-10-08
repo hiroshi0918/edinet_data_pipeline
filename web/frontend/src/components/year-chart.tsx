@@ -1,6 +1,5 @@
-// 直近10年度の折れ線。値が無い年は線を切る。線は描かれていき、最新年だけ朱の点。
-import type { CSSProperties } from 'react'
-
+// 1社の直近10年度の折れ線。目盛りと年は LineChart が描く。最新年だけ朱の点。
+import { LineChart } from '@/components/line-chart'
 import { formatOkuYen, formatPeople } from '@/lib/format'
 
 type Point = { fiscal_year: number; value: number | null }
@@ -17,9 +16,6 @@ export function YearChart({
   delayMs?: number
 }) {
   const present = points.filter((point) => point.value != null)
-  const width = 360
-  const height = 150
-  const pad = 16
   if (present.length === 0) {
     return (
       <div className="sheet p-5">
@@ -28,26 +24,6 @@ export function YearChart({
       </div>
     )
   }
-  const values = present.map((point) => point.value as number)
-  const min = Math.min(...values)
-  const max = Math.max(...values)
-  const span = max - min || 1
-  const xFor = (index: number) =>
-    pad + (index * (width - pad * 2)) / Math.max(points.length - 1, 1)
-  const yFor = (value: number) => height - pad - ((value - min) / span) * (height - pad * 2)
-  const segments: string[] = []
-  let current: string[] = []
-  points.forEach((point, index) => {
-    if (point.value == null) {
-      if (current.length > 1) segments.push(current.join(' '))
-      current = []
-      return
-    }
-    current.push(`${xFor(index)},${yFor(point.value)}`)
-  })
-  if (current.length > 1) segments.push(current.join(' '))
-  const latestIndex = points.findLastIndex((point) => point.value != null)
-  const style = { '--draw-delay': `${delayMs}ms` } as CSSProperties
 
   return (
     <div className="sheet p-5">
@@ -55,58 +31,14 @@ export function YearChart({
         <p className="text-sm font-black text-ink">{title}</p>
         <p className="font-num text-lg font-black text-ink">{formatLatest(points, kind)}</p>
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="mt-3 w-full overflow-visible" role="img" aria-label={title}>
-        <line
-          x1={pad}
-          x2={width - pad}
-          y1={height - pad + 6}
-          y2={height - pad + 6}
-          stroke="var(--ink)"
-          strokeOpacity="0.2"
-          strokeWidth="2"
-          strokeDasharray="4 6"
+      <div className="mt-3">
+        <LineChart
+          title={title}
+          kind={kind}
+          delayMs={delayMs}
+          years={points.map((point) => point.fiscal_year)}
+          series={[{ key: 'value', label: title, color: 'var(--ink)', values: points.map((point) => point.value) }]}
         />
-        {segments.map((segment) => (
-          <polyline
-            key={segment}
-            className="draw-line"
-            style={style}
-            pathLength={1}
-            fill="none"
-            stroke="var(--ink)"
-            strokeWidth="3.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            points={segment}
-          />
-        ))}
-        {points.map((point, index) =>
-          point.value == null ? null : index === latestIndex ? (
-            <circle
-              key={point.fiscal_year}
-              cx={xFor(index)}
-              cy={yFor(point.value)}
-              r="7"
-              fill="var(--shu)"
-              stroke="var(--ink)"
-              strokeWidth="2.5"
-            />
-          ) : (
-            <circle
-              key={point.fiscal_year}
-              cx={xFor(index)}
-              cy={yFor(point.value)}
-              r="4"
-              fill="var(--page)"
-              stroke="var(--ink)"
-              strokeWidth="2.5"
-            />
-          ),
-        )}
-      </svg>
-      <div className="font-num mt-2 flex justify-between text-[11px] font-bold text-ink-soft">
-        <span>{points[0]?.fiscal_year}</span>
-        <span>{points[points.length - 1]?.fiscal_year}</span>
       </div>
       <p className="mt-1 text-xs text-ink-soft">値がある年 {present.length}</p>
     </div>

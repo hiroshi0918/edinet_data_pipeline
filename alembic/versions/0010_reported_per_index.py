@@ -8,7 +8,6 @@ raw_edinet_facts は書類あたり千行を超える。doc_id だけの索引�
 from __future__ import annotations
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0010_reported_per_index"

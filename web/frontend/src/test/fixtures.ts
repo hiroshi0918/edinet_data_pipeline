@@ -438,6 +438,18 @@ export function jsonResponse(data: unknown, status = 200) {
   })
 }
 
+export const compareStoryFixture: StoryResponse = {
+  edinet_code: 'E10001',
+  company_name: '高い会社',
+  industry: '輸送用機器',
+  fiscal_year: 2025,
+  series: [
+    { fiscal_year: 2024, sales: 40000000000, operating_profit: -2000000000, employee_count: 800 },
+    { fiscal_year: 2025, sales: 50000000000, operating_profit: 3000000000, employee_count: 820 },
+  ],
+  narrative: { business: null, history: [], rewritten: false },
+}
+
 export function installApiMock() {
   vi.stubGlobal(
     'fetch',
@@ -460,6 +472,9 @@ export function installApiMock() {
       }
       if (url.includes('/api/v1/companies/E05206/sheet')) {
         return jsonResponse(sheetFixture)
+      }
+      if (url.includes('/api/v1/companies/E10001/story')) {
+        return jsonResponse(compareStoryFixture)
       }
       if (url.includes('/api/v1/companies/E05206/story')) {
         return jsonResponse(storyFixture)

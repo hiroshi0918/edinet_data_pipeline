@@ -24,6 +24,8 @@
     --color-ink-soft: var(--ink-soft);
     --color-shu: var(--shu);
     --color-marker: var(--marker);
+    --color-compare-a: var(--compare-a);
+    --color-compare-b: var(--compare-b);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -77,6 +79,9 @@
     --ink-soft: #6b5e52;
     --shu: #c63f28;
     --marker: #ffe08a;
+    /* 2社比較の会社の色。1社目は墨の実線、2社目は朱の点線。 */
+    --compare-a: var(--ink);
+    --compare-b: var(--shu);
 
     --line: 2.5px;
     --dur-press: 160ms;

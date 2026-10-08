@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0002_add_raw_edinet_facts"
