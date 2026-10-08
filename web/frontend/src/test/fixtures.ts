@@ -3,6 +3,7 @@ import type {
   CompanyDetail,
   HcDistributionResponse,
   HcRankingResponse,
+  IndustriesResponse,
   MetaResponse,
   Nikkei225Response,
   SheetResponse,
@@ -350,6 +351,14 @@ export const storyFixture: StoryResponse = {
   },
 }
 
+export const industriesFixture: IndustriesResponse = {
+  industries: [
+    { industry: 'サービス業', company_count: 1234 },
+    { industry: '水産・農林業', company_count: 8 },
+    { industry: '輸送用機器', company_count: 12 },
+  ],
+}
+
 export const nikkei225Fixture: Nikkei225Response = {
   as_of: '2026-10-08',
   source_note: 'テスト用の構成銘柄',
@@ -465,6 +474,7 @@ export function installApiMock() {
       if (url.includes('/api/v1/industries/hc_distribution')) {
         return jsonResponse(hcDistributionFixture)
       }
+      if (url.includes('/api/v1/industries')) return jsonResponse(industriesFixture)
       if (url.includes('/api/v1/rankings/human_capital')) {
         return jsonResponse(hcRankingFixture)
       }

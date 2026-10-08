@@ -13,6 +13,17 @@ class ResizeObserverMock {
 }
 vi.stubGlobal('ResizeObserver', ResizeObserverMock)
 
+class IntersectionObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+  takeRecords() {
+    return []
+  }
+}
+// app.test の unstubAllGlobals で消えないよう、stubGlobal ではなく直接置く。
+globalThis.IntersectionObserver = IntersectionObserverMock as unknown as typeof IntersectionObserver
+
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: (query: string) => ({

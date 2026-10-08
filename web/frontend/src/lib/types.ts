@@ -102,6 +102,15 @@ export type SheetPeopleAxis = SheetAxisBase & {
 
 export type SheetAxis = SheetPercentileAxis | SheetExpectationAxis | SheetPeopleAxis
 
+export type IndustryCount = {
+  industry: string
+  company_count: number
+}
+
+export type IndustriesResponse = {
+  industries: IndustryCount[]
+}
+
 export type RankingCompany = {
   edinet_code: string
   company_name: string

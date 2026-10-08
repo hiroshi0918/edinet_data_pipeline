@@ -3,6 +3,7 @@ import type {
   ApiErrorBody,
   CompaniesResponse,
   CompanyDetail,
+  IndustriesResponse,
   SheetResponse,
   StoryResponse,
   MetaResponse,
@@ -64,6 +65,10 @@ export function fetchSheet(code: string) {
 
 export function fetchStory(code: string) {
   return apiGet<StoryResponse>(`/companies/${encodeURIComponent(code)}/story`)
+}
+
+export function fetchIndustries() {
+  return apiGet<IndustriesResponse>('/industries')
 }
 
 export function fetchNikkei225() {
