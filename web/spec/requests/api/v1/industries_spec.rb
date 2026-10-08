@@ -1,5 +1,22 @@
 require "rails_helper"
 
+RSpec.describe "GET /api/v1/industries", type: :request do
+  it "counts companies per industry in name order and skips companies without one" do
+    create(:company, industry: "輸送用機器")
+    create(:company, industry: "輸送用機器")
+    create(:company, industry: "水産・農林業")
+    create(:company, industry: nil)
+
+    get "/api/v1/industries", as: :json
+
+    expect(response).to have_http_status(:ok)
+    expect(json_body["industries"]).to eq([
+      { "industry" => "水産・農林業", "company_count" => 1 },
+      { "industry" => "輸送用機器", "company_count" => 2 }
+    ])
+  end
+end
+
 RSpec.describe "GET /api/v1/industries/hc_distribution", type: :request do
   it "drops industries with fewer than 5 disclosed companies" do
     5.times do |i|

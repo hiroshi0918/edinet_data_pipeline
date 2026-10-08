@@ -14,13 +14,14 @@ Rails（`/api/v1`）と React の接点。JSON のキーは snake_case。メソ�
 | `GET /companies/:code/sheet` | `SheetQuery` |
 | `GET /companies/:code/story` | `StoryQuery` |
 | `GET /companies/:code/spotlight` | `SpotlightQuery` |
+| `GET /industries` | `IndustriesQuery` |
 | `GET /industries/hc_distribution` | `HcDistributionQuery` |
 | `GET /rankings` | `RankingsQuery` |
 | `GET /rankings/human_capital` | `HumanCapitalRankingQuery` |
 | `GET /rankings/size` | `SizeRankingQuery` |
 | `GET /nikkei225` | `Nikkei225Query` |
 
-図鑑の画面は `/companies`、`/companies/:code`、`/companies/:code/story`、`/rankings`、`/nikkei225`。`/companies/:code` は `GET /companies/:code/sheet` を読む。spotlight、業種分布、人的資本ランキング、規模ランキングのエンドポイントは残している。
+図鑑の画面は `/`、`/companies/:code`、`/companies/:code/story`、`/rankings`、`/nikkei225`。`/` は表紙で、業種の目次に `GET /industries` を読む。`/companies/:code` は `GET /companies/:code/sheet` を読む。`/rankings` は `?industry=&axis=` を URL に持つ。spotlight、業種分布、人的資本ランキング、規模ランキングのエンドポイントは残している。
 
 ## 共通パラメータ
 
@@ -135,6 +136,18 @@ KPI の件数は、既定の次元（`reporting_company` × `all`）で数える
 ### GET /api/v1/companies/:code/story
 
 直近10年の売上・営業利益・従業員数と、事業の内容・沿革。保存済みの書き直しがあればそれを返し、無ければ原文の抜粋を返す。この GET は書き直さない。保存は `bin/rails 'story:rewrite[EDINETコード]'`。
+
+### GET /api/v1/industries
+
+表紙の業種の目次。companies を業種で数える。業種が無い会社は数えない。並びは業種名の順。数え方は `GET /rankings?industry=` の社数と同じ。
+
+```json
+{
+  "industries": [
+    { "industry": "輸送用機器", "company_count": 123 }
+  ]
+}
+```
 
 ### GET /api/v1/rankings?industry=&axis=
 

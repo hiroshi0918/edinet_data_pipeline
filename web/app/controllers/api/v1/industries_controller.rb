@@ -1,6 +1,11 @@
 module Api
   module V1
     class IndustriesController < BaseController
+      # 図鑑の目次。業種ごとの社数。
+      def index
+        render json: IndustriesQuery.call
+      end
+
       # 業種別箱ひげ用の企業生値。
       def hc_distribution
         render json: HcDistributionQuery.call(

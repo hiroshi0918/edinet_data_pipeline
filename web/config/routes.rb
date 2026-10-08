@@ -10,6 +10,7 @@ Rails.application.routes.draw do
         get :sheet, on: :member
         get :story, on: :member
       end
+      get "industries", to: "industries#index"
       get "industries/hc_distribution", to: "industries#hc_distribution"
       get "rankings", to: "rankings#index"
       get "rankings/human_capital", to: "rankings#human_capital"
