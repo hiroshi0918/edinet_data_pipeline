@@ -1,6 +1,6 @@
 # EDINET Dashboard（Rails + React）
 
-会社図鑑の画面。PostgreSQL 直読みの Rails API と React SPA。入口は社名検索と日経225一覧。選んだ会社は `GET /companies/:code/sheet` のシート。パイプライン本体（Python）と Streamlit は触らない。
+会社図鑑の画面。PostgreSQL 直読みの Rails API と React SPA。入口は表紙（社名検索と業種の目次）、ランキング、日経225一覧。見た目の決まりは [frontend/DESIGN_SYSTEM.md](frontend/DESIGN_SYSTEM.md)。選んだ会社は `GET /companies/:code/sheet` のシート。パイプライン本体（Python）と Streamlit は触らない。
 
 - JSON は snake_case、GET のみ。契約は [API_CONTRACT.md](API_CONTRACT.md)
 - スキーマ正本はリポジトリルートの Alembic。`bin/rails db:migrate` は使わない
