@@ -30,9 +30,10 @@
 │  基盤             logging_utils.py                                  │
 │                   構造化ログ                                        │
 ├────────────────────────────────────────────────────────────────────┤
-│  可視化           dashboard/                                        │
-│                   app.py / data.py / views/ / components/           │
-│                   ↑ DuckDB を直接読んで Streamlit で表示            │
+│  可視化           dashboard/          (Streamlit / DuckDB)          │
+│                   app.py / data.py / views/                         │
+│                   web/                (Rails API + React / Postgres)│
+│                   queries / controllers / frontend/src/pages        │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -55,7 +56,10 @@
 | 7 | `db.py` | 永続化層の責務を把握する（多次元 upsert の実装に注目） | 517 |
 | 8 | `jobs.py` | 上記をどう組み合わせて 1 ジョブが動くかを読む（**最後に読むのが効率的**） | 414 |
 | 9 | `analytics.py` | DB → Parquet/DuckDB の変換を読む | 310 |
-| 10 | `dashboard/` | DuckDB から Streamlit までの可視化フロー (次元フィルタ含む) | - |
+| 10 | `dashboard/` | Streamlit: DuckDB から 5 ページまでの可視化 | - |
+| 11 | `web/API_CONTRACT.md` | Rails JSON の形。フロントと API の接点 | - |
+| 12 | `web/app/queries/` | `data.py` 相当。Postgres 向けに移植した分析クエリ | - |
+| 13 | `web/frontend/src/routes.tsx` | React Router の 5 画面と URL | - |
 
 ジョブ全体の挙動は [DATA_FLOW.md](DATA_FLOW.md) で時系列に追えます。
 
@@ -82,25 +86,39 @@
 | `cli.py` | argparse でサブコマンドを定義し、対応する関数を呼ぶ | `build_parser`, `main` |
 | `logging_utils.py` | 構造化ログ（JSON 1 行）の出力ヘルパー | `configure_logging`, `log_event` |
 
-### 3.3 可視化層（`dashboard/`）
+### 3.3 可視化層 — Streamlit（`dashboard/`、DuckDB）
 
 | ファイル | 責務 |
 | --- | --- |
 | `dashboard/__init__.py` | Streamlit アプリを subprocess で起動するラッパー |
-| `dashboard/app.py` | Streamlit のマルチページアプリのエントリポイント。データソースは `datasource.ensure_duckdb_file()` で解決 |
-| `dashboard/datasource.py` | DuckDB の取得元解決。ローカル優先、無ければ GitHub Releases (`data-latest`) から ETag をバージョンに埋めて DL・キャッシュ。パスが版ごとに変わることで `data.get_connection` の `@st.cache_resource` キーが自然に切り替わる |
-| `dashboard/data.py` | DuckDB へのクエリ関数群（read-only）。許可リスト検証は `models.ALLOWED_SCOPES`/`ALLOWED_WORKER_TYPES` を再利用 |
-| `dashboard/constants.py` | テーブル名・指標ラベル・色などの共通定数。男性育休の表示クリップ範囲 `RATIO_DISPLAY_MIN/MAX`、理想クラスタ閾値 `IDEAL_CLUSTER_THRESHOLDS` も集約 |
-| `dashboard/components/filters.py` | フィルター UI（年度選択など）の共通コンポーネント |
-| `dashboard/views/overview.py` | 概要ページ（KPI、ステータス分布） |
-| `dashboard/views/financial.py` | 財務指標の推移・ランキング |
-| `dashboard/views/human_capital.py` | 人的資本指標の分布・散布図、男性育休取得率の外れ値注記（100% 超・0%・集計外れ値の 3 種カード） |
-| `dashboard/views/company_spotlight.py` | 単一企業の peer 比較。業界 peer + 規模類似 peer（対数スケール ±0.3 dex）+ 理想クラスタ平均との差分を表示。持株会社は `detect_evaluation_scope` で自動的に連結子会社 scope に切替 |
-| `dashboard/views/data_quality.py` | カバレッジヒートマップ、充足率の推移 |
+| `dashboard/app.py` | 5 ページの入口。データソースは `datasource.ensure_duckdb_file()` |
+| `dashboard/datasource.py` | DuckDB の取得元。ローカル優先、無ければ GitHub Releases `data-latest` |
+| `dashboard/data.py` | DuckDB への read-only クエリ。許可リスト検証あり |
+| `dashboard/constants.py` | 指標ラベル、理想クラスタ閾値、育休クリップ範囲 |
+| `dashboard/components/filters.py` | 年度・scope・worker_type の共通 UI |
+| `dashboard/views/company_lookup.py` | 企業を調べる |
+| `dashboard/views/industry_boxplot.py` | 業種で比べる（箱ひげ） |
+| `dashboard/views/hc_ranking.py` | 人的資本トップ/ボトム |
+| `dashboard/views/size_vs_hc.py` | 規模×人的資本 |
+| `dashboard/views/company_spotlight.py` | スポットライト。peer・理想クラスタ・持株会社の自動 scope |
 
 > ディレクトリ名は `views/` です。Streamlit の `pages/` 規約と衝突しないよう
-> あえて中立な名前を使っています（`pages/` だと自動検出機能が発動し、自前の
-> `st.sidebar.radio` ナビゲーションと二重に並んでしまう）。
+> あえて中立な名前を使っています。
+
+### 3.4 可視化層 — Rails + React（`web/`、PostgreSQL）
+
+Streamlit と同じ 5 画面。クエリは `data.py` を Postgres に移植したもの。詳細は [web/README.md](../web/README.md)。
+
+| 場所 | 責務 |
+| --- | --- |
+| `web/API_CONTRACT.md` | REST JSON の契約（snake_case、GET のみ） |
+| `web/app/queries/` | 分析 SQL。`Dimension` が許可リスト、`SpotlightQuery` が peer / 理想クラスタ |
+| `web/app/controllers/api/v1/` | 薄いコントローラ。query のハッシュを JSON にする |
+| `web/app/models/` | `Company` 等のテーブル。分析はビューを query の SQL で読む |
+| `web/frontend/src/routes.tsx` | `/companies/:code` など React Router |
+| `web/frontend/src/pages/` | 5 画面 |
+| `web/frontend/src/hooks/use-filters.ts` | 年度・次元を URL search params と同期 |
+| `web/spec/requests/` | API の request spec |
 
 ## 4. 主要な依存グラフ（簡略版）
 
@@ -143,6 +161,11 @@ dashboard/app.py
            ├── query_industry_peers / query_size_peers (対数スケール ±0.3 dex)
            ├── query_ideal_cluster (3 HC P75 + 営業利益率 P50)
            └── detect_evaluation_scope (持株会社判定)
+
+web/frontend (React)
+ └── /api/v1/*  (Vite proxy → Rails)
+      └── web/app/queries/*
+           └── vw_company_year_metrics (PostgreSQL)
 ```
 
 ## 5. 用語と DB スキーマの対応
@@ -204,6 +227,8 @@ processed   failed   skipped
 | `analytics.py` | `test_analytics_export.py` |
 | `dashboard/data.py` | `test_dashboard_data.py`（インメモリ DuckDB） |
 | `dashboard/__init__.py` | `test_dashboard_cli.py`, `test_dashboard_app.py` |
+| `web/` API | `web/spec/requests/api/v1/*_spec.rb` |
+| `web/frontend` ルート | `web/frontend/src/test/app.test.tsx` |
 
 `@pytest.mark.integration` のついたテストは PostgreSQL が必要です。
 通常の `pytest` 実行では skip され、`pytest -m integration` で明示的に実行します。

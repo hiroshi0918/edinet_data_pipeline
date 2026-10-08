@@ -1,0 +1,55 @@
+#!/usr/bin/env ruby
+require "fileutils"
+
+APP_ROOT = File.expand_path("..", __dir__)
+REPO_ROOT = File.expand_path("../..", __dir__)
+TEST_DATABASE_URL = "postgresql://user:password@localhost:5432/edinet_db_test"
+DEV_DATABASE_URL = "postgresql://user:password@localhost:5432/edinet_db"
+
+def system!(*args, **kwargs)
+  system(*args, exception: true, **kwargs)
+end
+
+def create_database_if_missing(name)
+  require "pg"
+  conn = PG.connect(host: "localhost", user: "user", password: "password", dbname: "postgres")
+  exists = conn.exec_params("SELECT 1 FROM pg_database WHERE datname = $1", [ name ]).ntuples.positive?
+  conn.exec("CREATE DATABASE #{name}") unless exists
+  conn.close
+end
+
+def alembic_upgrade!(database_url)
+  env = ENV.to_h.merge("DATABASE_URL" => database_url)
+  Dir.chdir(REPO_ROOT) do
+    venv_alembic = File.join(REPO_ROOT, ".venv", "bin", "alembic")
+    if File.executable?(venv_alembic)
+      system!(env, venv_alembic, "upgrade", "head")
+      return
+    end
+    return if system(env, "alembic", "upgrade", "head")
+    return if system(env, "docker", "compose", "exec", "-T", "-e", "DATABASE_URL=#{database_url}", "app", "alembic", "upgrade", "head")
+
+    abort "alembic が見つかりません。.venv を用意するか PATH に alembic を入れてください。"
+  end
+end
+
+FileUtils.chdir APP_ROOT do
+  puts "== Installing dependencies =="
+  system("bundle check") || system!("bundle install")
+
+  puts "\n== Creating test database =="
+  create_database_if_missing("edinet_db_test")
+
+  puts "\n== Applying alembic migrations =="
+  alembic_upgrade!(TEST_DATABASE_URL)
+  alembic_upgrade!(DEV_DATABASE_URL)
+
+  puts "\n== Removing old logs and tempfiles =="
+  system! "bin/rails log:clear tmp:clear"
+
+  if ARGV.include?("--server")
+    puts "\n== Starting development server =="
+    STDOUT.flush
+    exec "bin/dev"
+  end
+end

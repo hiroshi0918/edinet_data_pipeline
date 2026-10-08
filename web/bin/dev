@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Rails :3000 と Vite :5173 を同時起動する。
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+export PATH="/opt/homebrew/lib/ruby/gems/3.4.0/bin:/opt/homebrew/opt/ruby/bin:${PATH}"
+
+cleanup() {
+  trap - EXIT INT TERM
+  kill 0 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+bin/rails server -b 127.0.0.1 -p 3000 &
+npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173 --strictPort &
+wait

@@ -13,6 +13,7 @@ EDINET API v2 から有価証券報告書を取得し、財務指標と人的資
 > 1. [docs/CODE_MAP.md](docs/CODE_MAP.md) — モジュール責務、依存グラフ、推奨される読む順序
 > 2. [docs/DATA_FLOW.md](docs/DATA_FLOW.md) — 1 書類が API → DB → Parquet/DuckDB → ダッシュボードへ流れる過程の時系列解説
 > 3. 実装本体は `src/edinet_pipeline/` 配下を `models.py → config.py → cli.py → ...` の順で読むと理解しやすいです（詳細は CODE_MAP.md 参照）。
+> 4. Rails + React ダッシュボードは [web/README.md](web/README.md) と [web/API_CONTRACT.md](web/API_CONTRACT.md)。
 
 ## 概要
 
@@ -25,9 +26,9 @@ EDINET API v2 から有価証券報告書を取得し、財務指標と人的資
 - 分析レイヤー
   - PostgreSQL のスナップショットを Parquet と DuckDB にエクスポート
   - Notebook、ローカル SQL、BI の前段として利用
-- 可視化レイヤー
-  - DuckDB をデータソースとした Streamlit ダッシュボード
-  - 財務指標の推移・比較、人的資本指標の分布・トレンド、データ品質をインタラクティブに可視化
+- 可視化レイヤー（2 系統。パイプライン本体はどちらも読み取り専用）
+  - Streamlit: DuckDB を読む。公開デモ (`edinet dashboard` / Streamlit Cloud)
+  - Rails + React: PostgreSQL の `vw_company_year_metrics` を読む。練習用 SPA（`web/`）
 
 現時点の対象帳票は「有価証券報告書」のみです。
 
@@ -71,7 +72,9 @@ graph LR
     E[edinet export-analytics]
     F[Parquet]
     G[DuckDB]
-    H[edinet dashboard]
+    H[Streamlit]
+    I[Rails API]
+    J[React SPA]
 
     A --> B
     A --> C
@@ -81,6 +84,8 @@ graph LR
     E --> F
     E --> G
     G --> H
+    D --> I
+    I --> J
 ```
 
 ## データ抽出・分析のロジック
@@ -190,8 +195,10 @@ graph LR
   - PostgreSQL の分析スナップショットを Parquet と DuckDB に出力します。
 - `edinet dashboard`
   - DuckDB をデータソースとした Streamlit ダッシュボードを起動します。
-  - 財務指標の推移・企業比較、人的資本指標の分布・散布図、データ品質のカバレッジを可視化します。
+  - 5 ページ（企業を調べる / 業種で比べる / 人的資本ランキング / 規模×人的資本 / スポットライト）。
   - サイドバーで `scope` (提出会社 / 連結子会社) と `worker_type` (全労働者 / 正規 / 非正規) を切り替えられます。
+- Rails + React ダッシュボード (`web/`)
+  - 同じ 5 画面を PostgreSQL 直読みで再現した SPA。起動は [web/README.md](web/README.md)。
 - 抽出根拠の保存
   - 指標の抽出元を `metric_evidence` に保存し、`matched_by` (`element_id_match` / `item_name_match` / `text_fallback` / `llm_fallback`) で抽出方法を区別できます。
 - 元CSV生データの保存
@@ -212,15 +219,20 @@ graph LR
 │   ├── llm_extractor.py  # Layer 3b: Ollama 連携 + SHA256 キャッシュ
 │   ├── jobs.py           # fetch/process/backfill の実行ロジック
 │   ├── analytics.py      # Parquet / DuckDB エクスポート
-│   └── dashboard/        # Streamlit ダッシュボード
-│       ├── app.py        # マルチページアプリの入口
-│       ├── data.py       # DuckDB クエリ関数群 (scope/worker_type フィルタ)
-│       ├── constants.py  # 共通定数 (指標ラベル + 次元ラベル)
-│       ├── components/   # 共通 UI (フィルタ・次元セレクタ)
-│       └── views/        # 各ページ (overview, financial, human_capital, data_quality, company_spotlight)
-├── alembic/              # DB migration (0001 / 0002 / 0003 / 0004)
+│   └── dashboard/        # Streamlit ダッシュボード (DuckDB)
+│       ├── app.py        # 5 ページの入口
+│       ├── data.py       # DuckDB クエリ (scope/worker_type フィルタ)
+│       ├── constants.py  # 指標ラベル・次元ラベル
+│       ├── components/   # 共通フィルタ
+│       └── views/        # lookup / industry / hc_ranking / size_vs_hc / spotlight
+├── web/                  # Rails 8 API + React SPA (PostgreSQL)
+│   ├── app/queries/      # 分析クエリ (data.py 相当)
+│   ├── app/controllers/api/v1/
+│   ├── API_CONTRACT.md   # JSON 契約
+│   └── frontend/         # Vite + React Router
+├── alembic/              # DB migration (0001〜0007)。web 側は migrate しない
 ├── airflow/dags/         # 任意の Airflow DAG
-├── tests/                # unit / integration tests
+├── tests/                # Python unit / integration
 ├── notebooks/            # 01_eda_basics, 02_extraction_quality_check
 ├── docker-compose.yml    # app, db, optional airflow
 ├── pyproject.toml        # 依存管理、pytest、ruff 設定
@@ -326,12 +338,25 @@ docker compose exec app edinet export-analytics --format both
 
 ### 6. ダッシュボードで可視化
 
+Streamlit（現行の公開デモ）:
+
 ```bash
 pip install -e '.[viz]'
 edinet dashboard
 ```
 
-ブラウザで `http://localhost:8501` を開くと、4 ページ構成のダッシュボードが表示されます。
+ブラウザで `http://localhost:8501` を開く。
+
+Rails + React（練習用。Postgres を直接読む）:
+
+```bash
+docker compose up -d db
+cd web
+bin/setup
+bin/dev
+```
+
+ブラウザで `http://localhost:5173` を開く。詳細は [web/README.md](web/README.md)。
 
 ### 7. 取り込み状況を確認
 
@@ -515,9 +540,9 @@ docker compose run --rm app edinet reset-stale --minutes 30
 - 復旧した件数は `stale_processing_reset: count=N` として標準出力に表示されます。
 - `edinet process` / `edinet backfill` は実行のたび claim の直前に同じ回収処理を自動で走らせるため、無人運用では通常このコマンドを手で叩く必要はありません（手動復旧・観測用）。
 
-### `edinet dashboard`
+### `edinet dashboard`（Streamlit / DuckDB）
 
-DuckDB をデータソースとしたインタラクティブな分析ダッシュボードを起動します。
+DuckDB をデータソースとしたインタラクティブな分析ダッシュボードを起動します。公開デモは Streamlit Cloud です。
 
 ```bash
 edinet dashboard
@@ -531,15 +556,15 @@ edinet dashboard --duckdb-path /path/to/edinet_analytics.duckdb
 pip install -e '.[viz]'
 ```
 
-ダッシュボードは以下の 5 ページで構成されます。
+5 ページ構成:
 
 | ページ | 内容 |
 | --- | --- |
-| 概要 | KPI カード（企業数・年度数・レコード数）、年度別処理ステータス分布 |
-| 財務指標 | 売上高・営業利益・純利益・従業員数の推移（折れ線）、企業ランキング（棒）、集計統計テーブル |
-| 人的資本指標 | 女性管理職比率・男性育休取得率・男女賃金格差の分布（ヒストグラム/箱ひげ図）、年度別平均推移、散布図、男性育休取得率の外れ値（100%超・0%報告・集計外れ値）の補足カード |
-| 企業スポットライト | 単一企業を選んで peer と並べる。業界 peer (`industry` 列) と規模類似 peer（対数スケール ±0.3 dex）の両系列、4 種の「理想値」（業界 P75 / 規模 peer P75 / 理想クラスタ平均 / 業界トップ10）テーブル。持株会社は自動的に連結子会社 scope で評価。`industry` が未取得の場合は業界 peer のみ非表示で動作 |
-| データ品質 | 指標カバレッジヒートマップ（凡例・hover 付き）、年度別充足率推移、抽出方法の分布（信頼性順の解説付き） |
+| 企業を調べる | 1 社の財務 4 + 人的資本 3 + 従業員情報 3。従業員情報は常に提出会社×全労働者 |
+| 業種で比べる | HC 指標の業種別箱ひげ（開示 5 社未満の業種は除外） |
+| 人的資本トップ/ボトム | 女性管理職比率・男女賃金格差の上位/下位 10 社。育休は扱わない |
+| 規模×人的資本 | 売上・営業利益・従業員数の上位/下位 10 社に HC を併記 |
+| 企業スポットライト | 業界 peer + 規模 peer（log ±0.3 dex）の violin と理想値差分。持株会社は自動で連結子会社 scope |
 
 オプション:
 
@@ -562,6 +587,23 @@ pip install -e '.[viz]'
 - リモートの ETag をバージョンとしてキャッシュファイル名に埋め込み、HEAD チェックを 1 時間キャッシュするため、最悪でも更新の約 65 分後には最新データが反映されます。
 - ダウンロード先 URL は `EDINET_DUCKDB_URL`、キャッシュ先は `EDINET_DUCKDB_CACHE_DIR` で上書きできます。
 - DuckDB は git に同梱しません（履歴肥大を避けるため）。最新化は週次更新スクリプトが `gh release upload data-latest ... --clobber` で Releases を上書きする運用です（[無人運用](#無人運用週次自動更新) を参照）。
+
+### Rails + React ダッシュボード（`web/` / PostgreSQL）
+
+同じ 5 画面を Rails 8 API + React (React Router) で実装した練習用 SPA です。Streamlit は残しています。スキーマ正本は Alembic で、Rails は migrate しません。
+
+```bash
+docker compose up -d db
+cd web
+bin/setup
+bin/dev
+```
+
+- UI: http://localhost:5173 （Vite が `/api` を Rails `:3000` へ proxy）
+- JSON 契約: [web/API_CONTRACT.md](web/API_CONTRACT.md)
+- 起動・テスト・読む順: [web/README.md](web/README.md)
+
+フィルタ（年度・scope・worker_type・指標）は URL search params に載ります。認証なし、GET のみです。
 
 ## 状態管理
 
@@ -871,11 +913,19 @@ ruff check .
 pytest -q
 ```
 
-ダッシュボード開発を含む場合:
+Streamlit ダッシュボード開発を含む場合:
 
 ```bash
 python -m pip install -e '.[dev,viz]'
 pytest tests/test_dashboard_data.py tests/test_dashboard_cli.py tests/test_dashboard_app.py -v
+```
+
+Rails + React ダッシュボード:
+
+```bash
+cd web
+bundle exec rspec
+npm --prefix frontend test
 ```
 
 CLI の確認:

@@ -30,9 +30,11 @@ llm_extraction_cache     ← SHA256(モデル+テキスト) → JSONB
 artifacts/analytics/parquet/
 artifacts/analytics/edinet_analytics.duckdb
    │
-   │ ④ dashboard (DuckDB を直接読む)
-   ▼
-ブラウザ (Streamlit) — サイドバーで scope / worker_type を切替
+   ├─ ④a Streamlit dashboard (DuckDB を直接読む)
+   │     └─ ブラウザ (edinet dashboard)
+   │
+   └─ ④b Rails + React dashboard (PostgreSQL のビューを読む)
+         Rails /api/v1 → ブラウザ (Vite :5173)
 ```
 
 スキーマは Alembic マイグレーション (`0001` → `0002` → `0003`) で管理。
@@ -233,7 +235,16 @@ artifacts/analytics/
                                   analytics.metric_evidence の 2 テーブル
 ```
 
-## 4. dashboard — DuckDB を直接読む（dashboard/）
+## 4. dashboard — 可視化は 2 系統
+
+分析結果の見せ方は 2 つある。どちらもパイプラインへの書き込みはしない。
+
+| 系統 | データ源 | 起動 |
+| --- | --- | --- |
+| Streamlit | DuckDB スナップショット | `edinet dashboard` |
+| Rails + React | PostgreSQL `vw_company_year_metrics` | `cd web && bin/dev` |
+
+### 4a. Streamlit — DuckDB を直接読む（dashboard/）
 
 `edinet dashboard` を実行すると、Streamlit が起動して上記 DuckDB を直接読みます。
 
@@ -245,16 +256,15 @@ dashboard/__init__.py.launch_dashboard(host, port, duckdb_path)
        └─ dashboard/app.py
             │
             ├─ dashboard/components/filters.py の共通フィルタを描画
-            │   ├─ render_fiscal_year_filter (年度範囲スライダー)
-            │   ├─ render_dimension_filter   (scope / worker_type セレクタ)
-            │   └─ render_company_filter     (企業マルチセレクト)
+            │   ├─ render_single_year_filter (年度。既定は企業数最多年度)
+            │   └─ render_dimension_filter   (scope / worker_type)
             │
             └─ st.sidebar.radio でページを切り替え
-                 ├─ views/overview.py          (KPI / ステータス分布)
-                 ├─ views/financial.py         (推移・ランキング・統計)
-                 ├─ views/human_capital.py     (分布・散布図・推移、scope/worker_type 対応)
-                 ├─ views/data_quality.py      (カバレッジ・充足率)
-                 └─ views/company_spotlight.py (単一企業の peer 比較・理想値差分)
+                 ├─ views/company_lookup.py    (1 社の指標)
+                 ├─ views/industry_boxplot.py  (業種別箱ひげ)
+                 ├─ views/hc_ranking.py        (HC 上位/下位)
+                 ├─ views/size_vs_hc.py        (規模×HC)
+                 └─ views/company_spotlight.py (peer 比較・理想値差分)
                       │
                       └─ dashboard/data.py.query_* で
                          DuckDB に SELECT を発行（read-only）
@@ -264,6 +274,29 @@ dashboard/__init__.py.launch_dashboard(host, port, duckdb_path)
 
 `dashboard/data.py` の各関数は `@st.cache_data(ttl=300)` で 5 分間結果を
 キャッシュしているため、同じフィルタ条件での再レンダリングは高速です。
+
+### 4b. Rails + React — PostgreSQL を読む（web/）
+
+`cd web && bin/dev` で Rails `:3000` と Vite `:5173` が上がる。ブラウザは Vite を開き、`/api` は Rails へ proxy される。
+
+```text
+React (routes.tsx)
+  /companies/:code
+  /industry
+  /hc-ranking
+  /size-hc
+  /companies/:code/spotlight
+    │  GET /api/v1/...  (snake_case JSON)
+    ▼
+Rails controllers/api/v1
+    ▼
+app/queries/*          ← data.py の Postgres 移植
+    ▼
+vw_company_year_metrics
+```
+
+クエリの意味（持株会社の自動 scope、規模 peer の log ±0.3 dex、理想クラスタ）は
+Streamlit 側と同じ。JSON 形は `web/API_CONTRACT.md`。
 
 ## 5. backfill — 日付範囲の一括実行（jobs.py）
 

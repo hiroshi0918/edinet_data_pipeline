@@ -1,0 +1,1 @@
+export { routeObjects } from '@/routes'
