@@ -59,6 +59,7 @@ export const sheetFixture: SheetResponse = {
   edinet_code: 'E05206',
   company_name: '株式会社セプテーニ・ホールディングス',
   industry: 'サービス業',
+  securities_code: '4293',
   fiscal_year: 2024,
   level: 86,
   axes: [

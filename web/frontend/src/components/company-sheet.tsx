@@ -1,14 +1,17 @@
-// 最新有報のキャラクターシート。点を先に出し、実数はカードを開くと出る。
+// 最新有報の標本ラベル。点を先に出し、実数は行を開くと出る。
 import { useState } from 'react'
 import { Link } from 'react-router'
 
+import { CollectRule } from '@/components/collect-rule'
+import { CompanyMark } from '@/components/company-mark'
+import { SpecimenFigure } from '@/components/specimen-figure'
 import { HC_METRIC_LABELS } from '@/lib/constants'
 import {
   formatAge,
   formatManYen,
+  formatMultiple,
   formatOkuYen,
   formatPeople,
-  formatMultiple,
   formatPct,
   formatRatioAsPct,
   formatYears,
@@ -69,28 +72,21 @@ function psrBasisText(basis: SheetExpectationAxis['psr_basis']): string | null {
   return null
 }
 
-function Gauge({
-  score,
-  tone,
-}: {
-  score: number | null
-  tone: 'position' | 'disclosure'
-}) {
-  const width = score == null ? 0 : Math.min(100, Math.max(0, score))
+function DisclosureStamp({ score }: { score: number | null }) {
+  const marked = score != null
   return (
-    <div className="h-2 overflow-hidden rounded-full bg-[#d7e2e4]">
-      <div
-        className={cn(
-          'h-full motion-safe:transition-[width] motion-safe:duration-300',
-          tone === 'disclosure' ? 'bg-[#c46b3a]' : 'bg-[#1f6f68]',
-        )}
-        style={{ width: `${width}%` }}
-      />
-    </div>
+    <span
+      className={cn(
+        'inline-flex size-12 shrink-0 items-center justify-center rounded-full border-2 font-mono text-sm tabular-nums',
+        marked ? 'border-stamp text-stamp' : 'border-pencil text-pencil',
+      )}
+    >
+      {scoreText(score)}
+    </span>
   )
 }
 
-function AxisCard({
+function AxisRow({
   axis,
   open,
   onToggle,
@@ -101,62 +97,44 @@ function AxisCard({
 }) {
   const panelId = `sheet-axis-${axis.key}`
   return (
-    <div
-      className={cn(
-        'rounded-xl border border-[#d5e0e3] bg-white p-4',
-        axis.key === 'people' && 'sm:col-span-2',
-      )}
-    >
+    <div className="py-4">
       <button
         type="button"
-        className="w-full space-y-3 text-left"
+        className="w-full cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-habitat"
         aria-expanded={open}
         aria-controls={panelId}
         onClick={onToggle}
       >
-        <div className="flex items-baseline justify-between gap-3">
-          <div>
-            <p className="text-[11px] tracking-[0.14em] text-[#5c7380]">{axis.nickname}</p>
-            <p className="text-sm font-medium text-[#16303a]">{axis.label}</p>
-          </div>
-          <p className="text-4xl font-semibold tabular-nums tracking-tight text-[#16303a]">
-            {scoreText(axis.score)}
-          </p>
-        </div>
-        <Gauge score={axis.score} tone="position" />
-        {axis.key === 'people' ? <DisclosureGauge axis={axis} /> : null}
+        <span className="flex items-baseline justify-between gap-3">
+          <span>
+            <span className="block font-mono text-[11px] text-pencil">{axis.nickname}</span>
+            <span className="mt-0.5 block text-sm">{axis.label}</span>
+          </span>
+          <span className="font-mono text-4xl leading-none tabular-nums">{scoreText(axis.score)}</span>
+        </span>
+        <CollectRule score={axis.score} />
+        {axis.key === 'people' ? (
+          <span className="mt-3 flex items-center gap-3">
+            <DisclosureStamp score={axis.disclosure.score} />
+            <span>
+              <span className="block font-mono text-[11px] text-pencil">
+                {axis.disclosure.nickname}
+              </span>
+              <span className="mt-0.5 block text-sm">{axis.disclosure.label}</span>
+            </span>
+          </span>
+        ) : null}
       </button>
       {open ? (
-        <div id={panelId} className="mt-4 space-y-2 border-t border-[#e4ecee] pt-3 text-sm">
-          <p className="text-[#5c7380]">有報の値</p>
-          {axis.key === 'people' ? (
-            <PeopleFacts axis={axis} />
-          ) : (
-            <FaceFacts axis={axis} />
-          )}
-          {axis.score == null ? <p className="text-[#5c7380]">{blankReason(axis)}</p> : null}
+        <div id={panelId} className="mt-3 space-y-2 border-t border-pencil/30 pt-3 text-sm">
+          <p className="text-pencil">有報の値</p>
+          {axis.key === 'people' ? <PeopleFacts axis={axis} /> : <FaceFacts axis={axis} />}
+          {axis.score == null ? <p className="text-pencil">{blankReason(axis)}</p> : null}
           {axis.peer_count != null ? (
-            <p className="text-xs text-[#5c7380]">比べた会社 {axis.peer_count}社</p>
+            <p className="text-xs text-pencil">比べた会社 {axis.peer_count}社</p>
           ) : null}
         </div>
       ) : null}
-    </div>
-  )
-}
-
-function DisclosureGauge({ axis }: { axis: SheetPeopleAxis }) {
-  const disclosure = axis.disclosure
-  return (
-    <div className="space-y-1">
-      <div className="flex items-baseline justify-between text-xs text-[#5c7380]">
-        <span>
-          {disclosure.nickname} <span className="text-[#16303a]">{disclosure.label}</span>
-        </span>
-        <span className="text-lg font-semibold tabular-nums text-[#16303a]">
-          {scoreText(disclosure.score)}
-        </span>
-      </div>
-      <Gauge score={disclosure.score} tone="disclosure" />
     </div>
   )
 }
@@ -165,11 +143,11 @@ function FaceFacts({ axis }: { axis: SheetPercentileAxis | SheetExpectationAxis 
   const basis = axis.key === 'expectation' ? psrBasisText(axis.psr_basis) : null
   return (
     <div className="space-y-1">
-      <p className="text-lg font-medium tabular-nums text-[#16303a]">{formatFaceValue(axis)}</p>
+      <p className="font-mono text-lg tabular-nums text-ink">{formatFaceValue(axis)}</p>
       {axis.key === 'expectation' && axis.per != null ? (
-        <p className="tabular-nums text-[#16303a]">実績PER {formatMultiple(axis.per)}</p>
+        <p className="font-mono tabular-nums text-ink">実績PER {formatMultiple(axis.per)}</p>
       ) : null}
-      {basis ? <p className="text-[#5c7380]">{basis}</p> : null}
+      {basis ? <p className="text-pencil">{basis}</p> : null}
     </div>
   )
 }
@@ -179,13 +157,13 @@ function PeopleFacts({ axis }: { axis: SheetPeopleAxis }) {
     <dl className="space-y-1">
       {axis.metrics.map((metric) => (
         <div key={metric.key} className="flex justify-between gap-3">
-          <dt className="text-[#5c7380]">{HC_METRIC_LABELS[metric.key]}</dt>
-          <dd className="tabular-nums text-[#16303a]">{formatPct(metric.value)}</dd>
+          <dt className="text-pencil">{HC_METRIC_LABELS[metric.key]}</dt>
+          <dd className="font-mono tabular-nums text-ink">{formatPct(metric.value)}</dd>
         </div>
       ))}
       <div className="flex justify-between gap-3">
-        <dt className="text-[#5c7380]">平均年齢</dt>
-        <dd className="tabular-nums text-[#16303a]">{formatAge(axis.average_age)}</dd>
+        <dt className="text-pencil">平均年齢</dt>
+        <dd className="font-mono tabular-nums text-ink">{formatAge(axis.average_age)}</dd>
       </div>
     </dl>
   )
@@ -195,40 +173,48 @@ export function CompanySheet({ sheet }: { sheet: SheetResponse }) {
   const [openKey, setOpenKey] = useState<string | null>(null)
 
   return (
-    <section className="space-y-6 rounded-2xl bg-[#e7eef2] p-5 sm:p-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-sm text-[#5c7380]">
-            {sheet.industry ?? '業種なし'}
-            {sheet.fiscal_year != null ? ` · ${sheet.fiscal_year}年度` : ''}
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight text-[#16303a]">
-            {sheet.company_name}
-          </h1>
-          <p className="font-mono text-xs text-[#5c7380]">{sheet.edinet_code}</p>
-          <Link
-            className="mt-2 inline-block text-sm font-medium text-[#1f6f68] hover:underline"
-            to={`/companies/${sheet.edinet_code}/story`}
-          >
-            歩みを見る
-          </Link>
+    <section className="plate px-5 pt-5 pr-16 pb-6 sm:px-8 sm:pt-6 sm:pr-24 sm:pb-8">
+      {sheet.fiscal_year != null ? (
+        <p className="text-right font-mono text-xs text-pencil">{sheet.fiscal_year}年度</p>
+      ) : null}
+      <div className="mt-4 grid items-start gap-8 lg:grid-cols-[minmax(18rem,30rem)_minmax(0,1fr)] lg:gap-10">
+        <div className="lg:sticky lg:top-6 lg:self-start">
+          <SpecimenFigure industry={sheet.industry} level={sheet.level} />
         </div>
-        <div className="text-right">
-          <p className="text-[11px] tracking-[0.16em] text-[#5c7380]">総合</p>
-          <p className="text-6xl font-semibold tabular-nums leading-none text-[#16303a]">
-            {scoreText(sheet.level)}
-          </p>
+        <div className="min-w-0">
+          <div className="flex items-start justify-between gap-4">
+            <p className="font-mono text-xs text-pencil">{sheet.edinet_code}</p>
+            <div className="shrink-0 text-right">
+              <p className="font-mono text-[11px] text-pencil">総合</p>
+              <p className="font-mono text-5xl leading-none tabular-nums text-ink sm:text-6xl">
+                {scoreText(sheet.level)}
+              </p>
+            </div>
+          </div>
+          <div className="mt-2 flex items-start gap-3 sm:gap-4">
+            <CompanyMark name={sheet.company_name} securitiesCode={sheet.securities_code} />
+            <div className="min-w-0 flex-1">
+              <h1 className="font-display text-3xl leading-tight text-ink sm:text-4xl">{sheet.company_name}</h1>
+              <p className="mt-2 text-sm text-pencil">{sheet.industry ?? '業種なし'}</p>
+              <Link
+                className="mt-3 inline-block text-sm text-ink underline decoration-pencil underline-offset-4 hover:decoration-ink focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-habitat"
+                to={`/companies/${sheet.edinet_code}/story`}
+              >
+                歩みを見る
+              </Link>
+            </div>
+          </div>
+          <div className="mt-6 divide-y divide-pencil/30 border-y border-pencil/30">
+            {sheet.axes.map((axis) => (
+              <AxisRow
+                key={axis.key}
+                axis={axis}
+                open={openKey === axis.key}
+                onToggle={() => setOpenKey((current) => (current === axis.key ? null : axis.key))}
+              />
+            ))}
+          </div>
         </div>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {sheet.axes.map((axis) => (
-          <AxisCard
-            key={axis.key}
-            axis={axis}
-            open={openKey === axis.key}
-            onToggle={() => setOpenKey((current) => (current === axis.key ? null : axis.key))}
-          />
-        ))}
       </div>
     </section>
   )

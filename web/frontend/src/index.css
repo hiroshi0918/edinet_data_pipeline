@@ -1,14 +1,29 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
+@import "@fontsource/ibm-plex-sans-jp/japanese-400.css";
+@import "@fontsource/ibm-plex-sans-jp/latin-400.css";
+@import "@fontsource/ibm-plex-sans-jp/japanese-500.css";
+@import "@fontsource/ibm-plex-sans-jp/latin-500.css";
+@import "@fontsource/ibm-plex-mono/latin-400.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
+@import "@fontsource/shippori-mincho/japanese-500.css";
+@import "@fontsource/shippori-mincho/latin-500.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Geist Variable', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', ui-sans-serif, system-ui, sans-serif;
-    --font-mono: ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
+    --font-sans: 'IBM Plex Sans JP', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
+    --font-display: 'Shippori Mincho', 'Yu Mincho', 'Hiragino Mincho ProN', serif;
+    --color-drawer: var(--drawer);
+    --color-ink: var(--ink);
+    --color-label: var(--label);
+    --color-habitat: var(--habitat);
+    --color-stamp: var(--stamp);
+    --color-brass: var(--brass);
+    --color-pencil: var(--pencil);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -50,72 +65,45 @@
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.48 0.12 232);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.205 0.02 250);
-    --sidebar-foreground: oklch(0.97 0 0);
-    --sidebar-primary: oklch(0.72 0.12 232);
-    --sidebar-primary-foreground: oklch(0.145 0 0);
-    --sidebar-accent: oklch(0.32 0.03 250);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.72 0.12 232);
-}
-
-.dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --drawer: #e4e7e1;
+    --ink: #1c2421;
+    --label: #f4f3ee;
+    --habitat: #2f5d50;
+    --stamp: #8c3a2f;
+    --brass: #a6843d;
+    --pencil: #7c766c;
+    --background: var(--drawer);
+    --foreground: var(--ink);
+    --card: var(--label);
+    --card-foreground: var(--ink);
+    --popover: var(--label);
+    --popover-foreground: var(--ink);
+    --primary: var(--habitat);
+    --primary-foreground: var(--label);
+    --secondary: #d9ddd6;
+    --secondary-foreground: var(--ink);
+    --muted: #d9ddd6;
+    --muted-foreground: var(--pencil);
+    --accent: #d9ddd6;
+    --accent-foreground: var(--ink);
+    --destructive: var(--ink);
+    --border: #c9c4b8;
+    --input: #c9c4b8;
+    --ring: var(--habitat);
+    --chart-1: var(--habitat);
+    --chart-2: var(--ink);
+    --chart-3: var(--pencil);
+    --chart-4: #d9ddd6;
+    --chart-5: var(--label);
+    --radius: 2px;
+    --sidebar: var(--drawer);
+    --sidebar-foreground: var(--ink);
+    --sidebar-primary: var(--habitat);
+    --sidebar-primary-foreground: var(--label);
+    --sidebar-accent: #d5d8d0;
+    --sidebar-accent-foreground: var(--ink);
+    --sidebar-border: #c9c4b8;
+    --sidebar-ring: var(--habitat);
 }
 
 @layer base {
@@ -128,4 +116,94 @@
   html {
     @apply font-sans;
     }
+}
+
+/* 標本ラベル。右上の欠けは抽斗のつまみ。採集尺の長さが点数。 */
+.plate {
+  position: relative;
+  background: var(--label);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+  clip-path: polygon(0 0, calc(100% - 3.25rem) 0, 100% 3.25rem, 100% 100%, 0 100%);
+}
+
+@media (min-width: 40rem) {
+  .plate {
+    clip-path: polygon(0 0, calc(100% - 4.75rem) 0, 100% 4.75rem, 100% 100%, 0 100%);
+  }
+}
+
+.collect-rule {
+  display: block;
+}
+
+.collect-rule-track {
+  position: relative;
+  display: block;
+  height: 12px;
+  background: color-mix(in srgb, var(--pencil) 22%, var(--label));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 45%, transparent);
+}
+
+.collect-rule-track::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--ink), var(--ink)),
+    linear-gradient(var(--ink), var(--ink)),
+    linear-gradient(var(--ink), var(--ink));
+  background-size: 1px 100%, 1px 100%, 1px 100%;
+  background-position: 25% 0, 50% 0, 75% 0;
+  background-repeat: no-repeat;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.collect-rule-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--habitat);
+  transform-origin: left center;
+  animation: rule-draw 700ms ease-out both;
+}
+
+.collect-rule-pin {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  margin-left: -6px;
+  border-radius: 999px;
+  background: var(--brass);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+
+.collect-rule-ticks {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1;
+  color: var(--pencil);
+}
+
+@keyframes rule-draw {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collect-rule-fill {
+    animation: none;
+    transform: none;
+  }
 }

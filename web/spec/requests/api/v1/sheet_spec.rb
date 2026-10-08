@@ -43,6 +43,7 @@ RSpec.describe "Api::V1::Companies sheet", type: :request do
       expect(response).to have_http_status(:ok)
       expect(json_body["fiscal_year"]).to be_nil
       expect(json_body["level"]).to be_nil
+      expect(json_body["securities_code"]).to be_nil
       expect(axis(json_body, "disclosure")["score"]).to be_nil
       expect(json_body["axes"].map { |item| item["key"] }).not_to include("disclosure")
     end
@@ -66,7 +67,7 @@ RSpec.describe "Api::V1::Companies sheet", type: :request do
     end
 
     it "uses the company's latest fiscal year" do
-      company = create(:company, edinet_code: "E00010", industry: "情報・通信業")
+      company = create(:company, edinet_code: "E00010", industry: "情報・通信業", securities_code: "6758")
       create(:financial_report, company: company, fiscal_year: 2023, sales: 1, submitted_date: Date.new(2024, 6, 1))
       create(:financial_report, company: company, fiscal_year: 2024, sales: 9, submitted_date: Date.new(2025, 6, 1))
 
@@ -74,6 +75,7 @@ RSpec.describe "Api::V1::Companies sheet", type: :request do
 
       expect(axis(json_body, "sales")["value"]).to eq(9)
       expect(json_body["fiscal_year"]).to eq(2024)
+      expect(json_body["securities_code"]).to eq("6758")
     end
 
     it "leaves an axis blank when fewer than five peers have a value, and still scores disclosure" do

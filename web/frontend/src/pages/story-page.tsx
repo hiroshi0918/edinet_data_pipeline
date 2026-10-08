@@ -24,19 +24,19 @@ export function StoryPage() {
         empty="歩みが見つかりません。"
       >
         {story ? (
-          <section className="space-y-6 rounded-2xl bg-[#e7eef2] p-5 sm:p-6">
+          <section className="space-y-6">
             <div>
               <Link
-                className="text-sm font-medium text-[#1f6f68] hover:underline"
+                className="text-sm text-ink underline decoration-pencil underline-offset-4 hover:decoration-ink focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-habitat"
                 to={`/companies/${story.edinet_code}`}
               >
                 シートに戻る
               </Link>
-              <p className="mt-3 text-sm text-[#5c7380]">
+              <p className="mt-3 text-sm text-pencil">
                 {story.industry ?? '業種なし'}
                 {story.fiscal_year != null ? ` · ${story.fiscal_year}年度までの10年` : ''}
               </p>
-              <h1 className="text-2xl font-semibold tracking-tight text-[#16303a]">
+              <h1 className="font-display text-3xl leading-tight text-ink sm:text-4xl">
                 {story.company_name}の歩み
               </h1>
             </div>
@@ -66,34 +66,34 @@ export function StoryPage() {
                 }))}
               />
             </div>
-            <article className="rounded-xl border border-[#d5e0e3] bg-white p-4">
-              <h2 className="text-sm font-medium text-[#16303a]">事業</h2>
+            <article className="border border-border bg-label p-4">
+              <h2 className="text-sm font-medium text-ink">事業</h2>
               {story.narrative.business ? (
                 <>
-                  <p className="mt-2 text-sm leading-6 text-[#16303a]">
+                  <p className="mt-2 text-sm leading-6 text-ink">
                     {story.narrative.business.text}
                   </p>
-                  <details className="mt-3 text-sm text-[#5c7380]">
+                  <details className="mt-3 text-sm text-pencil">
                     <summary>原文</summary>
                     <p className="mt-2 whitespace-pre-wrap">{story.narrative.business.source}</p>
                   </details>
                 </>
               ) : (
-                <p className="mt-2 text-sm text-[#5c7380]">事業の内容は、この有報から取れていません。</p>
+                <p className="mt-2 text-sm text-pencil">事業の内容は、この有報から取れていません。</p>
               )}
             </article>
-            <article className="rounded-xl border border-[#d5e0e3] bg-white p-4">
-              <h2 className="text-sm font-medium text-[#16303a]">これまでの歩み</h2>
+            <article className="border border-border bg-label p-4">
+              <h2 className="text-sm font-medium text-ink">これまでの歩み</h2>
               {story.narrative.history.length === 0 ? (
-                <p className="mt-2 text-sm text-[#5c7380]">沿革は、この有報から取れていません。</p>
+                <p className="mt-2 text-sm text-pencil">沿革は、この有報から取れていません。</p>
               ) : (
                 <ol className="mt-3 space-y-3">
                   {story.narrative.history.map((beat) => (
                     <li key={`${beat.label}-${beat.text}`} className="text-sm leading-6">
                       {beat.label ? (
-                        <p className="text-xs tracking-wide text-[#5c7380]">{beat.label}</p>
+                        <p className="text-xs tracking-wide text-pencil">{beat.label}</p>
                       ) : null}
-                      <p className="text-[#16303a]">{beat.text}</p>
+                      <p className="text-ink">{beat.text}</p>
                     </li>
                   ))}
                 </ol>

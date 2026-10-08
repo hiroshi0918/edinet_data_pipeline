@@ -230,7 +230,7 @@ graph LR
 │   ├── app/controllers/api/v1/
 │   ├── API_CONTRACT.md   # JSON 契約
 │   └── frontend/         # Vite + React Router
-├── alembic/              # DB migration (0001〜0007)。web 側は migrate しない
+├── alembic/              # DB migration (0001〜0010)。web 側は migrate しない
 ├── airflow/dags/         # 任意の Airflow DAG
 ├── tests/                # Python unit / integration
 ├── notebooks/            # 01_eda_basics, 02_extraction_quality_check

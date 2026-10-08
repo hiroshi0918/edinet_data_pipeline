@@ -41,6 +41,13 @@ bin/dev
 - API: `http://localhost:3000/api/v1/meta`
 - UI: `http://localhost:5173`（Vite が `/api` を Rails へ proxy）
 
+シートの企業ロゴは [logo.dev](https://www.logo.dev/) の画像 URL。`frontend/.env` に publishable key（`pk_`）だけ置く。secret key は使わない。未設定、証券コードなし、ロゴ無しのときは社名の頭文字になる。
+
+```bash
+# frontend/.env
+VITE_LOGO_DEV_PUBLISHABLE_KEY=pk_...
+```
+
 別々に起動する場合:
 
 ```bash

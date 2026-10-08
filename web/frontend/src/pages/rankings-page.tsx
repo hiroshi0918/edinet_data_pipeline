@@ -31,7 +31,7 @@ export function RankingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        kicker="Ranking"
+        kicker="点の順"
         title="ランキング"
         description="会社シートと同じ点で並べます。業種と軸を変えると、その中での順になります。"
       />
@@ -40,9 +40,9 @@ export function RankingsPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap gap-4">
               <label className="text-sm">
-                <span className="mr-2 text-[#5c7380]">業種</span>
+                <span className="mr-2 text-pencil">業種</span>
                 <select
-                  className="rounded-md border border-[#d5e0e3] bg-white px-2 py-1"
+                  className="border border-border bg-label px-2 py-1"
                   aria-label="業種"
                   value={industry}
                   onChange={(event) => setIndustry(event.target.value)}
@@ -56,9 +56,9 @@ export function RankingsPage() {
                 </select>
               </label>
               <label className="text-sm">
-                <span className="mr-2 text-[#5c7380]">軸</span>
+                <span className="mr-2 text-pencil">軸</span>
                 <select
-                  className="rounded-md border border-[#d5e0e3] bg-white px-2 py-1"
+                  className="border border-border bg-label px-2 py-1"
                   aria-label="軸"
                   value={axis}
                   onChange={(event) => setAxis(event.target.value)}
@@ -71,7 +71,7 @@ export function RankingsPage() {
                 </select>
               </label>
             </div>
-            <div className="overflow-hidden rounded-2xl bg-[#e7eef2]">
+            <div className="overflow-x-auto bg-label">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -84,17 +84,17 @@ export function RankingsPage() {
                 <TableBody>
                   {data.companies.map((company, index) => (
                     <TableRow key={company.edinet_code}>
-                      <TableCell className="tabular-nums text-[#5c7380]">{index + 1}</TableCell>
+                      <TableCell className="tabular-nums text-pencil">{index + 1}</TableCell>
                       <TableCell>
                         <Link
-                          className="font-medium text-[#16303a] hover:underline"
+                          className="text-ink underline decoration-pencil underline-offset-4 hover:decoration-ink focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-habitat"
                           to={`/companies/${company.edinet_code}`}
                         >
                           {company.company_name}
                         </Link>
                       </TableCell>
                       <TableCell>{company.industry ?? '—'}</TableCell>
-                      <TableCell className="text-right text-lg font-semibold tabular-nums text-[#16303a]">
+                      <TableCell className="text-right font-mono text-lg tabular-nums text-ink">
                         {scoreText(company.score)}
                       </TableCell>
                     </TableRow>

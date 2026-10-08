@@ -94,13 +94,14 @@ KPI の件数は、既定の次元（`reporting_company` × `all`）で数える
 
 ### GET /api/v1/companies/:code/sheet
 
-最新有報年度のキャラクターシート。年度、scope、worker_type は受け取らない。人的資本は `reporting_company` × `all` だけ。比較相手はその年度の同じ業種である。軸ごとに、比較相手の非欠損が 5 社未満なら `score` は null。点は「自分以下の社数 / 比較社数」を 100 点満点に丸めた値。`level` は、score がある軸の平均。開示の 0 は平均に入れる。期待は、株価が揃うまで null。業種が無い会社は、点も level も null。未知のコードは 404。
+最新有報年度のキャラクターシート。年度、scope、worker_type は受け取らない。人的資本は `reporting_company` × `all` だけ。比較相手はその年度の同じ業種である。軸ごとに、比較相手の非欠損が 5 社未満なら `score` は null。点は「自分以下の社数 / 比較社数」を 100 点満点に丸めた値。`level` は、score がある軸の平均。開示の 0 は平均に入れる。期待は、株価が揃うまで null。業種が無い会社は、点も level も null。未知のコードは 404。`securities_code` は companies の証券コードで、無いときは null。点の計算には使わない。
 
 ```json
 {
   "edinet_code": "E05206",
   "company_name": "株式会社セプテーニ・ホールディングス",
   "industry": "サービス業",
+  "securities_code": "4293",
   "fiscal_year": 2024,
   "level": 86,
   "axes": [

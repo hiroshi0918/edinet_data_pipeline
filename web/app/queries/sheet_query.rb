@@ -142,6 +142,8 @@ class SheetQuery < ApplicationQuery
       return {} if doc_ids.empty?
 
       placeholders = ([ "?" ] * doc_ids.length).join(", ")
+      # WHERE は ix_raw_edinet_facts_reported_per の条件と揃える。
+      # doc_id だけの索引だと、書類内の当期以外の行まで読む。
       select_all(<<~SQL, *doc_ids).to_h do |row|
         SELECT DISTINCT ON (doc_id) doc_id, raw_value
           FROM raw_edinet_facts
@@ -222,6 +224,7 @@ class SheetQuery < ApplicationQuery
         edinet_code: company.edinet_code,
         company_name: company.company_name,
         industry: company.industry,
+        securities_code: company.securities_code.presence,
         fiscal_year: year,
         level: level_for(axes),
         axes: nest_disclosure(axes)

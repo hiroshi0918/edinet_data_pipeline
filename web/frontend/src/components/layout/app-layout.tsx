@@ -1,25 +1,21 @@
-// 左サイドバー + メイン。全ページ共通の枠。
+// 抽斗の地に、左の背表紙と本文を載せる。
+import type { CSSProperties } from 'react'
 import { Outlet } from 'react-router'
 
 import { AppSidebar } from '@/components/layout/app-sidebar'
-import { Separator } from '@/components/ui/separator'
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from '@/components/ui/sidebar'
+import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
+
+const spineWidth = { '--sidebar-width': '13rem' } as CSSProperties
 
 export function AppLayout() {
   return (
-    <SidebarProvider>
+    <SidebarProvider style={spineWidth}>
       <AppSidebar />
-      <SidebarInset>
-        <header className="flex h-12 items-center gap-2 border-b px-4">
-          <SidebarTrigger />
-          <Separator orientation="vertical" className="h-4" />
-          <span className="text-sm text-muted-foreground">有報から読む会社図鑑</span>
+      <SidebarInset className="bg-drawer">
+        <header className="flex h-10 items-center px-3 md:px-4">
+          <SidebarTrigger className="text-ink" />
         </header>
-        <div className="flex-1 space-y-6 p-6">
+        <div className="flex-1 px-4 pb-12 md:px-8">
           <Outlet />
         </div>
       </SidebarInset>

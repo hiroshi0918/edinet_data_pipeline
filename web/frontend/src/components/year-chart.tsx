@@ -18,9 +18,9 @@ export function YearChart({
   const pad = 18
   if (present.length === 0) {
     return (
-      <div className="rounded-xl border border-[#d5e0e3] bg-white p-4">
-        <p className="text-sm font-medium text-[#16303a]">{title}</p>
-        <p className="mt-2 text-sm text-[#5c7380]">この10年の有報には値がありません。</p>
+      <div className="border border-border bg-label p-4">
+        <p className="text-sm text-ink">{title}</p>
+        <p className="mt-2 text-sm text-pencil">この10年の有報には値がありません。</p>
       </div>
     )
   }
@@ -44,29 +44,29 @@ export function YearChart({
   if (current.length > 1) segments.push(current.join(' '))
 
   return (
-    <div className="rounded-xl border border-[#d5e0e3] bg-white p-4">
-      <p className="text-sm font-medium text-[#16303a]">{title}</p>
+    <div className="border border-border bg-label p-4">
+      <p className="text-sm text-ink">{title}</p>
       <svg viewBox={`0 0 ${width} ${height}`} className="mt-2 w-full" role="img" aria-label={title}>
         {segments.map((segment) => (
           <polyline
             key={segment}
             fill="none"
-            stroke="#1f6f68"
+            stroke="#2f5d50"
             strokeWidth="2"
             points={segment}
           />
         ))}
         {points.map((point, index) =>
           point.value == null ? null : (
-            <circle key={point.fiscal_year} cx={xFor(index)} cy={yFor(point.value)} r="3" fill="#16303a" />
+            <circle key={point.fiscal_year} cx={xFor(index)} cy={yFor(point.value)} r="3" fill="#1c2421" />
           ),
         )}
       </svg>
-      <div className="flex justify-between text-[11px] text-[#5c7380]">
+      <div className="flex justify-between text-[11px] text-pencil">
         <span>{points[0]?.fiscal_year}</span>
         <span>{points[points.length - 1]?.fiscal_year}</span>
       </div>
-      <p className="mt-1 text-xs text-[#5c7380]">
+      <p className="mt-1 text-xs text-pencil">
         最新 {formatLatest(points, kind)} · 値がある年 {present.length}
       </p>
     </div>

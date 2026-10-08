@@ -1,12 +1,10 @@
-// 会社図鑑の入口。社名を選ぶと最新有報のシートを出す。
+// 会社図鑑の入口。社名を選ぶと最新有報の札が出る。
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router'
 
 import { CompanyCombobox } from '@/components/company-combobox'
 import { CompanySheet } from '@/components/company-sheet'
-import { PageHeader } from '@/components/page-header'
 import { QueryState } from '@/components/query-state'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { fetchSheet } from '@/lib/api'
 
 export function CompaniesPage() {
@@ -18,44 +16,47 @@ export function CompaniesPage() {
     enabled: Boolean(code),
   })
 
+  const search = (
+    <div className="max-w-xl space-y-1.5">
+      <p className="font-mono text-[11px] text-pencil">社名</p>
+      <CompanyCombobox
+        searchRemote
+        placeholder="社名を選ぶ"
+        selectedCode={code}
+        selectedLabel={
+          sheetQuery.data
+            ? `${sheetQuery.data.company_name} (${sheetQuery.data.edinet_code})`
+            : undefined
+        }
+        onSelect={(company) => navigate(`/companies/${company.edinet_code}`)}
+      />
+    </div>
+  )
+
+  if (!code) {
+    return (
+      <section className="plate max-w-3xl px-5 py-8 pr-16 sm:px-8 sm:py-10 sm:pr-24">
+        <p className="font-mono text-[11px] text-pencil">図鑑</p>
+        <h1 className="mt-3 text-3xl text-ink sm:text-4xl">会社を開く</h1>
+        <p className="mt-3 max-w-md text-sm leading-6 text-pencil">
+          社名を選ぶと、最新の有報が1枚の札になります。
+        </p>
+        <div className="mt-8">{search}</div>
+      </section>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      {!code ? (
-        <PageHeader
-          kicker="Zukan"
-          title="会社を開く"
-          description="社名を選ぶと、最新の有報から業種内の位置がシートになります。"
-        />
-      ) : null}
-
-      <div className="max-w-xl space-y-1.5">
-        <p className="text-sm font-medium">社名</p>
-        <CompanyCombobox
-          searchRemote
-          selectedCode={code}
-          selectedLabel={
-            sheetQuery.data
-              ? `${sheetQuery.data.company_name} (${sheetQuery.data.edinet_code})`
-              : undefined
-          }
-          onSelect={(company) => navigate(`/companies/${company.edinet_code}`)}
-        />
-      </div>
-
-      {!code ? (
-        <Alert>
-          <AlertDescription>社名を選んでください。</AlertDescription>
-        </Alert>
-      ) : (
-        <QueryState
-          isLoading={sheetQuery.isLoading}
-          error={sheetQuery.error}
-          isEmpty={!sheetQuery.data}
-          empty="指定した会社のシートが見つかりません。"
-        >
-          {sheetQuery.data ? <CompanySheet sheet={sheetQuery.data} /> : null}
-        </QueryState>
-      )}
+      {search}
+      <QueryState
+        isLoading={sheetQuery.isLoading}
+        error={sheetQuery.error}
+        isEmpty={!sheetQuery.data}
+        empty="指定した会社のシートが見つかりません。"
+      >
+        {sheetQuery.data ? <CompanySheet sheet={sheetQuery.data} /> : null}
+      </QueryState>
     </div>
   )
 }

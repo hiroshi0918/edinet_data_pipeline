@@ -40,11 +40,13 @@ test('/ は /companies にリダイレクトする', async () => {
 })
 
 test('/companies/:code はシートの点を出す', async () => {
-  renderAt('/companies/E05206')
+  const { container } = renderAt('/companies/E05206')
   expect(
     await screen.findByRole('heading', { name: '株式会社セプテーニ・ホールディングス' }),
   ).toBeInTheDocument()
   expect(screen.getByText('86')).toBeInTheDocument()
+  expect(screen.getByText('傘・おや')).toBeInTheDocument()
+  expect(container.querySelectorAll('.collect-rule')).toHaveLength(7)
   expect(screen.getByRole('button', { name: /規模\s*売上高/ })).toHaveTextContent('80')
   expect(screen.getByText('開示')).toBeInTheDocument()
   expect(screen.getByText('67')).toBeInTheDocument()

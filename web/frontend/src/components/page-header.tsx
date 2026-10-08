@@ -10,11 +10,9 @@ export function PageHeader({
 }) {
   return (
     <div className="space-y-1">
-      <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
-        {kicker}
-      </p>
-      <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-      <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
+      <p className="font-mono text-[11px] text-pencil">{kicker}</p>
+      <h1 className="text-2xl text-ink">{title}</h1>
+      <p className="max-w-3xl text-sm text-pencil">{description}</p>
     </div>
   )
 }

@@ -39,7 +39,7 @@ export function Nikkei225Page() {
   return (
     <div className="space-y-6">
       <PageHeader
-        kicker="Nikkei 225"
+        kicker="225銘柄"
         title="日経225"
         description="構成銘柄を、図鑑の総合点が高い順に並べます。"
       />
@@ -47,13 +47,13 @@ export function Nikkei225Page() {
         {query.data ? (
           <div className="space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-3">
-              <p className="text-sm text-[#5c7380]">
+              <p className="text-sm text-pencil">
                 {query.data.as_of} 時点 · 図鑑にある {withSheet} / {companies.length} 社
               </p>
               <label className="text-sm">
-                <span className="mr-2 text-[#5c7380]">日経の業種</span>
+                <span className="mr-2 text-pencil">日経の業種</span>
                 <select
-                  className="rounded-md border border-[#d5e0e3] bg-white px-2 py-1"
+                  className="border border-border bg-label px-2 py-1"
                   value={sector}
                   aria-label="日経の業種"
                   onChange={(event) => setSector(event.target.value)}
@@ -67,7 +67,7 @@ export function Nikkei225Page() {
                 </select>
               </label>
             </div>
-            <div className="overflow-hidden rounded-2xl bg-[#e7eef2]">
+            <div className="overflow-x-auto bg-label">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -85,7 +85,7 @@ export function Nikkei225Page() {
                 </TableBody>
               </Table>
             </div>
-            <p className="text-xs text-[#5c7380]">{query.data.source_note}</p>
+            <p className="text-xs text-pencil">{query.data.source_note}</p>
           </div>
         ) : null}
       </QueryState>
@@ -96,28 +96,31 @@ export function Nikkei225Page() {
 function NikkeiRow({ company, rank }: { company: Nikkei225Company; rank: number }) {
   const name = (
     <span>
-      <span className="font-medium text-[#16303a]">{company.company_name}</span>
-      <span className="ml-2 font-mono text-xs text-[#5c7380]">{company.securities_code}</span>
+      <span className="font-medium text-ink">{company.company_name}</span>
+      <span className="ml-2 font-mono text-xs text-pencil">{company.securities_code}</span>
     </span>
   )
   return (
     <TableRow>
-      <TableCell className="tabular-nums text-[#5c7380]">{rank}</TableCell>
+      <TableCell className="tabular-nums text-pencil">{rank}</TableCell>
       <TableCell>
         {company.has_sheet && company.edinet_code ? (
-          <Link className="hover:underline" to={`/companies/${company.edinet_code}`}>
+          <Link
+            className="text-ink underline decoration-pencil underline-offset-4 hover:decoration-ink focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-habitat"
+            to={`/companies/${company.edinet_code}`}
+          >
             {name}
           </Link>
         ) : (
           <span>
             {name}
-            <span className="ml-2 text-xs text-[#5c7380]">図鑑に無い</span>
+            <span className="ml-2 text-xs text-pencil">図鑑に無い</span>
           </span>
         )}
       </TableCell>
       <TableCell>{company.nikkei_sector}</TableCell>
       <TableCell>{company.industry ?? '—'}</TableCell>
-      <TableCell className="text-right text-lg font-semibold tabular-nums text-[#16303a]">
+      <TableCell className="text-right font-mono text-lg tabular-nums text-ink">
         {levelText(company.level)}
       </TableCell>
     </TableRow>

@@ -176,6 +176,7 @@ export type SheetResponse = {
   edinet_code: string
   company_name: string
   industry: string | null
+  securities_code: string | null
   fiscal_year: number | null
   level: number | null
   axes: SheetAxis[]
