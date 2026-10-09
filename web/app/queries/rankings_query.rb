@@ -9,7 +9,7 @@ class RankingsQuery
 
     # 並べるのは証券コードのある上場会社だけ。有報の提出義務が無い法人などは、
     # 比べる相手がいないまま点が付き、上位に紛れ込むため外す。
-    companies = Company.where.not(securities_code: [ nil, "" ]).order(:edinet_code).to_a
+    companies = Company.with_securities_code.order(:edinet_code).to_a
     industries = companies.filter_map(&:industry).uniq.sort
     selected = industry.present? ? companies.select { |company| company.industry == industry } : companies
     summaries = SheetQuery.summaries_for(selected.map(&:edinet_code))

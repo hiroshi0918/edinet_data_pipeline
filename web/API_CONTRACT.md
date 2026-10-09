@@ -146,7 +146,7 @@ KPI の件数は、既定の次元（`reporting_company` × `all`）で数える
 
 ### GET /api/v1/industries
 
-表紙の業種の目次。companies を業種で数える。業種が無い会社は数えない。並びは業種名の順。数え方は `GET /rankings?industry=` の社数と同じ。
+表紙の業種の目次。証券コードのある会社を業種で数える。業種が無い会社と、証券コードが無い会社は数えない。並びは業種名の順。数え方は `GET /rankings?industry=` の社数と同じ。
 
 ```json
 {
@@ -158,7 +158,7 @@ KPI の件数は、既定の次元（`reporting_company` × `all`）で数える
 
 ### GET /api/v1/rankings?industry=&axis=
 
-図鑑のランキング。`axis` を省略すると総合点。`sales`、`employee_count`、`operating_margin`、`people`、`average_annual_salary`、`average_years_of_service`、`expectation`、`disclosure` のいずれかなら、その軸の点で並べる。点がない会社は末尾。`industry` はその業種だけ。未知の `axis` は 400。各行の `edinet_code` はシートの会社コード。`securities_code` は companies の証券コードで、ロゴに使う。無いときは null。点の計算には使わない。
+図鑑のランキング。証券コードのある会社だけを並べる。`axis` を省略すると総合点。`sales`、`employee_count`、`operating_margin`、`people`、`average_annual_salary`、`average_years_of_service`、`expectation`、`disclosure` のいずれかなら、その軸の点で並べる。点がない会社は末尾。`industry` はその業種だけ。未知の `axis` は 400。各行の `edinet_code` はシートの会社コード。`securities_code` は companies の証券コードで、ロゴに使う。点の計算には使わない。開示の点は同業との比べではなく、人の3指標が揃っている割合。
 
 ```json
 {

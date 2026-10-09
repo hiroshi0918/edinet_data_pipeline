@@ -1,11 +1,14 @@
 require "rails_helper"
 
 RSpec.describe "GET /api/v1/industries", type: :request do
-  it "counts companies per industry in name order and skips companies without one" do
-    create(:company, industry: "輸送用機器")
-    create(:company, industry: "輸送用機器")
-    create(:company, industry: "水産・農林業")
-    create(:company, industry: nil)
+  it "counts listed companies per industry and skips blanks" do
+    create(:company, industry: "輸送用機器", securities_code: "7203")
+    create(:company, industry: "輸送用機器", securities_code: "7267")
+    create(:company, industry: "水産・農林業", securities_code: "1332")
+    create(:company, industry: nil, securities_code: "9999")
+    create(:company, industry: "輸送用機器", securities_code: nil)
+    create(:company, industry: "サービス業", securities_code: "")
+    create(:company, industry: "サービス業", securities_code: "   ")
 
     get "/api/v1/industries", as: :json
 
@@ -14,6 +17,17 @@ RSpec.describe "GET /api/v1/industries", type: :request do
       { "industry" => "水産・農林業", "company_count" => 1 },
       { "industry" => "輸送用機器", "company_count" => 2 }
     ])
+  end
+
+  it "matches the company count of the industry ranking" do
+    create(:company, industry: "輸送用機器", securities_code: "7203")
+    create(:company, industry: "輸送用機器", securities_code: nil)
+
+    get "/api/v1/industries", as: :json
+    counted = json_body["industries"].find { |row| row["industry"] == "輸送用機器" }["company_count"]
+
+    get "/api/v1/rankings", params: { industry: "輸送用機器" }, as: :json
+    expect(json_body["companies"].length).to eq(counted)
   end
 end
 
