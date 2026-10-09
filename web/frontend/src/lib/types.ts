@@ -22,6 +22,7 @@ export type CompanySummary = {
   edinet_code: string
   company_name: string
   industry: string | null
+  securities_code: string | null
 }
 
 export type CompaniesResponse = {

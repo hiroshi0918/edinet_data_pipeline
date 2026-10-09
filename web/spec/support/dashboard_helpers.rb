@@ -12,7 +12,7 @@ module DashboardHelpers
     report_keys = %i[
       fiscal_year sales operating_profit net_profit employee_count submitted_date status
     ]
-    company_keys = %i[edinet_code company_name industry]
+    company_keys = %i[edinet_code company_name industry securities_code]
 
     company = create(:company, **attrs.slice(*company_keys))
     report = create(:financial_report, company: company, **attrs.slice(*report_keys))

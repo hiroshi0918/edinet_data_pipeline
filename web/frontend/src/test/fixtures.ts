@@ -27,6 +27,7 @@ export const companiesFixture: CompaniesResponse = {
       edinet_code: 'E05206',
       company_name: '株式会社セプテーニ・ホールディングス',
       industry: 'サービス業',
+      securities_code: '4293',
     },
   ],
 }

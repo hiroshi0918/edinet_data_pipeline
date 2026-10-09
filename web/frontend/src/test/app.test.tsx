@@ -29,6 +29,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
 })
 
 test('/ は表紙で、検索と業種の目次を出す', async () => {
@@ -42,6 +43,19 @@ test('/ は表紙で、検索と業種の目次を出す', async () => {
   expect(tile).toHaveTextContent('No.017')
   await waitFor(() => expect(tile).toHaveTextContent('12社'))
   expect(screen.getByRole('link', { name: 'サービス業の会社を見る' })).toHaveTextContent('1,234社')
+})
+
+test('検索候補の左は業種キャラではなく企業ロゴ', async () => {
+  vi.stubEnv('VITE_LOGO_DEV_PUBLISHABLE_KEY', 'pk_test')
+  const user = userEvent.setup()
+  renderAt('/')
+  await user.click(screen.getByRole('combobox', { name: '企業を検索・選択' }))
+  expect(await screen.findByText('株式会社セプテーニ・ホールディングス')).toBeInTheDocument()
+  const list = document.querySelector('[data-slot="command-list"]')
+  const logo = list?.querySelector('img')
+  expect(logo).toHaveAttribute('src', expect.stringContaining('img.logo.dev/ticker/4293.T'))
+  expect(list?.querySelector('img[src*="/characters/"]')).toBeNull()
+  expect(screen.getByRole('link', { name: 'ロゴ: logo.dev' })).toBeInTheDocument()
 })
 
 test('目次の業種を押すと、その業種のランキングが開く', async () => {

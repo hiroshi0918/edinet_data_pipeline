@@ -17,13 +17,15 @@ class CompaniesQuery < ApplicationQuery
     end
 
     select_all(<<~SQL, *binds)
-      SELECT edinet_code, company_name, industry
+      SELECT listed.edinet_code, listed.company_name, listed.industry,
+             NULLIF(c.securities_code, '') AS securities_code
         FROM (
           SELECT DISTINCT edinet_code, company_name, industry
             FROM #{VIEW}
            #{where_sql}
-        ) companies
-       ORDER BY UPPER(company_name)
+        ) listed
+        LEFT JOIN companies c ON c.edinet_code = listed.edinet_code
+       ORDER BY UPPER(listed.company_name)
        #{limit_sql}
     SQL
   end
