@@ -20,9 +20,9 @@ const SLOTS = [
 ] as const
 
 const METRICS: { key: CompareMetric; title: string; kind: ChartKind; unitNote: string }[] = [
-  { key: 'sales', title: '売上高', kind: 'yen', unitNote: '単位は億円（1兆円以上の目盛りは兆円）' },
-  { key: 'operating_profit', title: '営業利益', kind: 'yen', unitNote: '単位は億円（1兆円以上の目盛りは兆円）' },
-  { key: 'operating_margin', title: '営業利益率', kind: 'pct', unitNote: '営業利益 ÷ 売上高。売上が無い年は出しません' },
+  { key: 'sales', title: '売上高', kind: 'yen', unitNote: '単位：億円（1兆円以上の目盛りは兆円）' },
+  { key: 'operating_profit', title: '営業利益', kind: 'yen', unitNote: '単位：億円（1兆円以上の目盛りは兆円）' },
+  { key: 'operating_margin', title: '営業利益率', kind: 'pct', unitNote: '営業利益 ÷ 売上高で、売上が無い年は出しません' },
 ]
 
 function useStory(code: string | null) {
@@ -67,7 +67,6 @@ export function ComparePage() {
   return (
     <div className="space-y-10">
       <SectionHeading
-        kicker="COMPARE"
         title="2社をくらべる"
         description="売上高・営業利益・営業利益率を、同じ目盛りで年度ごとに重ねます。"
       />
@@ -150,7 +149,7 @@ function CompareCharts({ stories }: { stories: StoryResponse[] }) {
               })}
             </dl>
             <p className="mt-3 text-[11px] leading-5 text-ink-soft">
-              {metric.unitNote}。年度は各社の有報の事業年度。連結・個別は有報の経営指標のとおりで、会社によって混ざることがあります。
+              {metric.unitNote}。年度は各社の事業年度で、決算月は会社によって違います。数値は有価証券報告書の主要な経営指標から取っていて、会社や年度によっては連結ではなく個別の値です。
             </p>
           </section>
         )

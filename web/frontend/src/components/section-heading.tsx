@@ -1,16 +1,14 @@
-// 見出し。上に小さな見出し、題に蛍光ペン、下に1文。
+// 見出し。題に蛍光ペン、下に1文。上の小さな赤字は邪魔なので置かない。
 import type { ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
 
 export function SectionHeading({
-  kicker,
   title,
   description,
   as: Tag = 'h1',
   className,
 }: {
-  kicker?: ReactNode
   title: string
   description?: ReactNode
   as?: 'h1' | 'h2'
@@ -18,7 +16,6 @@ export function SectionHeading({
 }) {
   return (
     <div className={cn('space-y-2', className)}>
-      {kicker ? <p className="font-num text-xs font-extrabold tracking-[0.18em] text-shu">{kicker}</p> : null}
       <Tag className="text-3xl leading-tight font-black text-ink sm:text-4xl">
         <span className="marker-line">{title}</span>
       </Tag>

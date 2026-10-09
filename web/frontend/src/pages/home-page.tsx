@@ -76,19 +76,11 @@ function Hero() {
             </motion.span>
           ))}
         </h1>
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.6, duration: 0.4 }}
-          className="mt-4 text-base font-bold text-ink sm:text-lg"
-        >
-          会社の名前を入れると、そのいきものの札がひらきます。
-        </motion.p>
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: 'spring', stiffness: 260, damping: 20, delay: 0.7 }}
-          className="mt-7 w-full max-w-xl"
+          className="mt-10 w-full max-w-xl sm:mt-12"
         >
           <CompanyCombobox
             size="hero"
@@ -188,7 +180,6 @@ function IndustryIndex() {
       <div className="mx-auto max-w-6xl">
         <SectionHeading
           as="h2"
-          kicker="INDEX"
           title="業種の目次"
           description="33の業種に、それぞれのいきものがいます。押すと、その業種の会社が点の順に並びます。"
         />
@@ -243,14 +234,12 @@ function OtherWays() {
       <div className="mx-auto grid max-w-6xl gap-6 md:grid-cols-2">
         <WayLink
           to="/rankings"
-          kicker="点の順"
           title="ランキングを見る"
           body="総合点や売上高の順に、図鑑の会社を並べます。"
           industry="サービス業"
         />
         <WayLink
           to="/nikkei225"
-          kicker="225銘柄"
           title="日経225をめくる"
           body="日経平均の構成銘柄を、総合点の高い順に。"
           industry="輸送用機器"
@@ -262,13 +251,11 @@ function OtherWays() {
 
 function WayLink({
   to,
-  kicker,
   title,
   body,
   industry,
 }: {
   to: string
-  kicker: string
   title: string
   body: string
   industry: string
@@ -278,8 +265,7 @@ function WayLink({
       to={to}
       className="press group relative flex min-h-56 flex-col overflow-hidden rounded-3xl border-[length:var(--line)] border-ink bg-page p-7 sm:p-9"
     >
-      <span className="font-num text-xs font-black tracking-[0.18em] text-shu">{kicker}</span>
-      <span className="mt-2 flex items-center gap-2 text-2xl font-black text-ink sm:text-3xl">
+      <span className="flex items-center gap-2 text-2xl font-black text-ink sm:text-3xl">
         {title}
         <ArrowRightIcon className="size-6 transition-transform group-hover:translate-x-1.5" strokeWidth={3} />
       </span>
