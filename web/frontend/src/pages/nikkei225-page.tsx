@@ -7,7 +7,7 @@ import { LogoCredit } from '@/components/company-mark'
 import { EggFigure } from '@/components/egg-figure'
 import { FilterSelect } from '@/components/filter-select'
 import { QueryState } from '@/components/query-state'
-import { RankRow } from '@/components/rank-row'
+import { RankRow, ScoreNote } from '@/components/rank-row'
 import { tiedRanks } from '@/lib/rank'
 import { SectionHeading } from '@/components/section-heading'
 import { fetchNikkei225 } from '@/lib/api'
@@ -31,6 +31,7 @@ export function Nikkei225Page() {
   return (
     <div className="space-y-8">
       <SectionHeading title="日経225" description="構成銘柄を、図鑑の総合点が高い順に並べます。" />
+      <ScoreNote />
       <QueryState isLoading={query.isLoading} error={query.error} isEmpty={false}>
         {query.data ? (
           <div className="space-y-6">
