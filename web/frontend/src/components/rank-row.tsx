@@ -73,7 +73,16 @@ export function RankRow({
 }
 
 // 一覧の右の点が何の点かを、見出しのすぐ下に小さく1行で書く。
-export function ScoreNote({ axisLabel }: { axisLabel?: string }) {
-  const what = !axisLabel || axisLabel === '総合' ? '総合点' : `${axisLabel}の点`
-  return <p className="-mt-5 text-xs text-ink-soft">同じ業種の会社と比べた{what}（100点満点）</p>
+// 人の開示だけは同業との比べではなく、3指標が書いてある割合。
+export function ScoreNote({ axis, axisLabel }: { axis?: string; axisLabel?: string }) {
+  const text =
+    axis === 'disclosure'
+      ? '人の3指標が揃っているほど高い点（100点満点）'
+      : `同じ業種の会社と比べた${axisScoreName(axisLabel)}（100点満点）`
+  return <p className="-mt-5 text-xs text-ink-soft">{text}</p>
+}
+
+function axisScoreName(axisLabel?: string) {
+  if (!axisLabel || axisLabel === '総合') return '総合点'
+  return `${axisLabel}の点`
 }

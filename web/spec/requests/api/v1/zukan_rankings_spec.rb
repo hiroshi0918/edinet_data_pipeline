@@ -34,6 +34,8 @@ RSpec.describe "Api::V1::Rankings index", type: :request do
       Company.find(code).update!(securities_code: (7203 + index).to_s)
     end
     create(:company, edinet_code: "E91010", company_name: "上場していない法人", industry: "内国法人・組合（有価証券報告書等の提出義務者以外）")
+    create(:company, edinet_code: "E91011", company_name: "コードが空", securities_code: "", industry: "輸送用機器")
+    create(:company, edinet_code: "E91012", company_name: "コードが空白", securities_code: "   ", industry: "輸送用機器")
   end
 
   def codes
@@ -56,7 +58,7 @@ RSpec.describe "Api::V1::Rankings index", type: :request do
   it "lists only listed companies with a securities code" do
     get "/api/v1/rankings", as: :json
 
-    expect(codes).not_to include("E91010")
+    expect(codes).not_to include("E91010", "E91011", "E91012")
     expect(json_body["industries"]).not_to include("内国法人・組合（有価証券報告書等の提出義務者以外）")
   end
 

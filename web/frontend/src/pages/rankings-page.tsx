@@ -54,7 +54,7 @@ export function RankingsPage() {
       ) : (
         <SpeciesBanner industry={industry} count={data?.companies.length} />
       )}
-      <ScoreNote axisLabel={data?.axes.find((item) => item.key === axis)?.label} />
+      <ScoreNote axis={axis} axisLabel={data?.axes.find((item) => item.key === axis)?.label} />
       <QueryState isLoading={query.isLoading} error={query.error} isEmpty={false}>
         {data ? (
           <div className="space-y-6">
