@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { CheckIcon, ChevronsUpDownIcon, SearchIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { CharacterImage } from '@/components/character-image'
+import { CompanyMark } from '@/components/company-mark'
 import { Button } from '@/components/ui/button'
 import {
   Command,
@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { fetchCompanies } from '@/lib/api'
+import { tokyoTicker } from '@/lib/company-mark'
 import type { CompanySummary } from '@/lib/types'
 
 type CompanyComboboxProps = {
@@ -55,6 +56,10 @@ export function CompanyCombobox({
 
   const companies = companiesQuery.data?.companies ?? []
   const selected = companies.find((item) => item.edinet_code === selectedCode)
+  const showLogoCredit = Boolean(
+    import.meta.env.VITE_LOGO_DEV_PUBLISHABLE_KEY &&
+      companies.some((company) => tokyoTicker(company.securities_code)),
+  )
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -118,7 +123,11 @@ export function CompanyCombobox({
                     setOpen(false)
                   }}
                 >
-                  <CharacterImage industry={company.industry} className="size-7 shrink-0" />
+                  <CompanyMark
+                    compact
+                    name={company.company_name}
+                    securitiesCode={company.securities_code}
+                  />
                   <span className="truncate font-bold">{company.company_name}</span>
                   <span className="font-num ml-auto text-xs text-muted-foreground">
                     {company.edinet_code}
@@ -130,6 +139,14 @@ export function CompanyCombobox({
               ))}
             </CommandGroup>
           </CommandList>
+          {showLogoCredit ? (
+            <a
+              href="https://logo.dev"
+              className="block px-3 pt-1 pb-1.5 text-center text-[10px] leading-none text-ink-soft underline decoration-ink-soft/60 underline-offset-2"
+            >
+              ロゴ: logo.dev
+            </a>
+          ) : null}
         </Command>
       </PopoverContent>
     </Popover>

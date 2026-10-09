@@ -6,7 +6,8 @@ RSpec.describe "Api::V1::Companies", type: :request do
       create_listed_company(
         edinet_code: "E05206",
         company_name: "株式会社セプテーニ・ホールディングス",
-        industry: "サービス業"
+        industry: "サービス業",
+        securities_code: "4293"
       )
       create_listed_company(
         edinet_code: "E00001",
@@ -23,8 +24,11 @@ RSpec.describe "Api::V1::Companies", type: :request do
       expect(names).to eq([ "アルファ株式会社", "株式会社セプテーニ・ホールディングス" ])
       expect(json_body["companies"].first).to include(
         "edinet_code" => "E00001",
-        "industry" => "情報・通信業"
+        "industry" => "情報・通信業",
+        "securities_code" => nil
       )
+      septeni = json_body["companies"].find { |row| row["edinet_code"] == "E05206" }
+      expect(septeni["securities_code"]).to eq("4293")
     end
 
     it "searches by company name" do

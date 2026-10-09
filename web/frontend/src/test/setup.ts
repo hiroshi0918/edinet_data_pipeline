@@ -11,7 +11,8 @@ class ResizeObserverMock {
   unobserve() {}
   disconnect() {}
 }
-vi.stubGlobal('ResizeObserver', ResizeObserverMock)
+// app.test の unstubAllGlobals で消えないよう、stubGlobal ではなく直接置く。
+globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver
 
 class IntersectionObserverMock {
   observe() {}

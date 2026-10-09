@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { monogramChar, tokyoTicker } from '@/lib/company-mark'
+import { logoDevSrc, monogramChar, tokyoTicker } from '@/lib/company-mark'
 import {
   industryIndex,
   specimenCaption,
@@ -96,6 +96,16 @@ describe('tokyoTicker', () => {
     expect(tokyoTicker('72030')).toBe('7203.T')
     expect(tokyoTicker(null)).toBeNull()
     expect(tokyoTicker('トヨタ')).toBeNull()
+  })
+})
+
+describe('logoDevSrc', () => {
+  test('証券コードと token から logo.dev の URL を作る', () => {
+    expect(logoDevSrc('4293', 'pk_test', 64)).toBe(
+      'https://img.logo.dev/ticker/4293.T?token=pk_test&format=png&size=64&retina=true&fallback=404',
+    )
+    expect(logoDevSrc(null, 'pk_test', 64)).toBeNull()
+    expect(logoDevSrc('4293', null, 64)).toBeNull()
   })
 })
 

@@ -1,3 +1,21 @@
+// logo.dev のティッカー画像。証券コードか token が無いときは null。
+export function logoDevSrc(
+  securitiesCode: string | null | undefined,
+  token: string | null | undefined,
+  size: number,
+): string | null {
+  const ticker = tokyoTicker(securitiesCode)
+  if (!token || !ticker) return null
+  const params = new URLSearchParams({
+    token,
+    format: 'png',
+    size: String(size),
+    retina: 'true',
+    fallback: '404',
+  })
+  return `https://img.logo.dev/ticker/${encodeURIComponent(ticker)}?${params}`
+}
+
 // 証券コードを東証ティッカーにする。EDINET が5桁の数字で持つときは先頭4桁。
 export function tokyoTicker(securitiesCode: string | null | undefined): string | null {
   const code = securitiesCode?.trim()

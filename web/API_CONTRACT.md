@@ -54,10 +54,17 @@ KPI の件数は、既定の次元（`reporting_company` × `all`）で数える
 
 `q` があるとき。`company_name` を `ILIKE %q%` で探す。`limit` の既定は 50。
 
+`securities_code` は companies の証券コード。検索候補の企業ロゴに使う。無いときは null。
+
 ```json
 {
   "companies": [
-    { "edinet_code": "E05206", "company_name": "株式会社セプテーニ・ホールディングス", "industry": "サービス業" }
+    {
+      "edinet_code": "E05206",
+      "company_name": "株式会社セプテーニ・ホールディングス",
+      "industry": "サービス業",
+      "securities_code": "4293"
+    }
   ]
 }
 ```
