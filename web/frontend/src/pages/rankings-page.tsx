@@ -7,7 +7,7 @@ import { CharacterImage } from '@/components/character-image'
 import { LogoCredit } from '@/components/company-mark'
 import { FilterSelect } from '@/components/filter-select'
 import { QueryState } from '@/components/query-state'
-import { RankRow } from '@/components/rank-row'
+import { RankRow, ScoreNote } from '@/components/rank-row'
 import { SectionHeading } from '@/components/section-heading'
 import { Button } from '@/components/ui/button'
 import { fetchRankings } from '@/lib/api'
@@ -54,6 +54,7 @@ export function RankingsPage() {
       ) : (
         <SpeciesBanner industry={industry} count={data?.companies.length} />
       )}
+      <ScoreNote axisLabel={data?.axes.find((item) => item.key === axis)?.label} />
       <QueryState isLoading={query.isLoading} error={query.error} isEmpty={false}>
         {data ? (
           <div className="space-y-6">
