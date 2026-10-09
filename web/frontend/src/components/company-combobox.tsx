@@ -142,6 +142,8 @@ export function CompanyCombobox({
           {showLogoCredit ? (
             <a
               href="https://logo.dev"
+              // cmdk はルートの Enter で候補を選ぶ。ここまで届くとクレジットが会社選択になる。
+              onKeyDown={(event) => event.stopPropagation()}
               className="block px-3 pt-1 pb-1.5 text-center text-[10px] leading-none text-ink-soft underline decoration-ink-soft/60 underline-offset-2"
             >
               ロゴ: logo.dev
