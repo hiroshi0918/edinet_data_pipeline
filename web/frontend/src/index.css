@@ -79,9 +79,9 @@
     --ink-soft: #6b5e52;
     --shu: #c63f28;
     --marker: #ffe08a;
-    /* 2社比較の会社の色。1社目は墨の実線、2社目は朱の点線。 */
+    /* 2社比較の会社の色。1社目は墨の実線、2社目は藍の点線。 */
     --compare-a: var(--ink);
-    --compare-b: var(--shu);
+    --compare-b: #2f5d8c; /* 藍。朱は押せる物だけなので比較の2社目には使わない */
 
     --line: 2.5px;
     --dur-press: 160ms;

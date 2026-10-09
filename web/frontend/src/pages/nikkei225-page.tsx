@@ -28,7 +28,7 @@ export function Nikkei225Page() {
 
   return (
     <div className="space-y-8">
-      <SectionHeading kicker="225銘柄" title="日経225" description="構成銘柄を、図鑑の総合点が高い順に並べます。" />
+      <SectionHeading title="日経225" description="構成銘柄を、図鑑の総合点が高い順に並べます。" />
       <QueryState isLoading={query.isLoading} error={query.error} isEmpty={false}>
         {query.data ? (
           <div className="space-y-6">

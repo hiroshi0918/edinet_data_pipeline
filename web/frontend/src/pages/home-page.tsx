@@ -188,7 +188,6 @@ function IndustryIndex() {
       <div className="mx-auto max-w-6xl">
         <SectionHeading
           as="h2"
-          kicker="INDEX"
           title="業種の目次"
           description="33の業種に、それぞれのいきものがいます。押すと、その業種の会社が点の順に並びます。"
         />

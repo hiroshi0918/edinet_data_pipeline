@@ -46,7 +46,6 @@ export function RankingsPage() {
     <div className="space-y-8">
       {industry === 'all' ? (
         <SectionHeading
-          kicker="点の順"
           title="ランキング"
           description="会社シートと同じ点で並べます。業種と軸を変えると、その中での順になります。"
         />
