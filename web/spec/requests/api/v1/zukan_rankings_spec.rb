@@ -30,7 +30,10 @@ RSpec.describe "Api::V1::Rankings index", type: :request do
     end
     create(:company, edinet_code: "E91008", company_name: "書類なし", industry: "輸送用機器")
     seed_peer("E91009", industry: "水産・農林業", sales: 9_000, employees: 90, skip_hc: true)
-    Company.find("E91001").update!(securities_code: "7203")
+    %w[E91001 E91002 E91003 E91004 E91005 E91008 E91009].each_with_index do |code, index|
+      Company.find(code).update!(securities_code: (7203 + index).to_s)
+    end
+    create(:company, edinet_code: "E91010", company_name: "上場していない法人", industry: "内国法人・組合（有価証券報告書等の提出義務者以外）")
   end
 
   def codes
@@ -47,7 +50,14 @@ RSpec.describe "Api::V1::Rankings index", type: :request do
     expect(json_body["companies"].map { |row| row["score"] }.last(2)).to eq([ 0, nil ])
     expect(json_body["companies"]).to all(include("edinet_code", "securities_code"))
     expect(json_body["companies"].find { |row| row["edinet_code"] == "E91001" }["securities_code"]).to eq("7203")
-    expect(json_body["companies"].find { |row| row["edinet_code"] == "E91008" }["securities_code"]).to be_nil
+    expect(json_body["companies"]).to all(satisfy { |row| row["securities_code"].present? })
+  end
+
+  it "lists only listed companies with a securities code" do
+    get "/api/v1/rankings", as: :json
+
+    expect(codes).not_to include("E91010")
+    expect(json_body["industries"]).not_to include("内国法人・組合（有価証券報告書等の提出義務者以外）")
   end
 
   it "restricts the list to one industry" do
