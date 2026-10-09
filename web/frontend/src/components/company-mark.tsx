@@ -66,7 +66,10 @@ export function CompanyMark({
       className={cn(
         'flex items-center justify-center overflow-hidden',
         mode === 'inline'
-          ? 'shrink-0 border-[length:var(--line)] border-ink bg-page @container rounded-xl'
+          ? cn(
+              'shrink-0 @container',
+              showLogo ? 'bg-transparent' : 'border-[length:var(--line)] border-ink bg-page',
+            )
           : showLogo
             ? 'bg-transparent'
             : 'border-[length:var(--line)] border-ink bg-page',
@@ -83,7 +86,7 @@ export function CompanyMark({
           crossOrigin="anonymous"
           loading={mode === 'inline' ? 'lazy' : 'eager'}
           decoding="async"
-          className={cn('size-full object-contain', mode === 'inline' && 'p-0.5')}
+          className="size-full object-contain"
           onLoad={(event) => {
             try {
               if (!logoHasInk(event.currentTarget)) setAttempt(2)
