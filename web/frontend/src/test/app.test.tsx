@@ -58,6 +58,18 @@ test('検索候補の左は業種キャラではなく企業ロゴ', async () =>
   expect(screen.getByRole('link', { name: 'ロゴ: logo.dev' })).toBeInTheDocument()
 })
 
+test('ロゴのクレジットで Enter しても会社は選ばれない', async () => {
+  vi.stubEnv('VITE_LOGO_DEV_PUBLISHABLE_KEY', 'pk_test')
+  const user = userEvent.setup()
+  const { router } = renderAt('/')
+  await user.click(screen.getByRole('combobox', { name: '企業を検索・選択' }))
+  const link = await screen.findByRole('link', { name: 'ロゴ: logo.dev' })
+  expect(link).toHaveAttribute('href', 'https://logo.dev')
+  link.focus()
+  await user.keyboard('{Enter}')
+  expect(router.state.location.pathname).toBe('/')
+})
+
 test('目次の業種を押すと、その業種のランキングが開く', async () => {
   const user = userEvent.setup()
   const { router } = renderAt('/')
