@@ -130,3 +130,12 @@ export function industryIndex(
       }
     })
 }
+
+// EDINET の「提出者業種」には、業種ではない区分名（有報の提出義務が無い法人など）が混ざる。
+// 一覧の業種欄ではこれを出さず空欄にする。
+const NON_INDUSTRY_PATTERN = /(法人|組合|個人|政府)/
+
+export function industryLabel(industry: string | null | undefined): string | null {
+  if (!industry) return null
+  return NON_INDUSTRY_PATTERN.test(industry) ? null : industry
+}

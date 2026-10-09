@@ -11,7 +11,8 @@ import { RankRow } from '@/components/rank-row'
 import { SectionHeading } from '@/components/section-heading'
 import { Button } from '@/components/ui/button'
 import { fetchRankings } from '@/lib/api'
-import { specimenLabel, specimenNo } from '@/lib/specimen'
+import { tiedRanks } from '@/lib/rank'
+import { specimenLabel, specimenNo, industryLabel } from '@/lib/specimen'
 
 const PAGE_SIZE = 100
 
@@ -29,6 +30,7 @@ export function RankingsPage() {
     placeholderData: keepPreviousData,
   })
   const data = query.data
+  const ranks = tiedRanks(data?.companies.map((company) => company.score) ?? [])
 
   const update = (key: 'industry' | 'axis', value: string, fallback: string) => {
     setParams(
@@ -77,7 +79,7 @@ export function RankingsPage() {
               {data.companies.slice(0, visibleCount).map((company, index) => (
                 <RankRow
                   key={company.edinet_code}
-                  rank={index + 1}
+                  rank={ranks[index]}
                   companyName={company.company_name}
                   securitiesCode={company.securities_code}
                   score={company.score}
@@ -89,7 +91,7 @@ export function RankingsPage() {
                       {company.company_name}
                     </Link>
                   }
-                  meta={company.industry ?? '—'}
+                  meta={industryLabel(company.industry)}
                 />
               ))}
             </ol>

@@ -8,6 +8,7 @@ import { EggFigure } from '@/components/egg-figure'
 import { FilterSelect } from '@/components/filter-select'
 import { QueryState } from '@/components/query-state'
 import { RankRow } from '@/components/rank-row'
+import { tiedRanks } from '@/lib/rank'
 import { SectionHeading } from '@/components/section-heading'
 import { fetchNikkei225 } from '@/lib/api'
 import type { Nikkei225Company } from '@/lib/types'
@@ -24,6 +25,7 @@ export function Nikkei225Page() {
     [companies],
   )
   const visible = companies.filter((company) => sector === 'all' || company.nikkei_sector === sector)
+  const ranks = tiedRanks(visible.map((company) => company.level))
   const withSheet = companies.filter((company) => company.has_sheet).length
 
   return (
@@ -49,7 +51,7 @@ export function Nikkei225Page() {
             </div>
             <ol>
               {visible.map((company, index) => (
-                <NikkeiRow key={company.securities_code} company={company} rank={index + 1} />
+                <NikkeiRow key={company.securities_code} company={company} rank={ranks[index]} />
               ))}
             </ol>
             <p className="text-xs text-ink-soft">{query.data.source_note}</p>

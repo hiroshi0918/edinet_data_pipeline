@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest'
 import { logoDevSrc, monogramChar, tokyoTicker } from '@/lib/company-mark'
 import {
   industryIndex,
+  industryLabel,
   specimenCaption,
   specimenNo,
   specimenPortrait,
@@ -114,4 +115,11 @@ describe('monogramChar', () => {
     expect(monogramChar('株式会社セプテーニ・ホールディングス')).toBe('セ')
     expect(monogramChar('トヨタ自動車株式会社')).toBe('ト')
   })
+})
+
+test('industryLabel は業種でない区分名を空欄にする', () => {
+  expect(industryLabel('内国法人・組合（有価証券報告書等の提出義務者以外）')).toBeNull()
+  expect(industryLabel('外国法人・組合')).toBeNull()
+  expect(industryLabel(null)).toBeNull()
+  expect(industryLabel('サービス業')).toBe('サービス業')
 })
