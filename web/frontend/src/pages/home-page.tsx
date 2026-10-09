@@ -76,14 +76,6 @@ function Hero() {
             </motion.span>
           ))}
         </h1>
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.6, duration: 0.4 }}
-          className="mt-4 text-base font-bold text-ink sm:text-lg"
-        >
-          会社の名前を入れると、そのいきものの札がひらきます。
-        </motion.p>
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
