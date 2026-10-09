@@ -33,7 +33,7 @@ export function RankRow({
     >
       <span className="relative flex items-center justify-center">
         {podium ? (
-          <span className="flex size-11 flex-col items-center justify-center rounded-full border-[length:var(--line)] border-ink bg-marker">
+          <span className="flex size-11 flex-col items-center justify-center rounded-full bg-marker">
             <CrownIcon className="size-4 text-shu" strokeWidth={2.75} aria-hidden="true" />
             <span className="font-num text-sm leading-none font-black text-ink">{rank}</span>
           </span>
