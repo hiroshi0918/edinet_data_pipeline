@@ -74,6 +74,6 @@ export function RankRow({
 
 // 一覧の右の点が何の点かを、見出しのすぐ下に小さく1行で書く。
 export function ScoreNote({ axisLabel }: { axisLabel?: string }) {
-  const what = !axisLabel || axisLabel === '総合' ? '総合点' : `「${axisLabel}」の点`
+  const what = !axisLabel || axisLabel === '総合' ? '総合点' : `${axisLabel}の点`
   return <p className="-mt-5 text-xs text-ink-soft">同じ業種の会社と比べた{what}（100点満点）</p>
 }
