@@ -307,18 +307,6 @@
   50% { transform: translateY(-10%) rotate(2deg); }
 }
 
-/* 判子。少し傾いて押される。 */
-.hanko {
-  animation: hanko-press 520ms var(--ease-pop) both;
-  animation-delay: var(--hanko-delay, 0ms);
-}
-
-@keyframes hanko-press {
-  0% { opacity: 0; transform: scale(1.8) rotate(-24deg); }
-  60% { opacity: 1; transform: scale(0.92) rotate(-6deg); }
-  100% { opacity: 1; transform: scale(1) rotate(-9deg); }
-}
-
 /* たまご。揺れて待つ。 */
 .egg-wobble {
   animation: wobble 1.4s ease-in-out infinite;
@@ -363,13 +351,9 @@
   .idle-bob,
   .parade-track,
   .parade-step,
-  .hanko,
   .egg-wobble,
   .rise-in {
     animation: none;
-  }
-  .hanko {
-    transform: rotate(-9deg);
   }
   .draw-line {
     animation: none;

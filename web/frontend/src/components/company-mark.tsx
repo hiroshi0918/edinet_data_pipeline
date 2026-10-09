@@ -14,7 +14,7 @@ export function CompanyMark({
   compact?: boolean
 }) {
   const token = import.meta.env.VITE_LOGO_DEV_PUBLISHABLE_KEY
-  const src = logoDevSrc(securitiesCode, token, compact ? 64 : 128)
+  const src = logoDevSrc(securitiesCode, token, compact ? 64 : 256)
   const [failed, setFailed] = useState(false)
   const showLogo = Boolean(src && !failed)
   const caption = showLogo ? (
@@ -32,29 +32,32 @@ export function CompanyMark({
     <div
       className={cn(
         'shrink-0',
-        compact ? undefined : 'flex w-16 flex-col items-center gap-1 sm:w-20',
+        compact ? undefined : 'flex w-32 flex-col items-center gap-1.5 sm:w-40',
       )}
     >
       <div
         className={cn(
-          'flex items-center justify-center overflow-hidden border-[length:var(--line)] border-ink bg-page',
+          'flex items-center justify-center overflow-hidden',
+          showLogo
+            ? 'bg-transparent'
+            : 'border-[length:var(--line)] border-ink bg-page',
           compact
             ? 'size-8 rounded-lg'
-            : 'size-16 rounded-2xl shadow-ink-sm sm:size-20',
+            : cn('size-32 rounded-3xl sm:size-40', showLogo ? undefined : 'shadow-ink'),
         )}
       >
         {showLogo ? (
           <img
             src={src ?? undefined}
             alt={compact ? '' : `${name}のロゴ`}
-            className={cn('size-full object-contain', compact ? 'p-0.5' : 'p-1')}
+            className="size-full object-contain"
             onError={() => setFailed(true)}
           />
         ) : (
           <span
             className={cn(
               'leading-none font-black text-ink',
-              compact ? 'text-sm' : 'text-2xl sm:text-3xl',
+              compact ? 'text-sm' : 'text-5xl sm:text-6xl',
             )}
             aria-hidden="true"
           >

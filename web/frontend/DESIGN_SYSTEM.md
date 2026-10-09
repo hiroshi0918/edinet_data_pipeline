@@ -54,7 +54,6 @@
 | `SpecimenFigure` | すみかの円の上のキャラと、図鑑番号・段階 |
 | `LevelBadge` | 総合点の丸いバッジ。段階名と星 |
 | `CollectRule` | 採集尺。HP バーのような太いゲージ |
-| `HankoStamp` | 開示の点。朱の判子 |
 | `FilterSelect` | 一覧の絞り込み。丸い `select` |
 | `RankRow` | 一覧の1行。1〜3位は王冠 |
 | `QueryState` | 読込はたまごが揺れる。空とエラーは吹き出し |
