@@ -76,7 +76,7 @@ export function ComparePage() {
           const story = stories[index]
           return (
             <div key={slot.param} className="sheet space-y-3 p-4">
-              <p className="flex items-center gap-2 text-xs font-black text-ink-soft">
+              <p className="flex items-center gap-2 text-xs font-medium text-ink-soft">
                 <Swatch className={slot.swatch} dashed={slot.dashed} />
                 {index === 0 ? '1社目（実線）' : '2社目（点線）'}
               </p>
@@ -125,7 +125,7 @@ function CompareCharts({ stories }: { stories: StoryResponse[] }) {
         }))
         return (
           <section key={metric.key} className="sheet flex flex-col p-5">
-            <h2 className="text-sm font-black text-ink">{metric.title}</h2>
+            <h2 className="text-lg font-light text-ink">{metric.title}</h2>
             <div className="mt-3">
               <LineChart title={metric.title} kind={metric.kind} years={years} series={series} delayMs={150 * (metricIndex + 1)} />
             </div>
@@ -138,7 +138,7 @@ function CompareCharts({ stories }: { stories: StoryResponse[] }) {
                       <Swatch className={SLOTS[index].swatch} dashed={SLOTS[index].dashed} />
                       <span className="truncate">{story.company_name}</span>
                     </dt>
-                    <dd className="font-num text-right text-base font-black text-ink tabular-nums">
+                    <dd className="font-num text-right text-base font-light text-ink tabular-nums">
                       {latest ? formatMetric(metric.key, latest.value) : '—'}
                     </dd>
                     <dd className="font-num w-12 text-right text-[11px] font-bold text-ink-soft">

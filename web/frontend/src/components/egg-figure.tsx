@@ -12,8 +12,8 @@ export function EggFigure({ className }: { className?: string }) {
         strokeWidth="4"
       />
       <path d="M30 70c10-6 20 4 30-2s20-8 30 0" fill="none" stroke="var(--chrome)" strokeWidth="4" strokeLinecap="round" />
-      <circle cx="44" cy="92" r="6" fill="var(--amber)" stroke="var(--ink)" strokeWidth="3" />
-      <circle cx="76" cy="100" r="4" fill="var(--amber)" stroke="var(--ink)" strokeWidth="3" />
+      <circle cx="44" cy="92" r="6" fill="#0070d1" stroke="var(--ink)" strokeWidth="3" />
+      <circle cx="76" cy="100" r="4" fill="#0070d1" stroke="var(--ink)" strokeWidth="3" />
       <path d="M40 36c-6 8-9 16-10 24" fill="none" stroke="var(--surface)" strokeWidth="5" strokeLinecap="round" opacity="0.9" />
     </svg>
   )

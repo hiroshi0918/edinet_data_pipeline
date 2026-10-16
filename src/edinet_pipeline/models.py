@@ -126,6 +126,58 @@ class RawFactRecord:
     raw_value: str | None
 
 
+ACCOUNTING_STANDARD_JGAAP = "jgaap"
+ACCOUNTING_STANDARD_IFRS = "ifrs"
+BASIS_CONSOLIDATED = "consolidated"
+BASIS_NON_CONSOLIDATED = "non_consolidated"
+
+
+@dataclass(frozen=True)
+class FinancialStatementRecord:
+    """財務諸表 (BS・PL・CF) の主要項目 — financial_statements へ1書類1行.
+
+    金額は円。取れなかった項目は None。1書類は1つの基準 (連結/IFRS/個別) で
+    埋め、基準の違う値は混ぜない。
+
+    Attributes:
+        accounting_standard: "jgaap" / "ifrs"
+        basis:               "consolidated" / "non_consolidated"
+        intangible_assets:   のれんを含む無形資産 (IFRS は のれん + 無形資産)
+        investment_securities: 他社の株など (日本基準は投資有価証券 + 関係会社株式、
+                             IFRS はその他の金融資産(非流動) + 持分法投資)
+        interest_bearing_debt: 借入金・社債・CP の合計
+    """
+
+    accounting_standard: str
+    basis: str
+    total_assets: int | None = None
+    current_assets: int | None = None
+    cash_and_deposits: int | None = None
+    trade_receivables: int | None = None
+    inventories: int | None = None
+    noncurrent_assets: int | None = None
+    property_plant_equipment: int | None = None
+    intangible_assets: int | None = None
+    goodwill: int | None = None
+    investment_securities: int | None = None
+    total_liabilities: int | None = None
+    current_liabilities: int | None = None
+    noncurrent_liabilities: int | None = None
+    interest_bearing_debt: int | None = None
+    net_assets: int | None = None
+    retained_earnings: int | None = None
+    net_sales: int | None = None
+    cost_of_sales: int | None = None
+    gross_profit: int | None = None
+    sga_expenses: int | None = None
+    operating_income: int | None = None
+    ordinary_income: int | None = None
+    net_income: int | None = None
+    operating_cf: int | None = None
+    investing_cf: int | None = None
+    financing_cf: int | None = None
+
+
 @dataclass
 class ParsedDocument:
     """1書類分の解析結果コンテナ — extractor の出力 / repository の入力.
@@ -138,6 +190,7 @@ class ParsedDocument:
         employee_status_text: 「従業員の状況 [テキストブロック]」の生テキスト.
             Layer 3b (LLM フォールバック) の入力候補として保持。
             jobs 層で参照され、LLM 抽出に渡される。
+        financial_statement: BS・PL・CF の主要項目。総資産が取れない書類は None。
     """
 
     financial_metrics: dict[str, int | None] = field(default_factory=dict)
@@ -145,3 +198,4 @@ class ParsedDocument:
     evidence: list[MetricEvidenceRecord] = field(default_factory=list)
     raw_facts: list[RawFactRecord] = field(default_factory=list)
     employee_status_text: str | None = None
+    financial_statement: FinancialStatementRecord | None = None

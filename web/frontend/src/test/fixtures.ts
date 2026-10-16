@@ -7,6 +7,7 @@ import type {
   MetaResponse,
   Nikkei225Response,
   SheetResponse,
+  StatementsResponse,
   StoryResponse,
   SizeRankingResponse,
   SpotlightResponse,
@@ -352,6 +353,98 @@ export const storyFixture: StoryResponse = {
   },
 }
 
+export const statementsFixture: StatementsResponse = {
+  edinet_code: 'E05206',
+  company_name: '株式会社セプテーニ・ホールディングス',
+  industry: 'サービス業',
+  securities_code: '4293',
+  is_financial: false,
+  note: null,
+  fiscal_year: 2026,
+  doc_id: 'S100TEST',
+  accounting_standard: 'ifrs',
+  basis: 'consolidated',
+  balance_sheet: {
+    total_assets: 100_000_000_000,
+    assets: [
+      { key: 'cash', label: '現金・預金', hint: 'すぐに使えるお金', amount: 40_000_000_000, share: 0.4 },
+      { key: 'receivables', label: 'まだ受け取っていない代金', hint: '入金待ち', amount: 20_000_000_000, share: 0.2 },
+      { key: 'inventories', label: '在庫', hint: '売る前の商品', amount: 0, share: 0 },
+      { key: 'property', label: '建物・機械・土地', hint: '設備', amount: 5_000_000_000, share: 0.05 },
+      { key: 'intangibles', label: 'のれん・ソフトなど', hint: '形のない資産', amount: 15_000_000_000, share: 0.15 },
+      { key: 'investments', label: '他社の株など', hint: '投資', amount: 10_000_000_000, share: 0.1 },
+      { key: 'other', label: 'その他', hint: 'そのほか', amount: 10_000_000_000, share: 0.1 },
+    ],
+    funding: [
+      { key: 'debt', label: '借入金・社債', hint: '返すお金', amount: 5_000_000_000, share: 0.05 },
+      { key: 'other_liabilities', label: 'その他の負債', hint: '支払い待ち', amount: 25_000_000_000, share: 0.25 },
+      { key: 'net_assets', label: '純資産', hint: '返さなくてよいお金', amount: 70_000_000_000, share: 0.7 },
+    ],
+    debt_known: true,
+  },
+  income_statement: {
+    net_sales: 120_000_000_000,
+    sales_source: 'summary',
+    cost_of_sales: 70_000_000_000,
+    gross_profit: 50_000_000_000,
+    sga_expenses: 41_000_000_000,
+    operating_income: 9_000_000_000,
+    ordinary_income: null,
+    net_income: -2_000_000_000,
+  },
+  cash_flow: {
+    operating: 8_000_000_000,
+    investing: -3_000_000_000,
+    financing: -1_000_000_000,
+    pattern: {
+      key: 'steady',
+      tone: 'good',
+      label: '本業で稼ぎ、投資と返済に回す',
+      text: '本業で稼いだお金で、設備などへの投資と、借入金の返済や配当をまかなっています。',
+    },
+  },
+  ratios: {
+    equity_ratio: 0.7,
+    cash_share: 0.4,
+    cash_months: 4,
+    property_share: 0.05,
+    intangible_share: 0.15,
+    investment_share: 0.1,
+    inventory_share: 0,
+    gross_margin: 0.42,
+    operating_margin: 0.075,
+  },
+  insights: [
+    { key: 'stable', tone: 'good', label: '借金が少なく安定', text: '持ち物の70%を、返さなくてよいお金でまかなっています。' },
+    { key: 'cash_rich', tone: 'neutral', label: '現金をたっぷり持っている', text: '持ち物の40%が現金・預金です。' },
+  ],
+}
+
+export const bankStatementsFixture: StatementsResponse = {
+  ...statementsFixture,
+  edinet_code: 'E10003',
+  company_name: '預かり銀行',
+  industry: '銀行業',
+  is_financial: true,
+  note: '銀行・保険・証券などは、預金や保険料として預かったお金が負債の大半を占めます。',
+  insights: [],
+}
+
+export const emptyStatementsFixture: StatementsResponse = {
+  ...statementsFixture,
+  edinet_code: 'E10004',
+  company_name: '取れない株式会社',
+  fiscal_year: null,
+  doc_id: null,
+  accounting_standard: null,
+  basis: null,
+  balance_sheet: null,
+  income_statement: null,
+  cash_flow: null,
+  ratios: null,
+  insights: [],
+}
+
 export const industriesFixture: IndustriesResponse = {
   industries: [
     { industry: 'サービス業', company_count: 1234 },
@@ -490,6 +583,15 @@ export function installApiMock() {
       }
       if (url.includes('/api/v1/companies/E05206/story')) {
         return jsonResponse(storyFixture)
+      }
+      if (url.includes('/api/v1/companies/E05206/statements')) {
+        return jsonResponse(statementsFixture)
+      }
+      if (url.includes('/api/v1/companies/E10003/statements')) {
+        return jsonResponse(bankStatementsFixture)
+      }
+      if (url.includes('/api/v1/companies/E10004/statements')) {
+        return jsonResponse(emptyStatementsFixture)
       }
       if (url.includes('/api/v1/companies/E05206/spotlight')) {
         return jsonResponse(spotlightFixture)

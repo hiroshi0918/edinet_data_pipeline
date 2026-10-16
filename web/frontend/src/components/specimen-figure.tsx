@@ -14,7 +14,7 @@ export function SpecimenFigure({
   return (
     <figure className="relative flex w-full flex-col items-center">
       <div className="relative aspect-square w-full max-w-[26rem]">
-        <div aria-hidden="true" className="absolute inset-[8%] border border-chrome bg-lavender" />
+        <div aria-hidden="true" className="absolute inset-[8%] rounded-lg bg-[#f5f7fa]" />
         <div className="absolute inset-x-0 top-0 bottom-[4%]">
           <CharacterImage
             industry={industry}
@@ -25,9 +25,9 @@ export function SpecimenFigure({
           />
         </div>
       </div>
-      <figcaption className="relative z-10 -mt-2 flex items-center gap-2 border border-chrome bg-surface px-3 py-1.5 shadow-[0_2px_0_var(--chrome)]">
-        <span className="font-num text-xs font-bold tracking-wide text-chrome">{specimenNo(industry)}</span>
-        <span className="text-sm font-bold text-ink">{caption}</span>
+      <figcaption className="relative z-10 -mt-2 flex items-center gap-2 rounded-full bg-white px-4 py-2">
+        <span className="font-num text-xs font-medium tracking-wide text-ink-soft">{specimenNo(industry)}</span>
+        <span className="text-sm font-medium text-ink">{caption}</span>
       </figcaption>
     </figure>
   )

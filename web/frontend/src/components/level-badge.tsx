@@ -7,8 +7,8 @@ function Star({ filled }: { filled: boolean }) {
     <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true">
       <path
         d="M12 2.8l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 16.8l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"
-        fill={filled ? 'var(--amber)' : 'var(--surface)'}
-        stroke="var(--carbon)"
+        fill={filled ? '#0070d1' : '#f3f3f3'}
+        stroke={filled ? '#0070d1' : '#cccccc'}
         strokeWidth="2"
         strokeLinejoin="round"
       />
@@ -21,12 +21,12 @@ export function LevelBadge({ level, className }: { level: number | null; classNa
   return (
     <div
       className={cn(
-        'flex size-28 shrink-0 flex-col items-center justify-center border border-chrome bg-surface shadow-[inset_0_1px_0_#fff,0_2px_0_var(--chrome)] sm:size-32',
+        'flex size-28 shrink-0 flex-col items-center justify-center rounded-lg bg-[#f5f7fa] sm:size-32',
         className,
       )}
     >
-      <p className="text-[11px] leading-none font-bold tracking-wide text-chrome">総合</p>
-      <p className="font-num mt-1 text-5xl leading-none font-black text-ink sm:text-[3.5rem]">
+      <p className="text-xs leading-none font-medium tracking-wide text-ink-soft">総合</p>
+      <p className="font-num mt-1 text-5xl leading-none font-light text-ink sm:text-[3.5rem]">
         {level == null ? '—' : level}
       </p>
       <p className="mt-1 text-[11px] leading-none font-bold text-ink">{STAGE_LABEL[stage]}</p>

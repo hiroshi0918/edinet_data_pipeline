@@ -114,11 +114,11 @@ export function CompanyMark({
         mode === 'inline'
           ? cn(
               'shrink-0 @container',
-              showLogo ? 'bg-transparent' : 'border border-chrome bg-surface',
+              showLogo ? 'bg-transparent' : 'rounded-lg bg-[#f5f7fa]',
             )
           : showLogo
             ? 'bg-transparent'
-            : 'border border-chrome bg-surface',
+            : 'rounded-lg bg-[#f5f7fa]',
         mode === 'compact' && 'size-8',
         mode === 'badge' && 'size-32 sm:size-40',
         mode === 'inline' && className,
@@ -143,7 +143,7 @@ export function CompanyMark({
       ) : missing || !url ? (
         <span
           className={cn(
-            'leading-none font-black text-ink',
+            'leading-none font-light text-ink',
             mode === 'compact' ? 'text-sm' : mode === 'inline' ? 'text-[45cqw]' : 'text-5xl sm:text-6xl',
           )}
           aria-hidden="true"

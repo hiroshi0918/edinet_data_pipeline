@@ -12,6 +12,7 @@ from edinet_pipeline.extractors import (
     classify_element_id,
     classify_sales_element_id,
     convert_to_percentage,
+    extract_financial_statement,
     extract_human_capital_from_text,
     extract_numeric,
     is_text_block_fact,
@@ -27,6 +28,7 @@ from edinet_pipeline.models import (
     WORKER_TYPE_REGULAR,
     FilingFilters,
     HumanMetricRecord,
+    RawFactRecord,
 )
 
 
@@ -1045,3 +1047,165 @@ def test_parse_document_zip_keeps_plausible_text_fallback_wage_gap() -> None:
     record = _find_record(parsed.human_metrics, SCOPE_REPORTING_COMPANY, WORKER_TYPE_ALL)
     assert record is not None
     assert record.gender_wage_gap == pytest.approx(75.5)
+
+
+# ------------------------------------------------------------------ #
+#  extract_financial_statement: BS・PL・CF の主要項目
+# ------------------------------------------------------------------ #
+
+
+def _fact(row: int, element_id: str, context_id: str, value: str) -> RawFactRecord:
+    return RawFactRecord(
+        source_file="XBRL_TO_CSV/jpcrp.csv",
+        row_number=row,
+        element_id=element_id,
+        item_name=None,
+        context_id=context_id,
+        relative_year=None,
+        consolidation_type=None,
+        period_type=None,
+        unit_id="JPY",
+        unit_label=None,
+        raw_value=value,
+    )
+
+
+def _facts(context_suffix: str, prefix: str, values: dict[str, str]) -> list[RawFactRecord]:
+    facts = []
+    for row, (name, value) in enumerate(values.items(), start=1):
+        period = (
+            "CurrentYearDuration"
+            if name.startswith(("NetSales", "Revenue", "OperatingIncome", "NetCash", "ProfitLoss"))
+            else "CurrentYearInstant"
+        )
+        facts.append(_fact(row, f"{prefix}:{name}", period + context_suffix, value))
+    return facts
+
+
+def test_extract_financial_statement_prefers_consolidated_jgaap() -> None:
+    facts = _facts(
+        "",
+        "jppfs_cor",
+        {
+            "Assets": "1000",
+            "CashAndDeposits": "300",
+            "NotesAndAccountsReceivableTrade": "100",
+            "ElectronicallyRecordedMonetaryClaimsOperatingCA": "20",
+            "MerchandiseAndFinishedGoods": "40",
+            "WorkInProcess": "10",
+            "Liabilities": "400",
+            "ShortTermLoansPayable": "50",
+            "LongTermLoansPayable": "70",
+            "NetAssets": "600",
+            "NetSales": "2000",
+            "OperatingIncome": "150",
+            "ProfitLossAttributableToOwnersOfParent": "90",
+            "ProfitLoss": "95",
+            "NetCashProvidedByUsedInOperatingActivities": "200",
+            "NetCashProvidedByUsedInInvestmentActivities": "-120",
+        },
+    ) + _facts("_NonConsolidatedMember", "jppfs_cor", {"Assets": "800", "CashAndDeposits": "1"})
+
+    statement = extract_financial_statement(facts)
+
+    assert statement is not None
+    assert statement.accounting_standard == "jgaap"
+    assert statement.basis == "consolidated"
+    assert statement.total_assets == 1000
+    assert statement.cash_and_deposits == 300
+    assert statement.trade_receivables == 120
+    assert statement.inventories == 50
+    assert statement.interest_bearing_debt == 120
+    assert statement.net_sales == 2000
+    assert statement.net_income == 90
+    assert statement.investing_cf == -120
+    assert statement.financing_cf is None
+
+
+def test_extract_financial_statement_ignores_segment_contexts() -> None:
+    facts = [
+        _fact(1, "jppfs_cor:Assets", "CurrentYearInstant_ReportableSegmentsMember", "999"),
+        _fact(2, "jppfs_cor:Assets", "CurrentYearInstant", "1000"),
+        _fact(3, "jppfs_cor:Assets", "CurrentYearInstant", "1000"),
+        _fact(4, "jppfs_cor:NetSales", "CurrentYearDuration_ReportableSegmentsMember", "5"),
+        _fact(5, "jppfs_cor:NetSales", "Prior1YearDuration", "1800"),
+    ]
+
+    statement = extract_financial_statement(facts)
+
+    assert statement is not None
+    assert statement.total_assets == 1000
+    assert statement.net_sales is None
+
+
+def test_extract_financial_statement_does_not_mix_consolidated_and_non_consolidated() -> None:
+    facts = _facts(
+        "_NonConsolidatedMember",
+        "jppfs_cor",
+        {"Assets": "500", "CashAndDeposits": "80", "NetSales": "700"},
+    ) + [_fact(99, "jppfs_cor:Goodwill", "CurrentYearInstant", "30")]
+
+    statement = extract_financial_statement(facts)
+
+    assert statement is not None
+    assert statement.basis == "non_consolidated"
+    assert statement.total_assets == 500
+    assert statement.cash_and_deposits == 80
+    assert statement.net_sales == 700
+    assert statement.goodwill is None
+    assert statement.interest_bearing_debt == 0
+
+
+def test_extract_financial_statement_reads_ifrs() -> None:
+    facts = _facts(
+        "",
+        "jpigp_cor",
+        {
+            "AssetsIFRS": "5000",
+            "CashAndCashEquivalentsIFRS": "700",
+            "GoodwillIFRS": "300",
+            "IntangibleAssetsIFRS": "200",
+            "BondsAndBorrowingsCLIFRS": "100",
+            "BorrowingsNCLIFRS": "400",
+            "EquityIFRS": "2000",
+            "RevenueIFRS": "6000",
+            "NetCashProvidedByUsedInFinancingActivitiesIFRS": "-50",
+        },
+    )
+
+    statement = extract_financial_statement(facts)
+
+    assert statement is not None
+    assert statement.accounting_standard == "ifrs"
+    assert statement.basis == "consolidated"
+    assert statement.intangible_assets == 500
+    assert statement.goodwill == 300
+    assert statement.interest_bearing_debt == 500
+    assert statement.net_assets == 2000
+    assert statement.net_sales == 6000
+    assert statement.ordinary_income is None
+    assert statement.financing_cf == -50
+
+
+def test_extract_financial_statement_leaves_unknown_ifrs_debt_empty() -> None:
+    facts = _facts("", "jpigp_cor", {"AssetsIFRS": "5000"})
+
+    statement = extract_financial_statement(facts)
+
+    assert statement is not None
+    assert statement.interest_bearing_debt is None
+
+
+def test_extract_financial_statement_returns_none_without_total_assets() -> None:
+    facts = _facts("", "jppfs_cor", {"CashAndDeposits": "300", "NetSales": "100"})
+
+    assert extract_financial_statement(facts) is None
+
+
+def test_parse_from_raw_facts_attaches_financial_statement() -> None:
+    facts = _facts("", "jppfs_cor", {"Assets": "1000", "NetAssets": "600"})
+
+    parsed = parse_from_raw_facts(facts)
+
+    assert parsed.financial_statement is not None
+    assert parsed.financial_statement.net_assets == 600

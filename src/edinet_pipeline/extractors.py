@@ -24,11 +24,16 @@ from dataclasses import replace
 import pandas as pd
 
 from edinet_pipeline.models import (
+    ACCOUNTING_STANDARD_IFRS,
+    ACCOUNTING_STANDARD_JGAAP,
+    BASIS_CONSOLIDATED,
+    BASIS_NON_CONSOLIDATED,
     SCOPE_CONSOLIDATED_SUBSIDIARY,
     SCOPE_REPORTING_COMPANY,
     WORKER_TYPE_ALL,
     WORKER_TYPE_NON_REGULAR,
     WORKER_TYPE_REGULAR,
+    FinancialStatementRecord,
     HumanMetricRecord,
     MetricEvidenceRecord,
     ParsedDocument,
@@ -729,6 +734,7 @@ def parse_from_raw_facts(
     parsed.human_metrics = hm_builder.to_records()
     _sanitize_text_fallback_wage_gap(parsed)
     parsed.employee_status_text = employee_status_text
+    parsed.financial_statement = extract_financial_statement(raw_facts)
     return parsed
 
 
@@ -969,6 +975,260 @@ def _sanitize_text_fallback_wage_gap(parsed: ParsedDocument) -> None:
     parsed.human_metrics = [
         rec for rec in parsed.human_metrics if _human_record_has_values(rec)
     ]
+
+
+# ------------------------------------------------------------------ #
+#  財務諸表 (BS・PL・CF) の主要項目
+# ------------------------------------------------------------------ #
+
+# 1項目の取り方。Rule は Part の和、Part は Group の候補を先頭から試し、
+# 値のある最初の Group の和を採る。Group は要素ID (接頭辞なし) の並び。
+# 例: IFRS の無形資産は「のれん及び無形資産」が無ければ「のれん + 無形資産」。
+StatementGroup = tuple[str, ...]
+StatementPart = tuple[StatementGroup, ...]
+StatementRule = tuple[StatementPart, ...]
+
+
+def _first(*groups: StatementGroup) -> StatementRule:
+    return (groups,)
+
+
+def _each(*names: str) -> StatementRule:
+    return tuple(((name,),) for name in names)
+
+
+_JGAAP_INVENTORY_PARTS = (
+    "MerchandiseAndFinishedGoods",
+    "Merchandise",
+    "FinishedGoods",
+    "WorkInProcess",
+    "RawMaterialsAndSupplies",
+    "RawMaterials",
+    "Supplies",
+    "RealEstateForSale",
+    "RealEstateForSaleInProcess",
+    "CostsOnUncompletedConstructionContractsCNS",
+    "RawMaterialsAndSuppliesCNS",
+)
+
+JGAAP_STATEMENT_RULES: dict[str, StatementRule] = {
+    "total_assets": _first(("Assets",)),
+    "current_assets": _first(("CurrentAssets",)),
+    "cash_and_deposits": _first(("CashAndDeposits",), ("CashAndDueFromBanksAssetsBNK",)),
+    "trade_receivables": (
+        (
+            ("NotesAndAccountsReceivableTradeAndContractAssets",),
+            ("NotesAndAccountsReceivableTrade",),
+            ("AccountsReceivableTradeAndContractAssets",),
+            ("NotesReceivableTrade", "AccountsReceivableTrade"),
+        ),
+        (("ElectronicallyRecordedMonetaryClaimsOperatingCA",),),
+        (("AccountsReceivableFromCompletedConstructionContractsCNS",),),
+    ),
+    "inventories": _first(("Inventories",), _JGAAP_INVENTORY_PARTS),
+    "noncurrent_assets": _first(("NoncurrentAssets",)),
+    "property_plant_equipment": _first(("PropertyPlantAndEquipment",)),
+    "intangible_assets": _first(("IntangibleAssets",)),
+    "goodwill": _first(("Goodwill",)),
+    "investment_securities": _each(
+        "InvestmentSecurities",
+        "StocksOfSubsidiariesAndAffiliates",
+        "InvestmentsInCapitalOfSubsidiariesAndAffiliates",
+    ),
+    "total_liabilities": _first(("Liabilities",)),
+    "current_liabilities": _first(("CurrentLiabilities",)),
+    "noncurrent_liabilities": _first(("NoncurrentLiabilities",)),
+    "interest_bearing_debt": _each(
+        "ShortTermLoansPayable",
+        "ShortTermLoansPayableToSubsidiariesAndAffiliates",
+        "CommercialPapersLiabilities",
+        "CurrentPortionOfLongTermLoansPayable",
+        "CurrentPortionOfLongTermLoansPayableToSubsidiariesAndAffiliates",
+        "CurrentPortionOfBonds",
+        "BondsPayable",
+        "ConvertibleBondTypeBondsWithSubscriptionRightsToShares",
+        "LongTermLoansPayable",
+        "LongTermLoansPayableToSubsidiariesAndAffiliates",
+    ),
+    "net_assets": _first(("NetAssets",)),
+    "retained_earnings": _first(("RetainedEarnings",)),
+    "net_sales": _first(
+        ("NetSales",),
+        ("OperatingRevenue1",),
+        ("OperatingRevenue2",),
+        ("NetSalesOfCompletedConstructionContractsCNS",),
+        ("RevenueFromContractsWithCustomers",),
+        ("OperatingRevenueRWY",),
+    ),
+    "cost_of_sales": _first(
+        ("CostOfSales",),
+        ("CostOfSalesOfCompletedConstructionContractsCNS",),
+    ),
+    "gross_profit": _first(
+        ("GrossProfit",),
+        ("GrossProfitOnCompletedConstructionContractsCNS",),
+    ),
+    "sga_expenses": _first(("SellingGeneralAndAdministrativeExpenses",)),
+    "operating_income": _first(("OperatingIncome",)),
+    "ordinary_income": _first(("OrdinaryIncome",)),
+    "net_income": _first(("ProfitLossAttributableToOwnersOfParent",), ("ProfitLoss",)),
+    "operating_cf": _first(("NetCashProvidedByUsedInOperatingActivities",)),
+    # 日本基準の投資 CF だけ "Investment" と綴る (IFRS は "Investing")。
+    "investing_cf": _first(("NetCashProvidedByUsedInInvestmentActivities",)),
+    "financing_cf": _first(("NetCashProvidedByUsedInFinancingActivities",)),
+}
+
+IFRS_STATEMENT_RULES: dict[str, StatementRule] = {
+    "total_assets": _first(("AssetsIFRS",)),
+    "current_assets": _first(("CurrentAssetsIFRS",)),
+    "cash_and_deposits": _first(("CashAndCashEquivalentsIFRS",)),
+    "trade_receivables": _first(("TradeAndOtherReceivablesCAIFRS",)),
+    "inventories": _first(("InventoriesCAIFRS",)),
+    "noncurrent_assets": _first(("NonCurrentAssetsIFRS",)),
+    "property_plant_equipment": _first(("PropertyPlantAndEquipmentIFRS",)),
+    "intangible_assets": _first(
+        ("GoodwillAndIntangibleAssetsIFRS",),
+        ("GoodwillIFRS", "IntangibleAssetsIFRS"),
+    ),
+    "goodwill": _first(("GoodwillIFRS",)),
+    "investment_securities": _each(
+        "OtherFinancialAssetsNCAIFRS",
+        "InvestmentsAccountedForUsingEquityMethodIFRS",
+    ),
+    "total_liabilities": _first(("LiabilitiesIFRS",)),
+    "current_liabilities": _first(("TotalCurrentLiabilitiesIFRS",)),
+    # タクソノミーの要素名が "Labilities" と綴られている。
+    "noncurrent_liabilities": _first(("NonCurrentLabilitiesIFRS",)),
+    "interest_bearing_debt": (
+        (
+            ("BondsAndBorrowingsCLIFRS",),
+            ("BorrowingsCLIFRS", "CurrentPortionOfLongTermBorrowingsCLIFRS"),
+        ),
+        (("BondsAndBorrowingsNCLIFRS",), ("BorrowingsNCLIFRS",)),
+    ),
+    "net_assets": _first(("EquityIFRS",)),
+    "retained_earnings": _first(("RetainedEarningsIFRS",)),
+    "net_sales": _first(("RevenueIFRS",), ("NetSalesIFRS",), ("Revenue2IFRS",)),
+    "cost_of_sales": _first(("CostOfSalesIFRS",)),
+    "gross_profit": _first(("GrossProfitIFRS",)),
+    "sga_expenses": _first(("SellingGeneralAndAdministrativeExpensesIFRS",)),
+    "operating_income": _first(("OperatingProfitLossIFRS",)),
+    "net_income": _first(
+        ("ProfitLossAttributableToOwnersOfParentIFRS",),
+        ("ProfitLossIFRS",),
+    ),
+    "operating_cf": _first(("NetCashProvidedByUsedInOperatingActivitiesIFRS",)),
+    "investing_cf": _first(("NetCashProvidedByUsedInInvestingActivitiesIFRS",)),
+    "financing_cf": _first(("NetCashProvidedByUsedInFinancingActivitiesIFRS",)),
+}
+
+# BS は期末時点、PL・CF は期間の context。セグメント等の Member 付き context は
+# 同じ要素IDで別の値を持つので、ここに挙げた context と完全一致した行だけ使う。
+STATEMENT_DURATION_FIELDS = frozenset(
+    {
+        "net_sales",
+        "cost_of_sales",
+        "gross_profit",
+        "sga_expenses",
+        "operating_income",
+        "ordinary_income",
+        "net_income",
+        "operating_cf",
+        "investing_cf",
+        "financing_cf",
+    }
+)
+
+# 基準の候補 (優先順)。(会計基準, 連結/個別, 要素ID接頭辞, context 接尾辞, 規則)
+STATEMENT_BASES: tuple[tuple[str, str, str, str, dict[str, StatementRule]], ...] = (
+    (ACCOUNTING_STANDARD_JGAAP, BASIS_CONSOLIDATED, "jppfs_cor", "", JGAAP_STATEMENT_RULES),
+    (ACCOUNTING_STANDARD_IFRS, BASIS_CONSOLIDATED, "jpigp_cor", "", IFRS_STATEMENT_RULES),
+    (
+        ACCOUNTING_STANDARD_JGAAP,
+        BASIS_NON_CONSOLIDATED,
+        "jppfs_cor",
+        "_NonConsolidatedMember",
+        JGAAP_STATEMENT_RULES,
+    ),
+)
+
+
+def _statement_context(field_name: str, suffix: str) -> str:
+    if field_name in STATEMENT_DURATION_FIELDS:
+        return "CurrentYearDuration" + suffix
+    return "CurrentYearInstant" + suffix
+
+
+# extract_financial_statement が読む context の全集合 (生行の読み戻しを絞るのに使う)
+STATEMENT_CONTEXT_IDS: frozenset[str] = frozenset(
+    _statement_context(field_name, suffix)
+    for _std, _basis, _prefix, suffix, rules in STATEMENT_BASES
+    for field_name in rules
+)
+
+
+def _resolve_statement_rule(
+    rule: StatementRule,
+    values: dict[tuple[str, str], int],
+    *,
+    prefix: str,
+    context_id: str,
+) -> int | None:
+    total: int | None = None
+    for part in rule:
+        for group in part:
+            found = [
+                values[(context_id, f"{prefix}:{name}")]
+                for name in group
+                if (context_id, f"{prefix}:{name}") in values
+            ]
+            if found:
+                total = (total or 0) + sum(found)
+                break
+    return total
+
+
+def extract_financial_statement(
+    raw_facts: list[RawFactRecord],
+) -> FinancialStatementRecord | None:
+    """raw_facts から BS・PL・CF の主要項目を取り出す.
+
+    基準は 連結(日本基準) > IFRS > 個別 の順に、総資産が取れる最初のものを採る。
+    採った基準の値だけで埋め、連結と個別の値は混ぜない。
+    同じ (context, 要素ID) の行が複数あるときは先頭の行を使う。
+    日本基準の有利子負債は、借入金の行が無ければ 0 (借入れが無い会社は行自体が無い)。
+    総資産がどの基準でも取れなければ None。
+    """
+    values: dict[tuple[str, str], int] = {}
+    for raw_fact in raw_facts:
+        context_id = raw_fact.context_id
+        element_id = raw_fact.element_id
+        if not context_id or not element_id or context_id not in STATEMENT_CONTEXT_IDS:
+            continue
+        key = (context_id, element_id)
+        if key in values:
+            continue
+        numeric = extract_numeric(raw_fact.raw_value)
+        if numeric is None:
+            continue
+        values[key] = int(round(numeric))
+
+    for standard, basis, prefix, suffix, rules in STATEMENT_BASES:
+        amounts = {
+            field_name: _resolve_statement_rule(
+                rule,
+                values,
+                prefix=prefix,
+                context_id=_statement_context(field_name, suffix),
+            )
+            for field_name, rule in rules.items()
+        }
+        if amounts["total_assets"] is None:
+            continue
+        if standard == ACCOUNTING_STANDARD_JGAAP and amounts["interest_bearing_debt"] is None:
+            amounts["interest_bearing_debt"] = 0
+        return FinancialStatementRecord(accounting_standard=standard, basis=basis, **amounts)
+    return None
 
 
 # ------------------------------------------------------------------ #

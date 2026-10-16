@@ -44,7 +44,7 @@ export function Nikkei225Page() {
               />
               <p className="text-sm font-bold text-ink">
                 {query.data.as_of} 時点 · 図鑑にある{' '}
-                <span className="font-num font-black text-ink">
+                <span className="font-num font-light text-ink">
                   {withSheet} / {companies.length}
                 </span>{' '}
                 社
@@ -89,7 +89,7 @@ function NikkeiRow({ company, rank }: { company: Nikkei225Company; rank: number 
       title={
         company.has_sheet && company.edinet_code ? (
           <Link
-            className="text-ink underline decoration-chrome/40 decoration-2 underline-offset-4 hover:decoration-signal"
+            className="text-ink underline decoration-black/15 decoration-2 underline-offset-4 hover:decoration-primary"
             to={`/companies/${company.edinet_code}`}
           >
             {name}
@@ -97,7 +97,7 @@ function NikkeiRow({ company, rank }: { company: Nikkei225Company; rank: number 
         ) : (
           <span className="inline-flex items-center gap-2">
             {name}
-            <span className="inline-flex items-center gap-1 bg-platinum px-1.5 py-0.5 text-[11px] font-bold text-chrome">
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#f3f3f3] px-2 py-0.5 text-xs font-medium text-ink-soft">
               <EggFigure className="h-3.5 w-auto" />
               図鑑に無い
             </span>

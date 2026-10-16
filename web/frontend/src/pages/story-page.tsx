@@ -25,7 +25,7 @@ export function StoryPage() {
         <article className="space-y-12">
           <header className="space-y-5">
             <Link
-              className="inline-flex h-11 items-center gap-1.5 text-sm font-bold text-chrome underline decoration-chrome/40 underline-offset-4 hover:decoration-signal"
+              className="inline-flex h-11 items-center gap-1.5 text-base text-link underline decoration-link/30 underline-offset-4 hover:decoration-link"
               to={`/companies/${story.edinet_code}`}
             >
               <ArrowLeftIcon className="size-4" strokeWidth={3} aria-hidden="true" />
@@ -36,7 +36,7 @@ export function StoryPage() {
                 initial={{ opacity: 0, scale: 0.6, rotate: -10 }}
                 animate={{ opacity: 1, scale: 1, rotate: 0 }}
                 transition={{ type: 'spring', stiffness: 300, damping: 14 }}
-                className="flex size-24 shrink-0 items-end justify-center border border-chrome bg-lavender sm:size-32"
+                className="flex size-24 shrink-0 items-end justify-center rounded-lg bg-[#f5f7fa] sm:size-32"
               >
                 <CharacterImage industry={story.industry} idle eager className="h-[115%] w-auto" />
               </motion.div>
@@ -47,7 +47,7 @@ export function StoryPage() {
                   {story.industry ?? '業種なし'}
                   {story.fiscal_year != null ? ` · ${story.fiscal_year}年度までの10年` : ''}
                 </p>
-                <h1 className="mt-1 text-3xl leading-tight font-black text-ink sm:text-4xl">{story.company_name}の歩み</h1>
+                <h1 className="mt-1 text-3xl leading-tight font-light text-ink sm:text-4xl">{story.company_name}の歩み</h1>
               </div>
             </div>
           </header>
@@ -80,7 +80,7 @@ export function StoryPage() {
           </div>
 
           <section className="sheet mx-auto max-w-3xl px-6 py-8 sm:px-10 sm:py-10">
-            <h2 className="text-[11px] font-bold tracking-[0.14em] text-chrome">事業</h2>
+            <h2 className="text-[1.375rem] leading-tight font-light text-ink">事業</h2>
             {story.narrative.business ? (
               <>
                 <p className="mt-4 text-lg leading-9 text-ink sm:text-xl sm:leading-10">
@@ -101,13 +101,11 @@ export function StoryPage() {
           </section>
 
           <section className="mx-auto max-w-3xl">
-            <h2 className="inline-flex border border-chrome bg-canvas px-3 py-2 text-xs font-bold tracking-[0.14em] text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_2px_0_var(--chrome)]">
-              これまでの歩み
-            </h2>
+            <h2 className="text-[1.375rem] leading-tight font-light text-ink">これまでの歩み</h2>
             {story.narrative.history.length === 0 ? (
               <p className="mt-3 text-sm text-ink">沿革は、この有報から取れていません。</p>
             ) : (
-              <ol className="relative mt-6 space-y-5 pl-8 before:absolute before:top-2 before:bottom-2 before:left-[7px] before:border-l before:border-chrome">
+              <ol className="relative mt-6 space-y-5 pl-8 before:absolute before:top-2 before:bottom-2 before:left-[7px] before:border-l before:border-[#cccccc]">
                 {story.narrative.history.map((beat, index) => (
                   <motion.li
                     key={`${beat.label}-${beat.text}`}
@@ -119,9 +117,9 @@ export function StoryPage() {
                   >
                     <span
                       aria-hidden="true"
-                      className="absolute top-1.5 -left-8 size-4 bg-carbon"
+                      className="absolute top-2 left-[-1.7rem] size-2 rounded-full bg-primary"
                     />
-                    {beat.label ? <p className="font-num text-sm font-bold text-chrome">{beat.label}</p> : null}
+                    {beat.label ? <p className="font-num text-sm font-medium text-ink-soft">{beat.label}</p> : null}
                     <p className="mt-0.5 text-base leading-8 text-ink">{beat.text}</p>
                   </motion.li>
                 ))}

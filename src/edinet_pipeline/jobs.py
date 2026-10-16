@@ -5,6 +5,7 @@
   process  : pending キューから書類を取得 → CSV ZIP ダウンロード → 指標抽出 → DB 更新
   backfill : 日付範囲で fetch → process を繰り返す一括実行
   reprocess: 保存済み raw_edinet_facts から再抽出 (再DLなし) → 指標・evidence を更新
+             --statements-only なら financial_statements だけを埋め直す
   import-local: 手元の CSV ZIP を API なしで 1 書類として取り込む
 """
 
@@ -21,6 +22,8 @@ from edinet_pipeline.client import CsvUnavailableError, EdinetClient
 from edinet_pipeline.config import Settings
 from edinet_pipeline.db import DatabasePool, PipelineRepository, db_connection
 from edinet_pipeline.extractors import (
+    STATEMENT_CONTEXT_IDS,
+    extract_financial_statement,
     merge_llm_records,
     parse_document_zip,
     parse_from_raw_facts,
@@ -346,6 +349,12 @@ def process_documents(
                             parsed=parsed,
                         )
                         repository.replace_metric_evidence(doc_id, parsed.evidence)
+                        repository.replace_financial_statement(
+                            doc_id=doc_id,
+                            edinet_code=edinet_code,
+                            fiscal_year=fiscal_year,
+                            statement=parsed.financial_statement,
+                        )
                         connection.commit()
                     elapsed_ms = int((time.time() - started_at) * 1000)
                     log_event(
@@ -496,6 +505,12 @@ def reprocess_documents(settings: Settings, *, limit: int | None = None) -> int:
                         parsed=parsed,
                     )
                     repository.replace_metric_evidence(doc_id, parsed.evidence)
+                    repository.replace_financial_statement(
+                        doc_id=doc_id,
+                        edinet_code=edinet_code,
+                        fiscal_year=fiscal_year,
+                        statement=parsed.financial_statement,
+                    )
                     connection.commit()
                 count += 1
                 elapsed_ms = int((time.time() - started_at) * 1000)
@@ -532,6 +547,58 @@ def reprocess_documents(settings: Settings, *, limit: int | None = None) -> int:
         return count
     finally:
         pool.closeall()
+
+
+def reprocess_statements(settings: Settings, *, limit: int | None = None) -> int:
+    """raw_edinet_facts から financial_statements だけを埋め直す.
+
+    財務指標・人的資本・evidence・status は触らず、LLM も呼ばない。
+    生行は財務諸表の context に絞って読む。個別書類の失敗はログして次へ進む。
+
+    Returns:
+        財務諸表を書き込んだ書類数 (総資産が取れず行を消しただけの書類は数えない)
+    """
+    with db_connection(settings.database_url) as connection:
+        repository = PipelineRepository(connection)
+        targets = repository.fetch_reprocessable_documents(limit=limit)
+        connection.commit()
+
+        written = 0
+        for document in targets:
+            doc_id = document["doc_id"]
+            try:
+                raw_facts = repository.fetch_raw_facts(
+                    doc_id, context_ids=STATEMENT_CONTEXT_IDS
+                )
+                statement = extract_financial_statement(raw_facts)
+                repository.replace_financial_statement(
+                    doc_id=doc_id,
+                    edinet_code=document["edinet_code"],
+                    fiscal_year=document["fiscal_year"],
+                    statement=statement,
+                )
+                connection.commit()
+            except Exception as exc:
+                connection.rollback()
+                log_event(
+                    logger,
+                    "error",
+                    "statement_reprocess_failed",
+                    doc_id=doc_id,
+                    reason=str(exc),
+                )
+                continue
+            if statement is not None:
+                written += 1
+
+    log_event(
+        logger,
+        "info",
+        "statement_reprocess_completed",
+        targets=len(targets),
+        written=written,
+    )
+    return written
 
 
 # ------------------------------------------------------------------ #
@@ -585,6 +652,12 @@ def import_local_document(
             parsed=parsed,
         )
         repository.replace_metric_evidence(doc_id, parsed.evidence)
+        repository.replace_financial_statement(
+            doc_id=doc_id,
+            edinet_code=edinet_code,
+            fiscal_year=fiscal_year,
+            statement=parsed.financial_statement,
+        )
         connection.commit()
     log_event(
         logger,

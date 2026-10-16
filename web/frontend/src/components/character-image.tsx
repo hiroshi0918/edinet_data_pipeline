@@ -13,6 +13,7 @@ export function CharacterImage({
   bobDelay = 0,
   className,
   eager = false,
+  onPaper = true,
 }: {
   industry: string | null | undefined
   variant?: 'thumb' | 'full'
@@ -21,6 +22,7 @@ export function CharacterImage({
   bobDelay?: number
   className?: string
   eager?: boolean
+  onPaper?: boolean
 }) {
   const src = variant === 'full' ? specimenPortrait(industry) : specimenThumb(industry)
   const style = idle ? ({ '--bob-delay': `${bobDelay}s` } as CSSProperties) : undefined
@@ -40,7 +42,7 @@ export function CharacterImage({
       decoding="async"
       draggable={false}
       style={style}
-      className={cn('on-paper object-contain select-none', idle && 'idle-bob', className)}
+      className={cn('object-contain select-none', onPaper && 'on-paper', idle && 'idle-bob', className)}
     />
   )
 }

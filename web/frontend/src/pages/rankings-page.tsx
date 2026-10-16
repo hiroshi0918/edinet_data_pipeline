@@ -86,7 +86,7 @@ export function RankingsPage() {
                   score={company.score}
                   title={
                     <Link
-                      className="text-ink underline decoration-chrome/40 decoration-2 underline-offset-4 hover:decoration-signal"
+                      className="text-ink underline decoration-black/15 decoration-2 underline-offset-4 hover:decoration-primary"
                       to={`/companies/${company.edinet_code}`}
                     >
                       {company.company_name}
@@ -118,16 +118,16 @@ export function RankingsPage() {
 // 業種で絞ったときの見出し。図鑑のその業種のページに見せる。
 function SpeciesBanner({ industry, count }: { industry: string; count: number | undefined }) {
   return (
-    <div className="sheet flex items-center gap-5 bg-periwinkle px-4 py-4 sm:gap-6 sm:px-6">
-      <div className="flex size-24 shrink-0 items-end justify-center border border-chrome bg-lavender sm:size-32">
+    <div className="flex items-center gap-5 rounded-lg bg-[#f5f7fa] px-4 py-6 sm:gap-6 sm:px-8">
+      <div className="flex size-24 shrink-0 items-end justify-center rounded-lg bg-white sm:size-32">
         <CharacterImage industry={industry} eager className="h-[108%] w-auto" />
       </div>
       <div className="min-w-0">
-        <p className="font-num text-[11px] font-bold tracking-[0.14em] text-carbon">
+        <p className="font-num text-xs font-medium tracking-wide text-ink-soft">
           {specimenNo(industry)} · {specimenLabel(industry)}
         </p>
-        <h1 className="mt-1 text-2xl leading-tight font-black text-ink sm:text-4xl">{industry}</h1>
-        <p className="mt-2 text-sm text-carbon">
+        <h1 className="mt-1 text-3xl leading-tight font-light text-ink sm:text-4xl">{industry}</h1>
+        <p className="mt-2 text-base text-black/60">
           この業種の会社を、点の高い順に並べます。{count != null ? `${count.toLocaleString('ja-JP')}社。` : ''}
         </p>
       </div>

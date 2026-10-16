@@ -258,6 +258,9 @@ def test_import_local_document_upserts_without_api(
         def replace_metric_evidence(self, doc_id: str, evidence: Any) -> None:
             return None
 
+        def replace_financial_statement(self, **_kwargs: Any) -> None:
+            return None
+
     monkeypatch.setattr(jobs, "db_connection", fake_db_connection)
     monkeypatch.setattr(jobs, "PipelineRepository", ImportRepo)
 
@@ -277,3 +280,74 @@ def test_import_local_document_upserts_without_api(
     assert repo.documents[0].fiscal_year == 2022
     assert repo.processed == ["S100LOCAL"]
     assert connection.commits == 1
+
+
+def test_reprocess_statements_rebuilds_only_financial_statements(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """財務諸表だけを埋め直し、総資産が取れない書類は行を消すだけにする."""
+    from edinet_pipeline.models import RawFactRecord
+
+    def fact(element_id: str, value: str) -> RawFactRecord:
+        return RawFactRecord(
+            source_file="jpcrp.csv",
+            row_number=1,
+            element_id=element_id,
+            item_name=None,
+            context_id="CurrentYearInstant",
+            relative_year="当期末",
+            consolidation_type="連結",
+            period_type=None,
+            unit_id="JPY",
+            unit_label=None,
+            raw_value=value,
+        )
+
+    settings = make_settings()
+
+    class StatementConnection(StubConnection):
+        def rollback(self) -> None:
+            return None
+
+    connection = StatementConnection()
+    StubRepository.reset()
+
+    @contextmanager
+    def fake_db_connection(_database_url: str):
+        yield connection
+
+    class StatementRepo(StubRepository):
+        def __init__(self, conn: StubConnection) -> None:
+            super().__init__(conn)
+            self.context_filters: list[Any] = []
+            self.written: list[tuple[str, Any]] = []
+
+        def fetch_reprocessable_documents(self, *, limit: int | None = None) -> list[dict]:
+            return [
+                {"doc_id": "S100BS", "edinet_code": "E00001", "fiscal_year": 2025},
+                {"doc_id": "S100NONE", "edinet_code": "E00002", "fiscal_year": 2025},
+            ]
+
+        def fetch_raw_facts(self, doc_id: str, *, context_ids: Any = None) -> list[RawFactRecord]:
+            self.context_filters.append(context_ids)
+            if doc_id == "S100BS":
+                return [fact("jppfs_cor:Assets", "1000")]
+            return []
+
+        def replace_financial_statement(self, *, doc_id: str, statement: Any, **_: Any) -> None:
+            self.written.append((doc_id, statement))
+
+        def mark_processed(self, *_args: Any) -> None:
+            raise AssertionError("statements-only must not touch financial_reports")
+
+    monkeypatch.setattr(jobs, "db_connection", fake_db_connection)
+    monkeypatch.setattr(jobs, "PipelineRepository", StatementRepo)
+
+    count = jobs.reprocess_statements(settings)
+
+    repo = StatementRepo.instances[0]
+    assert count == 1
+    assert [doc_id for doc_id, _ in repo.written] == ["S100BS", "S100NONE"]
+    assert repo.written[0][1].total_assets == 1000
+    assert repo.written[1][1] is None
+    assert all(filters == jobs.STATEMENT_CONTEXT_IDS for filters in repo.context_filters)

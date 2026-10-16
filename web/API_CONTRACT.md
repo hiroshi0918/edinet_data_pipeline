@@ -13,6 +13,7 @@ Rails（`/api/v1`）と React の接点。JSON のキーは snake_case。メソ�
 | `GET /companies/:code` | `CompaniesQuery.show` |
 | `GET /companies/:code/sheet` | `SheetQuery` |
 | `GET /companies/:code/story` | `StoryQuery` |
+| `GET /companies/:code/statements` | `StatementQuery`（読み解きは `StatementInsights`） |
 | `GET /companies/:code/spotlight` | `SpotlightQuery` |
 | `GET /industries` | `IndustriesQuery` |
 | `GET /industries/hc_distribution` | `HcDistributionQuery` |
@@ -21,7 +22,7 @@ Rails（`/api/v1`）と React の接点。JSON のキーは snake_case。メソ�
 | `GET /rankings/size` | `SizeRankingQuery` |
 | `GET /nikkei225` | `Nikkei225Query` |
 
-図鑑の画面は `/`、`/companies/:code`、`/companies/:code/story`、`/compare`、`/rankings`、`/nikkei225`。`/` は表紙で、業種の目次に `GET /industries` を読む。`/companies/:code` は `GET /companies/:code/sheet` を読む。`/rankings` は `?industry=&axis=` を URL に持つ。`GET /rankings` が並べるのは証券コードのある上場会社だけ。`/compare` は `?a=&b=` に会社コードを持ち、2社の `GET /companies/:code/story` を読んで売上高・営業利益・営業利益率を同じ目盛りで重ねる（BS は未取り込みなので対象外）。spotlight、業種分布、人的資本ランキング、規模ランキングのエンドポイントは残している。
+図鑑の画面は `/`、`/companies/:code`、`/companies/:code/story`、`/companies/:code/statements`、`/compare`、`/rankings`、`/nikkei225`。`/` は表紙で、業種の目次に `GET /industries` を読む。`/companies/:code` は `GET /companies/:code/sheet` を読む。`/companies/:code/statements` はお財布の画面で、`GET /companies/:code/statements` を読む。`/rankings` は `?industry=&axis=` を URL に持つ。`GET /rankings` が並べるのは証券コードのある上場会社だけ。`/compare` は `?a=&b=` に会社コードを持ち、2社の `GET /companies/:code/story` を読んで売上高・営業利益・営業利益率を同じ目盛りで重ねる（BS は比べない）。spotlight、業種分布、人的資本ランキング、規模ランキングのエンドポイントは残している。
 
 ## 共通パラメータ
 
@@ -143,6 +144,93 @@ KPI の件数は、既定の次元（`reporting_company` × `all`）で数える
 ### GET /api/v1/companies/:code/story
 
 直近10年の売上・営業利益・従業員数と、事業の内容・沿革。保存済みの書き直しがあればそれを返し、無ければ原文の抜粋を返す。事業の `source` は事業の内容の全文、沿革の `source` は根拠の引用。この GET は書き直さない。保存は `bin/rails 'story:rewrite[EDINETコード]'`。
+
+### GET /api/v1/companies/:code/statements
+
+お財布。最新の有報の財務諸表（BS・PL・CF）を、内訳と読み解きの札にする。値は `financial_statements`（パイプラインが `raw_edinet_facts` から抽出。`edinet reprocess --statements-only` で埋め直せる）。金額の単位は円。未知のコードは 404。財務諸表が取れていない会社は 200 で、`fiscal_year` から `ratios` までが null、`insights` は空配列。
+
+- 基準は1書類につき1つ。`basis` は `consolidated`（連結）か `non_consolidated`（個別）、`accounting_standard` は `jgaap` か `ifrs`。連結と個別の値は混ぜない。
+- `balance_sheet.assets` は重ならない内訳で、`other` は総資産から他を引いた残り（0 未満は 0）。`intangibles` はのれんを含む。`share` は総資産に対する割合。
+- `balance_sheet.funding` は `debt`（借入金・社債・CP）、`other_liabilities`、`net_assets`。借入金が取れない会社（IFRS の独自要素）は `debt_known: false` で、負債を `liabilities` 1つにまとめる。債務超過なら `net_assets` は負。
+- `income_statement.net_sales` は財務諸表の売上。取れなければ `financial_reports.sales`（経営指標等）に倒し、`sales_source` を `summary` にする。売上原価・売上総利益・販管費は、片方が欠けていれば差し引きで埋める。IFRS に経常利益は無い。
+- `cash_flow.pattern` は営業・投資・財務 CF の符号（0 以上を入り）の組み合わせ。どれかが null なら null。
+- 銀行業・保険業・証券、商品先物取引業・その他金融業は `is_financial: true`。札は出さず `note` を返す。
+
+```json
+{
+  "edinet_code": "E02367",
+  "company_name": "任天堂株式会社",
+  "industry": "その他製品",
+  "securities_code": "7974",
+  "is_financial": false,
+  "note": null,
+  "fiscal_year": 2026,
+  "doc_id": "S100XXXX",
+  "accounting_standard": "jgaap",
+  "basis": "consolidated",
+  "balance_sheet": {
+    "total_assets": 3805300000000,
+    "assets": [
+      { "key": "cash", "label": "現金・預金", "hint": "すぐに使えるお金", "amount": 1791800000000, "share": 0.47 }
+    ],
+    "funding": [
+      { "key": "debt", "label": "借入金・社債", "hint": "...", "amount": 0, "share": 0.0 },
+      { "key": "other_liabilities", "label": "その他の負債", "hint": "...", "amount": 850100000000, "share": 0.22 },
+      { "key": "net_assets", "label": "純資産", "hint": "...", "amount": 2955200000000, "share": 0.78 }
+    ],
+    "debt_known": true
+  },
+  "income_statement": {
+    "net_sales": 2313100000000, "sales_source": "statement",
+    "cost_of_sales": 1404100000000, "gross_profit": 909000000000, "sga_expenses": 548800000000,
+    "operating_income": 360100000000, "ordinary_income": 542200000000, "net_income": 424100000000
+  },
+  "cash_flow": {
+    "operating": 289800000000, "investing": -100000000000, "financing": -200000000000,
+    "pattern": { "key": "steady", "tone": "good", "label": "本業で稼ぎ、投資と返済に回す", "text": "..." }
+  },
+  "ratios": {
+    "equity_ratio": 0.78, "cash_share": 0.47, "cash_months": 9.3,
+    "property_share": 0.03, "intangible_share": 0.01, "investment_share": 0.11, "inventory_share": 0.14,
+    "gross_margin": 0.39, "operating_margin": 0.16
+  },
+  "insights": [
+    { "key": "stable", "tone": "good", "label": "借金が少なく安定", "text": "持ち物の78%を、返さなくてよいお金（株主のお金と貯めた利益）でまかなっています。" }
+  ]
+}
+```
+
+`assets` の `key` は `cash`、`receivables`、`inventories`、`property`、`intangibles`、`investments`、`other` の順。`tone` は `good`、`neutral`、`caution`。
+
+#### お財布の目安
+
+業種の平均とは比べない。閾値は `StatementInsights` の定数。割合はすべて総資産に対して、粗利率は売上に対して。
+
+| 札の key | 条件 |
+| --- | --- |
+| `insolvent` | 純資産が負（このとき `stable` と `leveraged` は出さない） |
+| `stable` | 自己資本比率（純資産 ÷ 総資産）が 50% 以上 |
+| `leveraged` | 自己資本比率が 20% 未満 |
+| `cash_rich` | 現金・預金が 30% 以上、または月の売上の 3 か月分以上 |
+| `net_cash` | 現金・預金が借入金・社債を上回る（借入金が取れない会社は判定しない） |
+| `asset_heavy` | 建物・機械・土地が 40% 以上 |
+| `acquisitive` | のれん・無形資産が 20% 以上 |
+| `investor` | 他社の株など（投資有価証券・関係会社株式、IFRS はその他の金融資産(非流動)と持分法投資）が 25% 以上 |
+| `inventory` | 在庫が 20% 以上 |
+| `high_margin` | 粗利率が 50% 以上 |
+| `low_margin` | 粗利率が 15% 以下 |
+| `net_loss` | 純利益が負 |
+| `cash_flow_*` | CF の符号の組み合わせ。下の表 |
+
+| 営業 | 投資 | 財務 | pattern の key | 札 |
+| --- | --- | --- | --- | --- |
+| 入り | 出 | 出 | `steady` | 本業で稼ぎ、投資と返済に回す |
+| 入り | 出 | 入り | `expanding` | 借りてでも投資する |
+| 入り | 入り | 出 | `restructuring` | 持ち物を売って返済に回す |
+| 入り | 入り | 入り | `cash_pile` | お金を集めている |
+| 出 | どちらも | 入り | `funding_gap` | 借入れや増資で資金をつないでいる |
+| 出 | 入り | 出 | `shrinking` | 持ち物を売って支払いにあてる |
+| 出 | 出 | 出 | `draining` | 手元のお金を取り崩している |
 
 ### GET /api/v1/industries
 

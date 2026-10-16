@@ -6,13 +6,15 @@
   human_capital_metrics : 人的資本指標 (書類 doc_id × scope × worker_type)
   raw_edinet_facts      : 元CSVの生行データ
   metric_evidence       : 抽出根拠の監査証跡
+  financial_statements  : BS・PL・CF の主要項目 (書類 doc_id ごとに1行)
   vw_company_year_metrics : 企業×年度ごとの統合ビュー (分析用)
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from contextlib import contextmanager
+from dataclasses import asdict
 from datetime import date
 
 import psycopg2
@@ -21,6 +23,7 @@ from psycopg2.pool import ThreadedConnectionPool
 
 from edinet_pipeline.models import (
     DocumentRecord,
+    FinancialStatementRecord,
     MetricEvidenceRecord,
     ParsedDocument,
     RawFactRecord,
@@ -527,28 +530,55 @@ class PipelineRepository:
             ],
         )
 
+    def replace_financial_statement(
+        self,
+        *,
+        doc_id: str,
+        edinet_code: str,
+        fiscal_year: int,
+        statement: FinancialStatementRecord | None,
+    ) -> None:
+        """財務諸表の行を削除 → 再挿入. statement が None なら削除だけ."""
+        with self.connection.cursor() as cursor:
+            cursor.execute("DELETE FROM financial_statements WHERE doc_id = %s", (doc_id,))
+            if statement is None:
+                return
+            values = asdict(statement)
+            columns = ["doc_id", "edinet_code", "fiscal_year", *values]
+            placeholders = ", ".join(["%s"] * len(columns))
+            cursor.execute(
+                f"INSERT INTO financial_statements ({', '.join(columns)}) "
+                f"VALUES ({placeholders})",
+                (doc_id, edinet_code, fiscal_year, *values.values()),
+            )
+
     # ------------------------------------------------------------------ #
     #  再抽出 (reprocess) — 保存済み生行からの読み戻し
     # ------------------------------------------------------------------ #
 
-    def fetch_raw_facts(self, doc_id: str) -> list[RawFactRecord]:
+    def fetch_raw_facts(
+        self, doc_id: str, *, context_ids: Collection[str] | None = None,
+    ) -> list[RawFactRecord]:
         """raw_edinet_facts から指定書類の生行を (source_file, row_number) 順で返す.
 
         抽出ロジック修正後、CSV ZIP を再ダウンロードせずに抽出を再実行するための
         入力。並び順は first-wins の挙動を決めるため必ず保つ。
+        context_ids を渡すと、その context の行だけに絞る。
         """
+        sql = """
+            SELECT source_file, row_number, element_id, item_name, context_id,
+                   relative_year, consolidation_type, period_type,
+                   unit_id, unit_label, raw_value
+              FROM raw_edinet_facts
+             WHERE doc_id = %s
+        """
+        params: tuple = (doc_id,)
+        if context_ids is not None:
+            sql += " AND context_id = ANY(%s)"
+            params = (doc_id, sorted(context_ids))
+        sql += " ORDER BY source_file, row_number"
         with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
-            cursor.execute(
-                """
-                SELECT source_file, row_number, element_id, item_name, context_id,
-                       relative_year, consolidation_type, period_type,
-                       unit_id, unit_label, raw_value
-                  FROM raw_edinet_facts
-                 WHERE doc_id = %s
-                 ORDER BY source_file, row_number
-                """,
-                (doc_id,),
-            )
+            cursor.execute(sql, params)
             return [
                 RawFactRecord(
                     source_file=row["source_file"],

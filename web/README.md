@@ -1,6 +1,12 @@
 # EDINET Dashboard（Rails + React）
 
-会社図鑑の画面。PostgreSQL 直読みの Rails API と React SPA。入口は表紙（社名検索と業種の目次）、ランキング、日経225一覧。見た目の決まりは [frontend/DESIGN_SYSTEM.md](frontend/DESIGN_SYSTEM.md)。選んだ会社は `GET /companies/:code/sheet` のシート。パイプライン本体（Python）と Streamlit は触らない。
+会社図鑑の画面。PostgreSQL 直読みの Rails API と React SPA。入口は表紙（社名検索と業種の目次）、ランキング、日経225一覧。見た目の決まりは [frontend/DESIGN_SYSTEM.md](frontend/DESIGN_SYSTEM.md)。選んだ会社は `GET /companies/:code/sheet` のシート。シートから、10年の歩み（`/companies/:code/story`）と、財務諸表を簿記なしで読むお財布（`/companies/:code/statements`）へ進む。パイプライン本体（Python）と Streamlit は触らない。
+
+お財布は `financial_statements` を読む。新しく作った DB や抽出ロジックを直したあとは、リポジトリルートで埋め直す（API は叩かない）。
+
+```bash
+edinet reprocess --statements-only
+```
 
 - JSON は snake_case、GET のみ。契約は [API_CONTRACT.md](API_CONTRACT.md)
 - スキーマ正本はリポジトリルートの Alembic。`bin/rails db:migrate` は使わない
@@ -11,7 +17,7 @@
 1. [API_CONTRACT.md](API_CONTRACT.md) — 画面と JSON の対応
 2. `config/routes.rb` — エンドポイント一覧
 3. `app/queries/dimension.rb` — 許可リストと閾値
-4. `app/queries/*.rb` — SQL（`data.py` の移植）。スポットライトは `spotlight_query.rb`
+4. `app/queries/*.rb` — SQL（`data.py` の移植）。スポットライトは `spotlight_query.rb`、お財布は `statement_query.rb` と目安の `statement_insights.rb`
 5. `app/controllers/api/v1/` — パラメータを Query に渡すだけ
 6. `frontend/src/routes.tsx` — React Router
 7. `frontend/src/hooks/use-filters.ts` — URL とフィルタの同期

@@ -181,6 +181,7 @@ web/frontend (React)
 | 抽出経路 | `metric_evidence.matched_by` | `element_id_match` / `item_name_match` / `text_fallback` / `llm_fallback` |
 | 抽出根拠 | `MetricEvidenceRecord` / `metric_evidence` | どの行・どのファイルから値を抜いたかの監査証跡 |
 | 元 CSV 行 | `RawFactRecord` / `raw_edinet_facts` | 元 CSV の 1 行をそのまま保存（再抽出・監査用） |
+| 財務諸表 | `FinancialStatementRecord` / `financial_statements` | BS・PL・CF の主要項目。`extractors.extract_financial_statement` が生行から作る。Web のお財布画面が読む |
 | LLM キャッシュ | `llm_extraction_cache` | SHA256(モデル+テキスト) をキーにした LLM 結果の永続化 |
 | 分析ビュー | `vw_company_year_metrics` | 企業×年度×次元 に集約した分析向けビュー (1 書類が最大 6 行を返す) |
 

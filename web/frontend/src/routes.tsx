@@ -1,4 +1,4 @@
-// 会社図鑑。表紙、選んだ会社のシートと歩み、2社比較、ランキング、日経225。
+// 会社図鑑。表紙、選んだ会社のシートと歩みとお財布、2社比較、ランキング、日経225。
 import { Navigate, type RouteObject } from 'react-router'
 
 import { AppLayout } from '@/components/layout/app-layout'
@@ -7,6 +7,7 @@ import { ComparePage } from '@/pages/compare-page'
 import { HomePage } from '@/pages/home-page'
 import { Nikkei225Page } from '@/pages/nikkei225-page'
 import { RankingsPage } from '@/pages/rankings-page'
+import { StatementsPage } from '@/pages/statements-page'
 import { StoryPage } from '@/pages/story-page'
 
 export const routeObjects: RouteObject[] = [
@@ -18,6 +19,7 @@ export const routeObjects: RouteObject[] = [
       { path: 'companies', element: <Navigate to="/" replace /> },
       { path: 'companies/:code', element: <CompaniesPage /> },
       { path: 'companies/:code/story', element: <StoryPage /> },
+      { path: 'companies/:code/statements', element: <StatementsPage /> },
       { path: 'compare', element: <ComparePage /> },
       { path: 'nikkei225', element: <Nikkei225Page /> },
       { path: 'rankings', element: <RankingsPage /> },

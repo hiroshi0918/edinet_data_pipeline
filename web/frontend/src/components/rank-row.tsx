@@ -26,14 +26,14 @@ export function RankRow({
       className={cn(
         'grid grid-cols-[2.25rem_auto_minmax(0,1fr)_auto] items-center gap-x-3 sm:gap-x-4',
         podium
-          ? 'sheet mb-2 px-3 py-3 sm:px-4'
-          : 'border-b border-chrome/25 bg-platinum/80 px-3 py-2.5 transition-colors hover:bg-surface sm:px-4',
+          ? 'mb-2 rounded-lg bg-[#f5f7fa] px-3 py-3 sm:px-4'
+          : 'border-b border-[#f3f3f3] px-3 py-3 transition-colors hover:bg-[#f5f7fa] sm:px-4',
       )}
     >
       <span
         className={cn(
-          'font-num flex size-8 items-center justify-center text-sm font-black',
-          podium ? 'bg-amber text-carbon' : 'text-chrome',
+          'font-num flex size-8 items-center justify-center text-sm',
+          podium ? 'rounded-full bg-primary font-bold text-white' : 'text-ink-soft',
         )}
       >
         {rank}
@@ -45,14 +45,14 @@ export function RankRow({
         className={podium ? 'size-12 sm:size-14' : 'size-9'}
       />
       <span className="min-w-0">
-        <span className={cn('block truncate', podium ? 'text-base font-black sm:text-lg' : 'text-sm font-bold')}>
+        <span className={cn('block truncate', podium ? 'text-lg font-light sm:text-xl' : 'text-sm font-medium')}>
           {title}
         </span>
         {meta ? <span className="mt-0.5 block truncate text-xs text-ink-soft">{meta}</span> : null}
       </span>
       <span
         className={cn(
-          'font-num text-right leading-none font-black text-ink',
+          'font-num text-right leading-none font-light text-ink',
           podium ? 'text-3xl sm:text-4xl' : 'text-xl',
         )}
       >
@@ -61,7 +61,7 @@ export function RankRow({
         ) : (
           <>
             {score}
-            <span className={cn('ml-0.5 font-bold text-ink-soft', podium ? 'text-sm' : 'text-xs')}>点</span>
+            <span className={cn('ml-0.5 font-normal text-ink-soft', podium ? 'text-sm' : 'text-xs')}>点</span>
           </>
         )}
       </span>

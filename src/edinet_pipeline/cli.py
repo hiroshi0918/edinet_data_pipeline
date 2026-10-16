@@ -16,6 +16,7 @@ from edinet_pipeline.jobs import (
     import_local_document,
     process_documents,
     reprocess_documents,
+    reprocess_statements,
 )
 from edinet_pipeline.logging_utils import configure_logging
 
@@ -33,6 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
         process          : キューに溜まった書類を順次ダウンロード・解析
         backfill         : 日付範囲で fetch → process をまとめて実行
         reprocess        : 保存済み生行から再抽出 (再DLなし) し指標を更新
+                           (--statements-only で財務諸表だけ)
         import-local     : 手元の CSV ZIP を API なしで 1 書類として取り込む
         export-analytics : PostgreSQL → Parquet / DuckDB へスナップショット出力
         dashboard        : 分析ダッシュボードを起動 (要 viz 依存)
@@ -118,6 +120,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Maximum documents to reprocess (default: all with raw facts)",
+    )
+    reprocess_parser.add_argument(
+        "--statements-only",
+        action="store_true",
+        help="Rebuild financial_statements only (keeps metrics, evidence and LLM untouched)",
     )
 
     # --- import-local: 手元 ZIP を API なしで取り込む ---
@@ -211,6 +218,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "reprocess":
+        if args.statements_only:
+            count = reprocess_statements(settings, limit=args.limit)
+            print(f"statements: count={count}")
+            return 0
         count = reprocess_documents(settings, limit=args.limit)
         print(f"reprocessed: count={count}")
         return 0

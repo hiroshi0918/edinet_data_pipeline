@@ -22,6 +22,19 @@ export function formatOkuYen(
   return withUnit(amount, '億円', options)
 }
 
+// 兆・億・万で丸める。1兆以上は小数1桁、それ未満は整数。負は「−」を付ける。
+export function formatYenShort(value: number | null | undefined): string {
+  if (isBlank(value)) return '—'
+  const sign = value < 0 ? '−' : ''
+  const abs = Math.abs(value)
+  if (abs >= 1e12) {
+    return `${sign}${(abs / 1e12).toLocaleString('ja-JP', { maximumFractionDigits: 1 })}兆円`
+  }
+  if (abs >= 1e8) return `${sign}${Math.round(abs / 1e8).toLocaleString('ja-JP')}億円`
+  if (abs >= 1e4) return `${sign}${Math.round(abs / 1e4).toLocaleString('ja-JP')}万円`
+  return `${sign}${Math.round(abs).toLocaleString('ja-JP')}円`
+}
+
 export function formatPeople(
   value: number | null | undefined,
   options?: FormatOptions,

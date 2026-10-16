@@ -19,7 +19,7 @@ export function YearChart({
   if (present.length === 0) {
     return (
       <div className="sheet p-5">
-        <p className="text-sm font-black text-ink">{title}</p>
+        <p className="text-base font-light text-ink">{title}</p>
         <p className="mt-2 text-sm text-ink-soft">この10年の有報には値がありません。</p>
       </div>
     )
@@ -28,8 +28,8 @@ export function YearChart({
   return (
     <div className="sheet p-5">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-sm font-black text-ink">{title}</p>
-        <p className="font-num text-lg font-black text-ink">{formatLatest(points, kind)}</p>
+        <p className="text-base font-light text-ink">{title}</p>
+        <p className="font-num text-lg font-light text-ink">{formatLatest(points, kind)}</p>
       </div>
       <div className="mt-3">
         <LineChart

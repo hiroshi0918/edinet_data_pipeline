@@ -5,6 +5,7 @@ import type {
   CompanyDetail,
   IndustriesResponse,
   SheetResponse,
+  StatementsResponse,
   StoryResponse,
   MetaResponse,
   RankingsResponse,
@@ -65,6 +66,10 @@ export function fetchSheet(code: string) {
 
 export function fetchStory(code: string) {
   return apiGet<StoryResponse>(`/companies/${encodeURIComponent(code)}/story`)
+}
+
+export function fetchStatements(code: string) {
+  return apiGet<StatementsResponse>(`/companies/${encodeURIComponent(code)}/statements`)
 }
 
 export function fetchIndustries() {

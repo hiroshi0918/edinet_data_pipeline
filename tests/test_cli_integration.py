@@ -289,6 +289,57 @@ def test_reprocess_re_extracts_from_raw_facts_without_redownload(
     ) == (Decimal("12.50"),)
 
 
+@pytest.mark.integration
+def test_process_and_reprocess_statements_fill_financial_statements(
+    db_connection: psycopg2.extensions.connection,
+    pipeline_env: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """process で財務諸表が入り、reprocess --statements-only で消えた行が戻ること."""
+    document_date = "2024-03-29"
+    FakeClient.documents_by_date[document_date] = [
+        build_document(doc_id="S100BS1", edinet_code="E00001", submit_date=document_date)
+    ]
+    FakeClient.downloads = {
+        "S100BS1": build_csv_zip(
+            [
+                {"要素ID": "jppfs_cor:Assets", "コンテキストID": "CurrentYearInstant",
+                 "項目名": "資産", "相対年度": "当期末", "値": "1000"},
+                {"要素ID": "jppfs_cor:CashAndDeposits", "コンテキストID": "CurrentYearInstant",
+                 "項目名": "現金及び預金", "相対年度": "当期末", "値": "300"},
+                {"要素ID": "jppfs_cor:NetSales", "コンテキストID": "CurrentYearDuration",
+                 "項目名": "売上高", "相対年度": "当期", "値": "2000"},
+            ]
+        ),
+    }
+    monkeypatch.setattr("edinet_pipeline.jobs.EdinetClient", FakeClient)
+    assert main(["fetch", "--date", document_date]) == 0
+    assert main(["process", "--limit", "10"]) == 0
+
+    query = """
+        SELECT basis, total_assets, cash_and_deposits, net_sales, interest_bearing_debt
+          FROM financial_statements WHERE doc_id = %s
+    """
+    assert fetch_one(db_connection, query, ("S100BS1",)) == (
+        "consolidated", 1000, 300, 2000, 0,
+    )
+
+    with db_connection.cursor() as cursor:
+        cursor.execute("DELETE FROM financial_statements")
+        cursor.execute("UPDATE financial_reports SET sales = 1 WHERE doc_id = 'S100BS1'")
+    db_connection.commit()
+
+    FakeClient.downloads = {}
+    assert main(["reprocess", "--statements-only"]) == 0
+
+    assert fetch_one(db_connection, query, ("S100BS1",)) == (
+        "consolidated", 1000, 300, 2000, 0,
+    )
+    assert fetch_one(
+        db_connection, "SELECT sales FROM financial_reports WHERE doc_id = %s", ("S100BS1",)
+    ) == (1,)
+
+
 def _register_pending_doc(
     monkeypatch: pytest.MonkeyPatch, *, doc_id: str, edinet_code: str, submit_date: str
 ) -> None:

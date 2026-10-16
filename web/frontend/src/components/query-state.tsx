@@ -29,7 +29,7 @@ export function QueryState({
   if (error) {
     return (
       <Alert variant="destructive" className="max-w-xl">
-        <AlertTitle className="font-black">取得に失敗しました</AlertTitle>
+        <AlertTitle className="font-medium">取得に失敗しました</AlertTitle>
         <AlertDescription>{errorMessage(error)}</AlertDescription>
       </Alert>
     )
@@ -39,7 +39,7 @@ export function QueryState({
       <div className="flex max-w-xl items-end gap-4">
         <EggFigure className="h-20 w-auto shrink-0" />
         <Alert className="bg-surface">
-          <AlertTitle className="font-black">データがありません</AlertTitle>
+          <AlertTitle className="font-medium">データがありません</AlertTitle>
           <AlertDescription>{empty}</AlertDescription>
         </Alert>
       </div>

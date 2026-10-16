@@ -1,4 +1,4 @@
-// 見出し。板の上端につく太いラベルと、下に1文。
+// 見出し。細い大きな文字と、その下の1文。
 import type { ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
@@ -16,10 +16,8 @@ export function SectionHeading({
 }) {
   return (
     <div className={cn(className)}>
-      <Tag className="inline-flex border border-chrome bg-canvas px-3 py-2 text-xs font-bold tracking-[0.14em] text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_2px_0_var(--chrome)]">
-        {title}
-      </Tag>
-      {description ? <p className="mt-3 max-w-2xl text-sm leading-6 text-ink">{description}</p> : null}
+      <Tag className="text-[1.75rem] leading-tight font-light text-ink sm:text-[2.75rem]">{title}</Tag>
+      {description ? <p className="mt-3 max-w-xl text-base leading-relaxed text-black/60">{description}</p> : null}
     </div>
   )
 }

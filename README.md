@@ -185,10 +185,12 @@ graph LR
   - 未処理キューを取得し、CSV ZIP から **3層抽出戦略** (要素ID → 項目名 → テキスト) で財務指標・人的資本指標を抽出します。
   - `LLM_FALLBACK_ENABLED=true` 時は Layer 1/2 で取れなかった書類のみ Ollama 経由で再抽出 (Layer 3b)。
   - 元CSVの全行は `raw_edinet_facts` に保存します。
+  - 財務諸表（BS・PL・CF）の主要項目を `financial_statements` に1書類1行で保存します。基準は連結 > IFRS > 個別の順に1つだけ選び、値は混ぜません。
 - `edinet backfill`
   - 日付範囲を日単位で `fetch -> process` し、途中停止後も再開できます。
 - `edinet reprocess`
   - 保存済み `raw_edinet_facts` から再抽出し、抽出ロジック修正を再ダウンロードなしで反映します。
+  - `--statements-only` を付けると `financial_statements` だけを埋め直します（指標・人的資本・LLM は触りません。1.3 万書類で約 2 分）。
 - `edinet import-local`
   - 手元の CSV ZIP を API なしで 1 書類として正本へ取り込みます。
 - `edinet export-analytics`

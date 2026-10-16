@@ -9,6 +9,7 @@ Rails.application.routes.draw do
         get :spotlight, on: :member
         get :sheet, on: :member
         get :story, on: :member
+        get :statements, on: :member
       end
       get "industries", to: "industries#index"
       get "industries/hc_distribution", to: "industries#hc_distribution"

@@ -144,6 +144,60 @@ test('シートから比較へ、その会社を1社目にして入れる', asyn
   renderAt('/companies/E05206')
   const link = await screen.findByRole('link', { name: 'ほかの会社とくらべる' })
   expect(link).toHaveAttribute('href', '/compare?a=E05206')
+  expect(screen.getByRole('link', { name: 'お財布を見る' })).toHaveAttribute(
+    'href',
+    '/companies/E05206/statements',
+  )
+})
+
+test('お財布のページに札、持ち物の内訳、利益の段、お金の流れが出る', async () => {
+  renderAt('/companies/E05206/statements')
+  expect(
+    await screen.findByRole('heading', { name: '株式会社セプテーニ・ホールディングスのお財布' }),
+  ).toBeInTheDocument()
+  expect(screen.getByText(/2026年度 · 連結・国際会計基準/)).toBeInTheDocument()
+
+  expect(screen.getByRole('heading', { name: 'ひとことで言うと' })).toBeInTheDocument()
+  expect(screen.getByText('借金が少なく安定')).toBeInTheDocument()
+  expect(screen.getByText('現金をたっぷり持っている')).toBeInTheDocument()
+
+  expect(
+    screen.getByText('持ち物は 1,000億円 です。出どころも同じ額で、700億円（70.0%）は返さなくてよいお金です。'),
+  ).toBeInTheDocument()
+  const cash = screen.getByRole('button', { name: /現金・預金、400億円/ })
+  await userEvent.hover(cash)
+  expect(screen.getByRole('tooltip')).toHaveTextContent('すぐに使えるお金')
+  await userEvent.unhover(cash)
+  expect(screen.getByRole('button', { name: /純資産、700億円/ })).toBeInTheDocument()
+
+  expect(screen.getByText(/最後は −20億円 の赤字です/)).toBeInTheDocument()
+  expect(screen.getByText(/最後に残った利益は −20億円/)).toBeInTheDocument()
+  const cost = screen.getByRole('button', { name: /原価（作る・仕入れる費用）、700億円/ })
+  expect(cost).toHaveAccessibleName(/700億円/)
+  await userEvent.hover(cost)
+  expect(screen.getByRole('tooltip')).toHaveTextContent('700億円')
+  expect(screen.getByText('売上は、有報の「経営指標等」の値です。')).toBeInTheDocument()
+
+  expect(screen.getByText('+80億円 入った')).toBeInTheDocument()
+  expect(screen.getByText('−30億円 出た')).toBeInTheDocument()
+  expect(screen.getAllByText('本業で稼ぎ、投資と返済に回す').length).toBeGreaterThan(0)
+
+  expect(screen.getByRole('link', { name: 'シートに戻る' })).toHaveAttribute('href', '/companies/E05206')
+})
+
+test('金融業のお財布は札を出さず注記を出す', async () => {
+  renderAt('/companies/E10003/statements')
+  expect(await screen.findByRole('heading', { name: '預かり銀行のお財布' })).toBeInTheDocument()
+  expect(screen.getByText(/預金や保険料として預かったお金/)).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'ひとことで言うと' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /現金・預金、400億円/ })).toBeInTheDocument()
+})
+
+test('財務諸表が取れていない会社は、そう書く', async () => {
+  renderAt('/companies/E10004/statements')
+  expect(await screen.findByRole('heading', { name: '取れない株式会社のお財布' })).toBeInTheDocument()
+  expect(screen.getByText('この会社の財務諸表は、まだ有報から取れていません。')).toBeInTheDocument()
+  expect(screen.queryByRole('table')).not.toBeInTheDocument()
 })
 
 function routePaths(routes: RouteObject[]): string[] {
@@ -161,6 +215,7 @@ test('外した分析画面はルートに無い', () => {
     'companies',
     'companies/:code',
     'companies/:code/story',
+    'companies/:code/statements',
     'compare',
     'nikkei225',
     'rankings',

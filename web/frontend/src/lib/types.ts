@@ -164,6 +164,70 @@ export type StoryResponse = {
   }
 }
 
+export type StatementPart = {
+  key: string
+  label: string
+  hint: string
+  amount: number | null
+  share: number | null
+}
+
+export type StatementTone = 'good' | 'neutral' | 'caution'
+
+export type StatementInsight = {
+  key: string
+  tone: StatementTone
+  label: string
+  text: string
+}
+
+export type StatementsResponse = {
+  edinet_code: string
+  company_name: string
+  industry: string | null
+  securities_code: string | null
+  is_financial: boolean
+  note: string | null
+  fiscal_year: number | null
+  doc_id: string | null
+  accounting_standard: 'jgaap' | 'ifrs' | null
+  basis: 'consolidated' | 'non_consolidated' | null
+  balance_sheet: {
+    total_assets: number
+    assets: StatementPart[]
+    funding: StatementPart[]
+    debt_known: boolean
+  } | null
+  income_statement: {
+    net_sales: number | null
+    sales_source: 'statement' | 'summary' | null
+    cost_of_sales: number | null
+    gross_profit: number | null
+    sga_expenses: number | null
+    operating_income: number | null
+    ordinary_income: number | null
+    net_income: number | null
+  } | null
+  cash_flow: {
+    operating: number | null
+    investing: number | null
+    financing: number | null
+    pattern: StatementInsight | null
+  } | null
+  ratios: {
+    equity_ratio: number | null
+    cash_share: number | null
+    cash_months: number | null
+    property_share: number | null
+    intangible_share: number | null
+    investment_share: number | null
+    inventory_share: number | null
+    gross_margin: number | null
+    operating_margin: number | null
+  } | null
+  insights: StatementInsight[]
+}
+
 export type Nikkei225Company = {
   securities_code: string
   short_name: string

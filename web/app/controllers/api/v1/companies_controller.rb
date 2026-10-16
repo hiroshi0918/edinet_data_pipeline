@@ -29,6 +29,13 @@ module Api
         render json: story
       end
 
+      def statements
+        statements = StatementQuery.call(params[:code])
+        return render_not_found("Company not found") unless statements
+
+        render json: statements
+      end
+
       # scope=auto（または auto=1）は SpotlightQuery が評価次元を決める。
       def spotlight
         company = Company.find_by(edinet_code: params[:code])

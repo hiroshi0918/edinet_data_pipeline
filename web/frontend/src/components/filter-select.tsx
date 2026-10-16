@@ -13,14 +13,14 @@ export function FilterSelect({
   onChange: (value: string) => void
 }) {
   return (
-    <label className="inline-flex items-center gap-2 text-sm font-bold text-ink">
+    <label className="inline-flex items-center gap-2 text-sm font-medium text-ink">
       <span>{label}</span>
       <span className="relative inline-flex">
         <select
           aria-label={label}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="press h-11 max-w-[16rem] cursor-pointer appearance-none truncate rounded-[2px] border border-chrome bg-surface pr-9 pl-3 text-sm font-bold text-ink"
+          className="h-12 max-w-[16rem] cursor-pointer appearance-none truncate rounded-full border border-[#cccccc] bg-white pr-10 pl-4 text-sm font-bold tracking-wide text-ink"
         >
           {options.map((option) => (
             <option key={option.value} value={option.value}>
