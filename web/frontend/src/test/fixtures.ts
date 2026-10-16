@@ -454,11 +454,19 @@ export const compareStoryFixture: StoryResponse = {
   narrative: { business: null, history: [], rewritten: false },
 }
 
+const OPAQUE_PNG = Uint8Array.from(
+  atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=='),
+  (char) => char.charCodeAt(0),
+)
+
 export function installApiMock() {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
+      if (url.includes('img.logo.dev')) {
+        return new Response(OPAQUE_PNG, { status: 200, headers: { 'Content-Type': 'image/png' } })
+      }
       if (url.includes('/api/v1/meta')) return jsonResponse(metaFixture)
       if (url.includes('/api/v1/nikkei225')) return jsonResponse(nikkei225Fixture)
       if (

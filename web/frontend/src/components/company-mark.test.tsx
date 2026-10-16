@@ -1,49 +1,67 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 
 import { CompanyMark } from '@/components/company-mark'
+import { resetLogoQueueForTests } from '@/lib/logo-queue'
+
+const PNG = Uint8Array.from(
+  atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=='),
+  (char) => char.charCodeAt(0),
+)
 
 beforeEach(() => {
   vi.stubEnv('VITE_LOGO_DEV_PUBLISHABLE_KEY', 'publishable-test')
-  vi.useFakeTimers()
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('1111')) return new Response('missing', { status: 404 })
+      return new Response(PNG, { status: 200, headers: { 'Content-Type': 'image/png' } })
+    }),
+  )
 })
 
 afterEach(() => {
-  vi.useRealTimers()
+  resetLogoQueueForTests()
   vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
 })
 
-function failLogo(name: string) {
-  fireEvent.error(screen.getByRole('img', { name: `${name}のロゴ` }))
-}
-
-test('別の証券コードでは、失敗したロゴの試行を引き継がない', () => {
+test('取れないロゴは頭文字に戻り、次の証券コードは最初から取り直す', async () => {
   const { rerender } = render(<CompanyMark name="透明株式会社" securitiesCode="1111" />)
 
-  failLogo('透明株式会社')
-  act(() => {
-    vi.advanceTimersByTime(800)
-  })
-  failLogo('透明株式会社')
-
+  expect(await screen.findByText('透')).toBeInTheDocument()
   expect(screen.queryByRole('img', { name: '透明株式会社のロゴ' })).not.toBeInTheDocument()
-  expect(screen.getByText('透')).toBeInTheDocument()
 
   rerender(<CompanyMark name="本物株式会社" securitiesCode="7203" />)
 
-  const next = screen.getByRole('img', { name: '本物株式会社のロゴ' })
-  expect(next).toHaveAttribute('src', expect.stringContaining('/ticker/7203.T?'))
+  const next = await screen.findByRole('img', { name: '本物株式会社のロゴ' })
+  expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))).toEqual(
+    expect.arrayContaining([expect.stringContaining('/ticker/7203.T?')]),
+  )
   expect(next.getAttribute('src')).not.toContain('retry=')
 })
 
-test('別の証券コードへ移ったあとに、前の再試行タイマーは発火しない', () => {
+test('別の証券コードへ移ると、前の取得結果は捨てる', async () => {
+  let resolveFirst: ((response: Response) => void) | undefined
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('1111')) {
+        return new Promise<Response>((resolve) => {
+          resolveFirst = resolve
+        })
+      }
+      return Promise.resolve(new Response(PNG, { status: 200, headers: { 'Content-Type': 'image/png' } }))
+    }),
+  )
+
   const { rerender } = render(<CompanyMark name="透明株式会社" securitiesCode="1111" />)
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalled())
 
-  failLogo('透明株式会社')
   rerender(<CompanyMark name="本物株式会社" securitiesCode="7203" />)
-  act(() => {
-    vi.advanceTimersByTime(800)
-  })
+  expect(await screen.findByRole('img', { name: '本物株式会社のロゴ' })).toBeInTheDocument()
 
-  const next = screen.getByRole('img', { name: '本物株式会社のロゴ' })
-  expect(next.getAttribute('src')).not.toContain('retry=')
+  resolveFirst?.(new Response(PNG, { status: 200, headers: { 'Content-Type': 'image/png' } }))
+  await vi.waitFor(() => expect(screen.queryByRole('img', { name: '透明株式会社のロゴ' })).not.toBeInTheDocument())
 })

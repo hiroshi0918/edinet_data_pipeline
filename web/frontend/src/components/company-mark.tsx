@@ -1,11 +1,14 @@
 // 証券コードから logo.dev のロゴを出す。取れないときは社名の頭文字。
+// 一覧は一度に何件も頼むと 429 になるので、画面に入ったものから列に載せる。
 import { useEffect, useRef, useState } from 'react'
 
 import { logoDevSrc, monogramChar } from '@/lib/company-mark'
+import { loadLogo } from '@/lib/logo-queue'
 import { cn } from '@/lib/utils'
 
 // 透過だけの画像は社名の頭文字に戻す。
 function logoHasInk(image: HTMLImageElement) {
+  if (image.naturalWidth === 0 || image.naturalHeight === 0) return true
   const canvas = document.createElement('canvas')
   canvas.width = 16
   canvas.height = 16
@@ -17,6 +20,68 @@ function logoHasInk(image: HTMLImageElement) {
     if (pixels[index] > 24) return true
   }
   return false
+}
+
+function isAbort(error: unknown) {
+  return typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError'
+}
+
+function observeWhenVisible(element: Element, onVisible: () => void) {
+  const observer = new IntersectionObserver(
+    (entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return
+      observer.disconnect()
+      onVisible()
+    },
+    { rootMargin: '240px 0px' },
+  )
+  observer.observe(element)
+  return () => observer.disconnect()
+}
+
+function useCompanyLogo(url: string | null) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [trackedUrl, setTrackedUrl] = useState(url)
+  const [src, setSrc] = useState<string | null>(null)
+  const [missing, setMissing] = useState(false)
+  if (url !== trackedUrl) {
+    setTrackedUrl(url)
+    setSrc(null)
+    setMissing(false)
+  }
+
+  useEffect(() => {
+    if (!url) return
+    const element = ref.current
+    if (!element) return
+    let cancelled = false
+    let objectUrl: string | null = null
+    const controller = new AbortController()
+    const stop = observeWhenVisible(element, () => {
+      void loadLogo(url, controller.signal).then(
+        (next) => {
+          if (cancelled) {
+            URL.revokeObjectURL(next)
+            return
+          }
+          objectUrl = next
+          setSrc(next)
+        },
+        (error: unknown) => {
+          if (cancelled || isAbort(error)) return
+          setMissing(true)
+        },
+      )
+    })
+    return () => {
+      cancelled = true
+      controller.abort()
+      stop()
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [url])
+
+  return { ref, src, missing, markMissing: () => setMissing(true) }
 }
 
 export function CompanyMark({
@@ -37,32 +102,13 @@ export function CompanyMark({
   const token = import.meta.env.VITE_LOGO_DEV_PUBLISHABLE_KEY
   const mode = compact ? 'compact' : layout
   const size = mode === 'compact' ? 64 : mode === 'inline' ? 128 : 256
-  const [logoAttempt, setLogoAttempt] = useState({ code: securitiesCode, attempt: 0 })
-  const retryTimer = useRef<number | null>(null)
-  // 前の会社で透過ロゴや取得失敗になると attempt が 2 のまま残る。別の証券コードでは最初から試す。
-  if (logoAttempt.code !== securitiesCode) {
-    setLogoAttempt({ code: securitiesCode, attempt: 0 })
-  }
-  const attempt = logoAttempt.code === securitiesCode ? logoAttempt.attempt : 0
-  const setAttempt = (next: number) => {
-    setLogoAttempt((current) =>
-      current.code === securitiesCode ? { code: securitiesCode, attempt: next } : current,
-    )
-  }
-  const src = attempt < 2 ? logoDevSrc(securitiesCode, token, size, attempt) : null
-  const showLogo = Boolean(src)
-
-  useEffect(() => {
-    return () => {
-      if (retryTimer.current != null) {
-        window.clearTimeout(retryTimer.current)
-        retryTimer.current = null
-      }
-    }
-  }, [securitiesCode])
+  const url = logoDevSrc(securitiesCode, token, size)
+  const { ref, src, missing, markMissing } = useCompanyLogo(url)
+  const showLogo = Boolean(src) && !missing
 
   const face = (
     <div
+      ref={ref}
       className={cn(
         'flex items-center justify-center overflow-hidden',
         mode === 'inline'
@@ -83,27 +129,18 @@ export function CompanyMark({
           key={securitiesCode}
           src={src ?? undefined}
           alt={mode === 'compact' ? '' : `${name}のロゴ`}
-          crossOrigin="anonymous"
-          loading={mode === 'inline' ? 'lazy' : 'eager'}
           decoding="async"
           className="size-full object-contain"
+          onError={() => markMissing()}
           onLoad={(event) => {
             try {
-              if (!logoHasInk(event.currentTarget)) setAttempt(2)
+              if (!logoHasInk(event.currentTarget)) markMissing()
             } catch {
               // 画素が読めないときは、表示できたロゴを残す。
             }
           }}
-          onError={() => {
-            if (attempt > 0) {
-              setAttempt(2)
-              return
-            }
-            if (retryTimer.current != null) return
-            retryTimer.current = window.setTimeout(() => setAttempt(1), 800)
-          }}
         />
-      ) : (
+      ) : missing || !url ? (
         <span
           className={cn(
             'leading-none font-black text-ink',
@@ -113,7 +150,7 @@ export function CompanyMark({
         >
           {monogramChar(name)}
         </span>
-      )}
+      ) : null}
     </div>
   )
 
@@ -127,9 +164,9 @@ export function CompanyMark({
     >
       ロゴ: logo.dev
     </a>
-  ) : (
+  ) : missing || !url ? (
     <span className="text-[10px] leading-none text-ink-soft">社章</span>
-  )
+  ) : null
 
   return (
     <div className="flex w-32 shrink-0 flex-col items-center gap-1.5 sm:w-40">

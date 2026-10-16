@@ -103,7 +103,7 @@ describe('tokyoTicker', () => {
 describe('logoDevSrc', () => {
   test('証券コードと token から logo.dev の URL を作る', () => {
     expect(logoDevSrc('4293', 'pk_test', 64)).toBe(
-      'https://img.logo.dev/ticker/4293.T?token=pk_test&format=png&size=64&retina=true&fallback=404',
+      'https://img.logo.dev/ticker/4293.T?token=pk_test&format=png&size=64&retina=false&fallback=404',
     )
     expect(logoDevSrc(null, 'pk_test', 64)).toBeNull()
     expect(logoDevSrc('4293', null, 64)).toBeNull()

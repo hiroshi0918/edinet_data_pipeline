@@ -15,7 +15,30 @@ class ResizeObserverMock {
 globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver
 
 class IntersectionObserverMock {
-  observe() {}
+  private callback: IntersectionObserverCallback
+
+  constructor(callback: IntersectionObserverCallback) {
+    this.callback = callback
+  }
+
+  observe(target: Element) {
+    const rect = target.getBoundingClientRect()
+    this.callback(
+      [
+        {
+          isIntersecting: true,
+          intersectionRatio: 1,
+          target,
+          boundingClientRect: rect,
+          intersectionRect: rect,
+          rootBounds: null,
+          time: 0,
+        } as IntersectionObserverEntry,
+      ],
+      this as unknown as IntersectionObserver,
+    )
+  }
+
   unobserve() {}
   disconnect() {}
   takeRecords() {

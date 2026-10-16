@@ -11,7 +11,8 @@ export function logoDevSrc(
     token,
     format: 'png',
     size: String(size),
-    retina: 'true',
+    // 一覧の小さい社章は等倍で足りる。2倍画像はシートの大きい社章だけ。
+    retina: size >= 256 ? 'true' : 'false',
     fallback: '404',
   })
   if (retry > 0) params.set('retry', String(retry))

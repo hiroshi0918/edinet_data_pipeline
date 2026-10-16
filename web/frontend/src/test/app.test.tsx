@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider, type RouteObject } from 'react-router'
 
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { resetLogoQueueForTests } from '@/lib/logo-queue'
 import { routeObjects } from '@/routes'
 import { installApiMock } from '@/test/fixtures'
 
@@ -28,6 +29,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  resetLogoQueueForTests()
   vi.unstubAllEnvs()
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
@@ -53,8 +55,13 @@ test('検索候補の左は業種キャラではなく企業ロゴ', async () =>
   await user.click(screen.getByRole('combobox', { name: '企業を検索・選択' }))
   expect(await screen.findByText('株式会社セプテーニ・ホールディングス')).toBeInTheDocument()
   const list = document.querySelector('[data-slot="command-list"]')
-  const logo = list?.querySelector('img')
-  expect(logo).toHaveAttribute('src', expect.stringContaining('img.logo.dev/ticker/4293.T'))
+  await waitFor(() => {
+    const logo = list?.querySelector('img')
+    expect(logo).toHaveAttribute('src', expect.stringMatching(/^blob:/))
+  })
+  expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))).toEqual(
+    expect.arrayContaining([expect.stringContaining('img.logo.dev/ticker/4293.T')]),
+  )
   expect(list?.querySelector('img[src*="/characters/"]')).toBeNull()
   expect(screen.getByRole('link', { name: 'ロゴ: logo.dev' })).toBeInTheDocument()
 })
@@ -190,10 +197,16 @@ test('ランキングと日経225は社名の前にロゴを出す', async () =>
   vi.stubEnv('VITE_LOGO_DEV_PUBLISHABLE_KEY', 'publishable-test')
   const rankings = renderAt('/rankings')
   const toyota = await screen.findByRole('img', { name: '高い会社のロゴ' })
-  expect(toyota).toHaveAttribute('src', expect.stringContaining('/ticker/7203.T?'))
-  expect(screen.getByRole('img', { name: '売上の会社のロゴ' })).toHaveAttribute(
+  expect(toyota).toHaveAttribute('src', expect.stringMatching(/^blob:/))
+  expect(await screen.findByRole('img', { name: '売上の会社のロゴ' })).toHaveAttribute(
     'src',
-    expect.stringContaining('/ticker/7267.T?'),
+    expect.stringMatching(/^blob:/),
+  )
+  expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining('/ticker/7203.T?'),
+      expect.stringContaining('/ticker/7267.T?'),
+    ]),
   )
   expect(screen.queryByRole('img', { name: '別業種の会社のロゴ' })).not.toBeInTheDocument()
   expect(rankings.container.querySelector('img[src*="/characters/"]')).not.toBeInTheDocument()
@@ -203,11 +216,17 @@ test('ランキングと日経225は社名の前にロゴを出す', async () =>
   const nikkei = renderAt('/nikkei225')
   expect(await screen.findByRole('img', { name: 'トヨタ自動車株式会社のロゴ' })).toHaveAttribute(
     'src',
-    expect.stringContaining('/ticker/7203.T?'),
+    expect.stringMatching(/^blob:/),
   )
-  expect(screen.getByRole('img', { name: '（株）商船三井のロゴ' })).toHaveAttribute(
+  expect(await screen.findByRole('img', { name: '（株）商船三井のロゴ' })).toHaveAttribute(
     'src',
-    expect.stringContaining('/ticker/9104.T?'),
+    expect.stringMatching(/^blob:/),
+  )
+  expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining('/ticker/7203.T?'),
+      expect.stringContaining('/ticker/9104.T?'),
+    ]),
   )
   expect(nikkei.container.querySelector('img[src*="/characters/"]')).not.toBeInTheDocument()
   vi.unstubAllEnvs()
