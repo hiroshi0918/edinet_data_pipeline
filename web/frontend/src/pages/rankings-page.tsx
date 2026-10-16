@@ -74,7 +74,7 @@ export function RankingsPage() {
                 onChange={(value) => update('axis', value, 'level')}
                 options={data.axes.map((item) => ({ value: item.key, label: item.label }))}
               />
-              <span className="font-num text-sm font-bold text-ink-soft">{data.companies.length.toLocaleString('ja-JP')}社</span>
+              <span className="font-num text-sm font-bold text-ink">{data.companies.length.toLocaleString('ja-JP')}社</span>
             </div>
             <ol className={query.isPlaceholderData ? 'opacity-50 transition-opacity' : 'transition-opacity'}>
               {data.companies.slice(0, visibleCount).map((company, index) => (
@@ -86,7 +86,7 @@ export function RankingsPage() {
                   score={company.score}
                   title={
                     <Link
-                      className="text-ink underline decoration-ink/25 decoration-2 underline-offset-4 hover:decoration-shu"
+                      className="text-ink underline decoration-chrome/40 decoration-2 underline-offset-4 hover:decoration-signal"
                       to={`/companies/${company.edinet_code}`}
                     >
                       {company.company_name}
@@ -118,18 +118,16 @@ export function RankingsPage() {
 // 業種で絞ったときの見出し。図鑑のその業種のページに見せる。
 function SpeciesBanner({ industry, count }: { industry: string; count: number | undefined }) {
   return (
-    <div className="sheet relative flex items-center gap-5 overflow-hidden bg-paper-deep px-5 py-5 sm:gap-8 sm:px-8">
-      <div className="flex size-28 shrink-0 items-end justify-center rounded-full border-[length:var(--line)] border-ink bg-marker sm:size-36">
-        <CharacterImage industry={industry} idle eager className="h-[118%] w-auto" />
+    <div className="sheet flex items-center gap-5 bg-periwinkle px-4 py-4 sm:gap-6 sm:px-6">
+      <div className="flex size-24 shrink-0 items-end justify-center border border-chrome bg-lavender sm:size-32">
+        <CharacterImage industry={industry} eager className="h-[108%] w-auto" />
       </div>
       <div className="min-w-0">
-        <p className="font-num text-xs font-black tracking-[0.18em] text-shu">
+        <p className="font-num text-[11px] font-bold tracking-[0.14em] text-carbon">
           {specimenNo(industry)} · {specimenLabel(industry)}
         </p>
-        <h1 className="mt-1 text-2xl leading-tight font-black text-ink sm:text-4xl">
-          <span className="marker-line">{industry}</span>
-        </h1>
-        <p className="mt-2 text-sm text-ink-soft">
+        <h1 className="mt-1 text-2xl leading-tight font-black text-ink sm:text-4xl">{industry}</h1>
+        <p className="mt-2 text-sm text-carbon">
           この業種の会社を、点の高い順に並べます。{count != null ? `${count.toLocaleString('ja-JP')}社。` : ''}
         </p>
       </div>

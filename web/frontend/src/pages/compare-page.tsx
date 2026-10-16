@@ -129,7 +129,7 @@ function CompareCharts({ stories }: { stories: StoryResponse[] }) {
             <div className="mt-3">
               <LineChart title={metric.title} kind={metric.kind} years={years} series={series} delayMs={150 * (metricIndex + 1)} />
             </div>
-            <dl className="mt-4 space-y-1.5 border-t-2 border-dashed border-ink/20 pt-3">
+            <dl className="mt-4 space-y-1.5 border-t border-chrome/30 pt-3">
               {stories.map((story, index) => {
                 const latest = latestValue(story, metric.key)
                 return (

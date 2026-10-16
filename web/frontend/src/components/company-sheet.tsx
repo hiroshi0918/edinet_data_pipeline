@@ -55,13 +55,8 @@ const AXIS_ICON: Record<SheetAxis['key'], LucideIcon> = {
 function AxisGlyph({ axisKey }: { axisKey: SheetAxis['key'] }) {
   const Icon = AXIS_ICON[axisKey]
   return (
-    <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl border-[length:var(--line)] border-ink bg-page shadow-ink-sm">
-      <Icon
-        className="size-6 text-ink"
-        strokeWidth={2.5}
-        aria-hidden="true"
-        fill={axisKey === 'people' ? 'var(--shu)' : 'none'}
-      />
+    <span className="flex size-11 shrink-0 items-center justify-center border border-chrome bg-surface">
+      <Icon className="size-6 text-ink" strokeWidth={2.25} aria-hidden="true" />
     </span>
   )
 }
@@ -127,7 +122,7 @@ function AxisRow({
   const panelId = `sheet-axis-${axis.key}`
   const delayMs = GAUGE_START_MS + order * GAUGE_STAGGER_MS
   return (
-    <div className={cn('rounded-2xl px-3 py-4 transition-colors sm:px-4', open ? 'bg-paper-deep' : 'hover:bg-paper-deep/60')}>
+    <div className={cn('px-3 py-3 transition-colors sm:px-4', open ? 'bg-platinum' : 'hover:bg-platinum/70')}>
       <button
         type="button"
         className="group w-full cursor-pointer rounded-xl text-left"
@@ -152,7 +147,7 @@ function AxisRow({
         <CollectRule score={axis.score} delayMs={delayMs} />
       </button>
       {open ? (
-        <div id={panelId} className="rise-in mt-4 space-y-2 rounded-xl border-2 border-dashed border-ink/25 bg-page p-4 text-sm">
+        <div id={panelId} className="rise-in mt-3 space-y-2 border border-chrome bg-surface p-4 text-sm">
           <p className="text-xs font-bold text-ink-soft">{axis.label}</p>
           {axis.key === 'people' ? <PeopleFacts axis={axis} /> : <FaceFacts axis={axis} />}
           {axis.score == null ? <p className="text-ink-soft">{blankReason(axis)}</p> : null}
@@ -196,18 +191,18 @@ export function CompanySheet({ sheet }: { sheet: SheetResponse }) {
   const [openKey, setOpenKey] = useState<string | null>(null)
 
   return (
-    <section className="sheet relative overflow-hidden rounded-[2rem] shadow-ink-lg">
+    <section className="sheet relative overflow-hidden">
       <div className="grid lg:grid-cols-[minmax(18rem,26rem)_minmax(0,1fr)]">
-        <div className="relative border-b-[length:var(--line)] border-ink bg-paper px-6 pt-8 pb-10 lg:border-r-[length:var(--line)] lg:border-b-0">
+        <div className="relative border-b border-chrome bg-periwinkle px-6 pt-8 pb-10 lg:border-r lg:border-b-0">
           <div className="lg:sticky lg:top-24">
             <SpecimenFigure industry={sheet.industry} level={sheet.level} />
           </div>
         </div>
         <div className="min-w-0 px-5 pt-6 pb-8 sm:px-8 sm:pt-8">
-          <div className="flex items-center justify-between gap-3 text-xs font-bold text-ink-soft">
+          <div className="flex items-center justify-between gap-3 text-xs font-bold text-carbon">
             <span className="font-num">{sheet.edinet_code}</span>
             {sheet.fiscal_year != null ? (
-              <span className="rounded-full border-2 border-ink/20 px-2.5 py-0.5">{sheet.fiscal_year}年度の有報</span>
+              <span className="border border-chrome bg-surface px-2 py-0.5">{sheet.fiscal_year}年度の有報</span>
             ) : null}
           </div>
           {/* 狭い幅はロゴの下に社名。広い幅は横に並べ、総合点は下に置く。 */}
@@ -216,7 +211,7 @@ export function CompanySheet({ sheet }: { sheet: SheetResponse }) {
               <CompanyMark name={sheet.company_name} securitiesCode={sheet.securities_code} />
               <div className="min-w-0">
                 <h1 className="text-3xl leading-tight font-black text-balance text-ink">{sheet.company_name}</h1>
-                <p className="mt-3 inline-flex rounded-full bg-paper-deep px-3 py-1 text-xs font-bold text-ink">
+                <p className="mt-3 inline-flex bg-amber px-2 py-1 text-[11px] font-bold tracking-wide text-carbon">
                   {sheet.industry ?? '業種なし'}
                 </p>
               </div>
@@ -225,14 +220,14 @@ export function CompanySheet({ sheet }: { sheet: SheetResponse }) {
               <LevelBadge level={sheet.level} />
               <div className="flex flex-col items-start gap-3">
                 <Link
-                  className="press inline-flex h-11 items-center gap-2 rounded-full border-[length:var(--line)] border-ink bg-shu px-5 text-sm font-black text-page"
+                  className="press inline-flex h-11 items-center gap-2 bg-signal px-4 text-[11px] font-bold tracking-wide text-carbon"
                   to={`/companies/${sheet.edinet_code}/story`}
                 >
                   歩みを見る
                   <ArrowRightIcon className="size-4" strokeWidth={3} aria-hidden="true" />
                 </Link>
                 <Link
-                  className="text-sm font-bold text-ink underline decoration-shu decoration-2 underline-offset-4"
+                  className="text-sm font-bold text-chrome underline decoration-chrome/40 underline-offset-4 hover:decoration-signal"
                   to={`/compare?a=${sheet.edinet_code}`}
                 >
                   ほかの会社とくらべる
@@ -240,7 +235,7 @@ export function CompanySheet({ sheet }: { sheet: SheetResponse }) {
               </div>
             </div>
           </div>
-          <h2 className="mt-8 mb-2 text-xs font-black tracking-[0.2em] text-shu">ステータス</h2>
+          <h2 className="mt-8 mb-2 text-[11px] font-bold tracking-[0.14em] text-chrome">ステータス</h2>
           <div className="-mx-3 space-y-1 sm:-mx-4">
             {sheet.axes.map((axis, index) => (
               <AxisRow

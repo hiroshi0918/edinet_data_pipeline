@@ -42,7 +42,7 @@ export function Nikkei225Page() {
                 onChange={setSector}
                 options={[{ value: 'all', label: 'すべて' }, ...sectors.map((item) => ({ value: item, label: item }))]}
               />
-              <p className="text-sm font-bold text-ink-soft">
+              <p className="text-sm font-bold text-ink">
                 {query.data.as_of} 時点 · 図鑑にある{' '}
                 <span className="font-num font-black text-ink">
                   {withSheet} / {companies.length}
@@ -55,7 +55,7 @@ export function Nikkei225Page() {
                 <NikkeiRow key={company.securities_code} company={company} rank={ranks[index]} />
               ))}
             </ol>
-            <p className="text-xs text-ink-soft">{query.data.source_note}</p>
+            <p className="text-xs text-ink">{query.data.source_note}</p>
             <LogoCredit />
           </div>
         ) : null}
@@ -89,7 +89,7 @@ function NikkeiRow({ company, rank }: { company: Nikkei225Company; rank: number 
       title={
         company.has_sheet && company.edinet_code ? (
           <Link
-            className="text-ink underline decoration-ink/25 decoration-2 underline-offset-4 hover:decoration-shu"
+            className="text-ink underline decoration-chrome/40 decoration-2 underline-offset-4 hover:decoration-signal"
             to={`/companies/${company.edinet_code}`}
           >
             {name}
@@ -97,7 +97,7 @@ function NikkeiRow({ company, rank }: { company: Nikkei225Company; rank: number 
         ) : (
           <span className="inline-flex items-center gap-2">
             {name}
-            <span className="inline-flex items-center gap-1 rounded-full bg-paper-deep px-2 py-0.5 text-xs font-bold text-ink-soft">
+            <span className="inline-flex items-center gap-1 bg-platinum px-1.5 py-0.5 text-[11px] font-bold text-chrome">
               <EggFigure className="h-3.5 w-auto" />
               図鑑に無い
             </span>

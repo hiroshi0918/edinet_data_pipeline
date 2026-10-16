@@ -1,4 +1,4 @@
-// ロゴと、しおり型のタブ。トップではヒーローに重ねて透明にする。
+// カーボンの主ナビと、その下の淡い帯。現在地の文字だけ琥珀。
 import { Link, useLocation } from 'react-router'
 
 import { EggFigure } from '@/components/egg-figure'
@@ -11,46 +11,47 @@ const TABS = [
   { to: '/nikkei225', label: '日経225', match: (path: string) => path.startsWith('/nikkei225') },
 ]
 
-export function AppHeader({ overlay }: { overlay: boolean }) {
+export function AppHeader() {
   const { pathname } = useLocation()
   return (
-    <header
-      className={cn(
-        'z-40 w-full',
-        overlay
-          ? 'absolute inset-x-0 top-0'
-          : 'sticky top-0 border-b-[length:var(--line)] border-ink bg-paper/90 backdrop-blur-sm',
-      )}
-    >
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:gap-3 sm:px-8">
-        <Link to="/" className="group flex items-center gap-1.5 rounded-full" aria-label="会社図鑑 トップ">
-          <EggFigure className="h-8 w-auto transition-transform duration-300 ease-(--ease-pop) group-hover:-rotate-12" />
-          {/* タブが4つになったので、狭いスマホではロゴの文字を隠して卵だけにする。 */}
-          <span className="hidden text-base font-black whitespace-nowrap text-ink min-[420px]:inline sm:text-xl sm:tracking-wide">会社図鑑</span>
-        </Link>
-        <nav aria-label="ページ">
-          <ul className="flex items-center gap-0.5 sm:gap-2">
-            {TABS.map((tab) => {
-              const active = tab.match(pathname)
-              return (
-                <li key={tab.to}>
-                  <Link
-                    to={tab.to}
-                    aria-current={active ? 'page' : undefined}
-                    className={cn(
-                      'inline-flex h-9 items-center rounded-full px-2 text-[13px] font-bold whitespace-nowrap text-ink transition-[background-color,transform] duration-150 sm:h-10 sm:px-4 sm:text-sm',
-                      active
-                        ? 'border-[length:var(--line)] border-ink bg-marker shadow-ink-sm'
-                        : 'border-[length:var(--line)] border-transparent hover:-translate-y-0.5 hover:bg-paper-deep',
-                    )}
-                  >
-                    {tab.label}
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
-        </nav>
+    <header className="sticky top-0 z-40 w-full">
+      <div className="carbon-slab">
+        <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-3 sm:gap-4 sm:px-8">
+          <Link
+            to="/"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-surface px-2.5"
+            aria-label="会社図鑑 トップ"
+          >
+            <EggFigure className="h-6 w-auto" />
+            <span className="hidden text-sm font-black tracking-wide text-brand min-[420px]:inline">会社図鑑</span>
+          </Link>
+          <nav aria-label="ページ" className="min-w-0 flex-1 overflow-x-auto">
+            <ul className="flex w-max items-center gap-1 sm:gap-3">
+              {TABS.map((tab) => {
+                const active = tab.match(pathname)
+                return (
+                  <li key={tab.to}>
+                    <Link
+                      to={tab.to}
+                      aria-current={active ? 'page' : undefined}
+                      className={cn(
+                        'inline-flex h-11 items-center px-2 text-[13px] font-bold tracking-wide whitespace-nowrap sm:px-3',
+                        active ? 'text-amber' : 'text-nav-gold hover:text-surface',
+                      )}
+                    >
+                      {tab.label}
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          </nav>
+        </div>
+      </div>
+      <div className="border-b border-chrome bg-canvas-soft">
+        <p className="mx-auto flex h-8 max-w-6xl items-center px-3 text-[11px] font-bold tracking-wide text-ink sm:px-8">
+          有価証券報告書（EDINET）の数字から作った図鑑
+        </p>
       </div>
     </header>
   )

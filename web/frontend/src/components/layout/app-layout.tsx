@@ -1,28 +1,26 @@
-// 紙の地に、上のしおりと本文を載せる。トップだけは全幅で、ヘッダーを重ねる。
+// ペリウィンクルの地に、カーボンのナビと本文を載せる。
 import { MotionConfig, motion } from 'motion/react'
 import { Outlet, ScrollRestoration, useLocation } from 'react-router'
 
 import { AppHeader } from '@/components/layout/app-header'
-import { cn } from '@/lib/utils'
 
 export function AppLayout() {
   const { pathname } = useLocation()
-  const home = pathname === '/'
 
   return (
     <MotionConfig reducedMotion="user">
       <div className="flex min-h-svh flex-col">
-        <AppHeader overlay={home} />
+        <AppHeader />
         <motion.main
           key={pathname}
-          initial={{ opacity: 0, y: 12 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-          className={cn('flex-1', !home && 'mx-auto w-full max-w-6xl px-4 pt-8 pb-24 sm:px-8')}
+          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+          className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-16 sm:px-8"
         >
           <Outlet />
         </motion.main>
-        <footer className="border-t-2 border-dashed border-ink/20 px-4 py-6 text-center text-xs text-ink-soft">
+        <footer className="carbon-slab px-4 py-5 text-center text-[11px] leading-5">
           有価証券報告書（EDINET）の数字から作った図鑑です。
         </footer>
         <ScrollRestoration />

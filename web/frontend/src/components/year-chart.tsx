@@ -1,4 +1,4 @@
-// 1社の直近10年度の折れ線。目盛りと年は LineChart が描く。最新年だけ朱の点。
+// 1社の直近10年度の折れ線。目盛りと年は LineChart が描く。最新年だけカーボンの点。
 import { LineChart } from '@/components/line-chart'
 import { formatOkuYen, formatPeople } from '@/lib/format'
 

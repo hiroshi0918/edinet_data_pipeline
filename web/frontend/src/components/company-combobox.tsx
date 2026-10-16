@@ -70,11 +70,11 @@ export function CompanyCombobox({
             role="combobox"
             aria-expanded={open}
             aria-label="企業を検索・選択"
-            className="press flex h-16 w-full cursor-pointer items-center gap-3 rounded-full border-[length:var(--line)] border-ink bg-page pr-2 pl-5 text-left text-base font-bold text-ink-soft sm:h-[4.5rem] sm:text-lg"
+            className="flex h-14 w-full cursor-pointer items-center gap-3 border border-chrome bg-surface pr-1 pl-4 text-left text-sm font-bold text-ink-soft sm:h-16"
           >
-            <SearchIcon className="size-6 shrink-0 text-ink" strokeWidth={2.5} />
+            <SearchIcon className="size-5 shrink-0 text-ink" strokeWidth={2.5} />
             <span className="flex-1 truncate">{placeholder}</span>
-            <span className="inline-flex h-12 shrink-0 items-center rounded-full border-[length:var(--line)] border-ink bg-shu px-5 text-base font-black text-page sm:h-14 sm:px-7">
+            <span className="press inline-flex h-11 shrink-0 items-center bg-amber px-4 text-[11px] font-bold tracking-wide text-carbon sm:px-5">
               さがす
             </span>
           </button>

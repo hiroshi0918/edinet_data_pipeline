@@ -1,5 +1,4 @@
-// 一覧の1行。1〜3位は王冠つきで大きく出す。社名の前はロゴ。
-import { CrownIcon } from 'lucide-react'
+// 一覧の1行。上位3つは琥珀の順位印と白い板。社名の前はロゴ。
 import type { ReactNode } from 'react'
 
 import { CompanyMark } from '@/components/company-mark'
@@ -25,27 +24,25 @@ export function RankRow({
   return (
     <li
       className={cn(
-        'grid grid-cols-[2.75rem_auto_minmax(0,1fr)_auto] items-center gap-x-3 sm:gap-x-4',
+        'grid grid-cols-[2.25rem_auto_minmax(0,1fr)_auto] items-center gap-x-3 sm:gap-x-4',
         podium
-          ? 'sheet mb-3 px-3 py-3 sm:px-5'
-          : 'border-b-2 border-dashed border-ink/15 px-3 py-2.5 transition-colors hover:bg-paper-deep/70 sm:px-5',
+          ? 'sheet mb-2 px-3 py-3 sm:px-4'
+          : 'border-b border-chrome/25 bg-platinum/80 px-3 py-2.5 transition-colors hover:bg-surface sm:px-4',
       )}
     >
-      <span className="relative flex items-center justify-center">
-        {podium ? (
-          <span className="flex size-11 flex-col items-center justify-center rounded-full bg-marker">
-            <CrownIcon className="size-4 text-shu" strokeWidth={2.75} aria-hidden="true" />
-            <span className="font-num text-sm leading-none font-black text-ink">{rank}</span>
-          </span>
-        ) : (
-          <span className="font-num text-base font-extrabold text-ink-soft">{rank}</span>
+      <span
+        className={cn(
+          'font-num flex size-8 items-center justify-center text-sm font-black',
+          podium ? 'bg-amber text-carbon' : 'text-chrome',
         )}
+      >
+        {rank}
       </span>
       <CompanyMark
         name={companyName}
         securitiesCode={securitiesCode}
         layout="inline"
-        className={podium ? 'size-14 rounded-2xl sm:size-16' : 'size-9'}
+        className={podium ? 'size-12 sm:size-14' : 'size-9'}
       />
       <span className="min-w-0">
         <span className={cn('block truncate', podium ? 'text-base font-black sm:text-lg' : 'text-sm font-bold')}>
@@ -75,5 +72,5 @@ export function RankRow({
 // 一覧の右の点が何の点かを、見出しのすぐ下に小さく1行で書く。
 export function ScoreNote({ axisLabel }: { axisLabel?: string }) {
   const what = !axisLabel || axisLabel === '総合' ? '総合点' : `${axisLabel}の点`
-  return <p className="-mt-5 text-xs text-ink-soft">同じ業種の会社と比べた{what}（100点満点）</p>
+  return <p className="text-xs text-ink">同じ業種の会社と比べた{what}（100点満点）</p>
 }

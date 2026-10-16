@@ -68,13 +68,13 @@ export function CompanyMark({
         mode === 'inline'
           ? cn(
               'shrink-0 @container',
-              showLogo ? 'bg-transparent' : 'border-[length:var(--line)] border-ink bg-page',
+              showLogo ? 'bg-transparent' : 'border border-chrome bg-surface',
             )
           : showLogo
             ? 'bg-transparent'
-            : 'border-[length:var(--line)] border-ink bg-page',
-        mode === 'compact' && 'size-8 rounded-lg',
-        mode === 'badge' && cn('size-32 rounded-3xl sm:size-40', showLogo ? undefined : 'shadow-ink'),
+            : 'border border-chrome bg-surface',
+        mode === 'compact' && 'size-8',
+        mode === 'badge' && 'size-32 sm:size-40',
         mode === 'inline' && className,
       )}
     >
@@ -142,7 +142,7 @@ export function CompanyMark({
 export function LogoCredit({ className }: { className?: string }) {
   if (!import.meta.env.VITE_LOGO_DEV_PUBLISHABLE_KEY) return null
   return (
-    <p className={cn('text-xs text-ink-soft', className)}>
+    <p className={cn('text-xs text-ink', className)}>
       <a
         href="https://logo.dev"
         className="underline decoration-ink-soft/60 underline-offset-2"

@@ -1,5 +1,5 @@
 // 年度の折れ線。縦軸は 0 を含む目盛りと単位、横軸は年。値が無い年は線を切る。
-// 1社なら最新年だけ朱の点。2社以上なら会社ごとの色で、2本目以降は点線にして色に頼らず見分ける。
+// 1社なら最新年だけカーボンの点。2社以上なら会社ごとの色で、2本目以降は点線にして色に頼らず見分ける。
 import type { CSSProperties } from 'react'
 
 import { buildAxis, type ChartKind, formatTick, yearLabelIndexes } from '@/lib/chart-scale'
@@ -112,7 +112,7 @@ export function LineChart({
                   cx={xFor(index)}
                   cy={yFor(value)}
                   r={latest ? (single ? 7 : 6) : 4}
-                  fill={single ? (latest ? 'var(--shu)' : 'var(--page)') : latest ? line.color : 'var(--page)'}
+                  fill={single ? (latest ? 'var(--carbon)' : 'var(--surface)') : latest ? line.color : 'var(--surface)'}
                   stroke={single ? 'var(--ink)' : line.color}
                   strokeWidth="2.5"
                 />

@@ -22,7 +22,7 @@ export function QueryState({
     return (
       <div className="flex flex-col items-center gap-3 py-16" data-testid="loading" role="status">
         <EggFigure className="egg-wobble h-20 w-auto" />
-        <p className="text-sm font-bold text-ink-soft">よみこみ中…</p>
+        <p className="text-sm font-bold text-ink">よみこみ中…</p>
       </div>
     )
   }
@@ -38,7 +38,7 @@ export function QueryState({
     return (
       <div className="flex max-w-xl items-end gap-4">
         <EggFigure className="h-20 w-auto shrink-0" />
-        <Alert className="bg-page">
+        <Alert className="bg-surface">
           <AlertTitle className="font-black">データがありません</AlertTitle>
           <AlertDescription>{empty}</AlertDescription>
         </Alert>

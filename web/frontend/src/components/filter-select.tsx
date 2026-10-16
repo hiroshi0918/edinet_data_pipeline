@@ -1,4 +1,4 @@
-// 一覧の絞り込み。読み上げと操作を素の select に任せ、見た目だけ丸くする。
+// 一覧の絞り込み。読み上げと操作は素の select に任せる。
 import { ChevronDownIcon } from 'lucide-react'
 
 export function FilterSelect({
@@ -20,7 +20,7 @@ export function FilterSelect({
           aria-label={label}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="press h-10 max-w-[16rem] cursor-pointer appearance-none truncate rounded-full border-[length:var(--line)] border-ink bg-page pr-9 pl-4 text-sm font-bold text-ink"
+          className="press h-11 max-w-[16rem] cursor-pointer appearance-none truncate rounded-[2px] border border-chrome bg-surface pr-9 pl-3 text-sm font-bold text-ink"
         >
           {options.map((option) => (
             <option key={option.value} value={option.value}>
